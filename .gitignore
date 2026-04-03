@@ -22,8 +22,15 @@ mobile/android/.gradle/
 mobile/android/build/
 mobile/android/app/build/
 mobile/android/local.properties
+mobile/android/app/debug.keystore
 mobile/ios/build/
 mobile/ios/Pods/
 mobile/ios/.symlinks/
 mobile/ios/.xcode.env.local
 supabase/.temp/
+BUGFIX_SUMMARY.md
+DEV_NOTES.md
+MANUAL_STEPS.md
+MOBILE_VS_WEB.md
+POST_DOMINIO.md
+TEST_RESULTS.md
