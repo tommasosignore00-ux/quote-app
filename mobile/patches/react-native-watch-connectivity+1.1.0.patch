@@ -1,0 +1,69 @@
+diff --git a/node_modules/react-native-watch-connectivity/RNWatch.podspec b/node_modules/react-native-watch-connectivity/RNWatch.podspec
+index ad9170c..76a7a90 100644
+--- a/node_modules/react-native-watch-connectivity/RNWatch.podspec
++++ b/node_modules/react-native-watch-connectivity/RNWatch.podspec
+@@ -15,5 +15,5 @@ Pod::Spec.new do |s|
+   s.source       = { :git => "https://github.com/react-native-watch-connectivity/react-native-watch-connectivity.git", :tag => "v#{s.version}" }
+   s.source_files  = "ios/**/*.{h,m}"
+ 
+-  s.dependency 'React'
++  s.dependency 'React-Core'
+ end
+diff --git a/node_modules/react-native-watch-connectivity/ios/RNWatch/RNWatch.h b/node_modules/react-native-watch-connectivity/ios/RNWatch/RNWatch.h
+index abb8fa5..f2b770d 100644
+--- a/node_modules/react-native-watch-connectivity/ios/RNWatch/RNWatch.h
++++ b/node_modules/react-native-watch-connectivity/ios/RNWatch/RNWatch.h
+@@ -1,20 +1,5 @@
+-// import RCTBridgeModule.h
+-#if __has_include("RCTBridgeModule.h")
+-#import "RCTBridgeModule.h"
+-#elif __has_include(<React/RCTBridgeModule.h>)
+ #import <React/RCTBridgeModule.h>
+-#else
+-#import "React/RCTBridgeModule.h"
+-#endif
+-
+-// import RCTEventEmitter.h
+-#if __has_include("RCTEventEmitter.h")
+-#import "RCTEventEmitter.h"
+-#elif __has_include(<React/RCTEventEmitter.h>)
+ #import <React/RCTEventEmitter.h>
+-#else
+-#import "React/RCTEventEmitter.h"
+-#endif
+ 
+ @import WatchConnectivity;
+ 
+diff --git a/node_modules/react-native-watch-connectivity/ios/RNWatch/RNWatch.m b/node_modules/react-native-watch-connectivity/ios/RNWatch/RNWatch.m
+index bbdfac5..54f8449 100644
+--- a/node_modules/react-native-watch-connectivity/ios/RNWatch/RNWatch.m
++++ b/node_modules/react-native-watch-connectivity/ios/RNWatch/RNWatch.m
+@@ -3,28 +3,8 @@
+ #import "FileTransferEvent.h"
+ #import "util.h"
+ 
+-// import RCTConvert.h
+-#if __has_include("RCTConvert.h")
+-#import "RCTConvert.h"
+-#elif __has_include(<React/RCTConvert.h>)
+-
+ #import <React/RCTConvert.h>
+ 
+-#else
+-#import "React/RCTConvert.h"
+-#endif
+-
+-// import RCTEventDispatcher.h
+-#if __has_include("RCTEventDispatcher.h")
+-#import "RCTEventDispatcher.h"
+-#elif __has_include(<React/RCTEventDispatcher.h>)
+-
+-#import <React/RCTEventDispatcher.h>
+-
+-#else
+-#import "React/RCTEventDispatcher.h"
+-#endif
+-
+ static NSString *EVENT_FILE_TRANSFER = @"WatchFileTransfer";
+ static NSString *EVENT_WATCH_FILE_RECEIVED = @"WatchFileReceived";
+ static NSString *EVENT_WATCH_FILE_ERROR = @"WatchFileError";

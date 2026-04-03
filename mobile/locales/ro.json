@@ -1,0 +1,148 @@
+{
+  "app": {
+    "title": "Quote App",
+    "subtitle": "Oferte cu AI vocal"
+  },
+  "auth": {
+    "register": "Înregistrare",
+    "login": "Autentificare",
+    "email": "Email",
+    "password": "Parolă",
+    "confirmPassword": "Confirmă parola",
+    "passwordMismatch": "Parolele nu se potrivesc",
+    "registrationComplete": "Înregistrare finalizată. Verificați e-mailul."
+  },
+  "legal": {
+    "title": "Documente legale",
+    "privacy": "Politica de confidențialitate",
+    "terms": "Termeni și condiții",
+    "security": "Politica de securitate",
+    "accept": "Accept"
+  },
+  "onboarding": {
+    "title": "Ghid rapid",
+    "voice": "Buton vocal",
+    "voiceDesc": "Apăsați pentru înregistrare.",
+    "listini": "Liste de prețuri",
+    "listiniDesc": "Încărcați CSV.",
+    "preventivo": "Ofertă",
+    "preventivoDesc": "Generați și trimiteți oferta prin email.",
+    "next": "Următorul",
+    "start": "Începe"
+  },
+  "main": {
+    "record": "Înregistrare",
+    "stop": "Oprire și trimitere",
+    "jobs": "Lucrări",
+    "listini": "Liste prețuri",
+    "profile": "Profil",
+    "generateQuote": "Generare ofertă"
+  },
+  "profile": {
+    "company": "Companie",
+    "vatNumber": "CUI",
+    "materialMarkupVAT": "TVA adaos materiale %",
+    "fiscalCode": "CNP",
+    "country": "Țara",
+    "language": "Limbă",
+    "swiftBic": "SWIFT/BIC",
+    "iban": "IBAN",
+    "vatPercent": "TVA %"
+  },
+  "messages": {
+    "error": "Eroare",
+    "success": "Succes",
+    "loading": "Se încarcă...",
+    "address": "Adresă",
+    "city": "Oraș",
+    "postalCode": "Cod poștal",
+    "saved": "Profil salvat",
+    "saving": "Se salvează...",
+    "save": "Salvează",
+    "emailSent": "E-mail trimis",
+    "notAuthenticated": "Neautentificat",
+    "permission": "Permisiune",
+    "permissionDescription": "Este necesară permisiunea microfonului."
+  },
+  "navigation": {
+    "login": "Autentificare",
+    "register": "Înregistrare",
+    "quote": "Generare ofertă",
+    "profile": "Profil",
+    "listini": "Liste prețuri",
+    "subscription": "Abonament"
+  },
+  "buttons": {
+    "save": "Salvează",
+    "cancel": "Anulează",
+    "delete": "Șterge",
+    "loading": "...",
+    "generatePreview": "Generează previzualizare",
+    "openBrowser": "Deschide în browser",
+    "send": "Trimite",
+    "sendEmail": "Trimite e-mail",
+    "validateApprove": "Validează și aprobă"
+  },
+  "sections": {
+    "clients": "Clienți",
+    "jobs": "Lucrări",
+    "details": "Detalii",
+    "detailsLabel": "Detalii:",
+    "selectListino": "Selectați listă prețuri",
+    "selectClientToViewJobs": "Selectați un client pentru a vedea lucrările",
+    "description": "Descriere"
+  },
+  "actions": {
+    "add": "Adaugă",
+    "addClient": "Adaugă client",
+    "addJob": "Adaugă lucrare",
+    "addCost": "Adaugă cost",
+    "edit": "Editează",
+    "delete": "Șterge",
+    "deleteConfirm": "Sigur?",
+    "deleted": "Șters"
+  },
+  "listini": {
+    "newListino": "Listă prețuri nouă",
+    "uploadCsv": "Importă CSV/Excel",
+    "addManual": "Adaugă manual",
+    "promptNewListino": "Introduceți numele listei",
+    "itemsAdded": "articole adăugate",
+    "newItem": "Articol nou",
+    "description": "Descriere",
+    "price": "Preț",
+    "markup": "Adaos %",
+    "emptyFile": "Fișier gol sau invalid"
+  },
+  "modals": {
+    "confirmEmail": "Confirmați trimiterea email"
+  },
+  "subscription": {
+    "title": "Abonament",
+    "monthly": "Lunar",
+    "yearly": "Anual",
+    "active": "Abonament activ",
+    "inactive": "Niciun abonament activ",
+    "expires": "Expiră la",
+    "manage": "Gestionați abonamentul",
+    "cancel": "Anulați abonamentul",
+    "change": "Schimbați planul",
+    "subscribe": "Abonați-vă",
+    "saveTwoMonths": "Economisiți 2 luni!",
+    "perMonth": "/lună",
+    "perYear": "/an",
+    "chooseYourPlan": "Alegeți-vă planul"
+  },
+  "dashboard": {
+    "noMaterialFound": "Nu s-a găsit material în listele de prețuri",
+    "notFoundTitle": "Negăsit",
+    "quantity": "Cantitate",
+    "resultsFound": "{{count}} rezultate găsite. Selectați lista de prețuri:",
+    "searchClient": "Caută client...",
+    "selectMaterial": "Selectează material",
+    "selectionRequiredMessage": "S-au găsit mai multe materiale. Selectați lista de prețuri corectă.",
+    "selectionRequiredTitle": "Selecție necesară",
+    "unitPrice": "Preț unitar",
+    "unknownListino": "Listă de prețuri necunoscută"
+  }
+}

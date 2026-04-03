@@ -1,0 +1,148 @@
+{
+  "app": {
+    "title": "Quote App",
+    "subtitle": "Orçamentos com IA vocal"
+  },
+  "auth": {
+    "register": "Registar",
+    "login": "Entrar",
+    "email": "Email",
+    "password": "Palavra-passe",
+    "confirmPassword": "Confirmar",
+    "passwordMismatch": "As senhas não coincidem",
+    "registrationComplete": "Registo concluído. Verifique o seu e-mail."
+  },
+  "legal": {
+    "title": "Legal",
+    "privacy": "Privacidade",
+    "terms": "Termos",
+    "security": "Segurança",
+    "accept": "Aceito"
+  },
+  "onboarding": {
+    "title": "Guia rápida",
+    "voice": "Botão de voz",
+    "voiceDesc": "Pressione para gravar.",
+    "listini": "Preços",
+    "listiniDesc": "Carregar CSV.",
+    "preventivo": "Orçamento",
+    "preventivoDesc": "Gerar e enviar orçamentos.",
+    "next": "Seguinte",
+    "start": "Começar"
+  },
+  "main": {
+    "record": "Gravar",
+    "stop": "Parar e enviar",
+    "jobs": "Trabalhos",
+    "listini": "Tarifas",
+    "profile": "Perfil",
+    "generateQuote": "Gerar orçamento"
+  },
+  "profile": {
+    "company": "Empresa",
+    "vatNumber": "NIF",
+    "materialMarkupVAT": "IVA acréscimo materiais %",
+    "fiscalCode": "NIF",
+    "country": "País",
+    "language": "Idioma",
+    "swiftBic": "SWIFT/BIC",
+    "iban": "IBAN",
+    "vatPercent": "IVA %"
+  },
+  "messages": {
+    "error": "Erro",
+    "success": "Sucesso",
+    "loading": "Carregando...",
+    "address": "Endereço",
+    "city": "Cidade",
+    "postalCode": "Código postal",
+    "saved": "Perfil salvo",
+    "saving": "Salvando...",
+    "save": "Salvar",
+    "emailSent": "E-mail enviado",
+    "notAuthenticated": "Não autenticado",
+    "permission": "Permissão",
+    "permissionDescription": "Permissão do microfone é necessária."
+  },
+  "navigation": {
+    "login": "Entrar",
+    "register": "Registrar",
+    "quote": "Gerar orçamento",
+    "profile": "Perfil",
+    "listini": "Tarifas",
+    "subscription": "Assinatura"
+  },
+  "buttons": {
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "delete": "Excluir",
+    "loading": "...",
+    "generatePreview": "Gerar pré-visualização",
+    "openBrowser": "Abrir no navegador",
+    "send": "Enviar",
+    "sendEmail": "Enviar e-mail",
+    "validateApprove": "Validar e aprovar"
+  },
+  "sections": {
+    "clients": "Clientes",
+    "jobs": "Trabalhos",
+    "details": "Detalhes",
+    "detailsLabel": "Detalhes:",
+    "selectListino": "Selecionar tarifa",
+    "selectClientToViewJobs": "Selecione um cliente para ver trabalhos",
+    "description": "Descrição"
+  },
+  "actions": {
+    "add": "Adicionar",
+    "addClient": "Adicionar cliente",
+    "addJob": "Adicionar trabalho",
+    "addCost": "Adicionar custo",
+    "edit": "Editar",
+    "delete": "Excluir",
+    "deleteConfirm": "Tem certeza?",
+    "deleted": "Excluído"
+  },
+  "listini": {
+    "newListino": "Nova tarifa",
+    "uploadCsv": "Importar CSV/Excel",
+    "addManual": "Adicionar manualmente",
+    "promptNewListino": "Digite o nome da tarifa",
+    "itemsAdded": "itens adicionados",
+    "newItem": "Novo item",
+    "description": "Descrição",
+    "price": "Preço",
+    "markup": "Margem %",
+    "emptyFile": "Arquivo vazio ou inválido"
+  },
+  "modals": {
+    "confirmEmail": "Confirmar envio de email"
+  },
+  "subscription": {
+    "title": "Assinatura",
+    "monthly": "Mensal",
+    "yearly": "Anual",
+    "active": "Assinatura ativa",
+    "inactive": "Nenhuma assinatura ativa",
+    "expires": "Expira em",
+    "manage": "Gerenciar assinatura",
+    "cancel": "Cancelar assinatura",
+    "change": "Mudar plano",
+    "subscribe": "Assinar",
+    "saveTwoMonths": "Economize 2 meses!",
+    "perMonth": "/mês",
+    "perYear": "/ano",
+    "chooseYourPlan": "Escolha seu plano"
+  },
+  "dashboard": {
+    "noMaterialFound": "Nenhum material encontrado nas listas de preços",
+    "notFoundTitle": "Não encontrado",
+    "quantity": "Quantidade",
+    "resultsFound": "{{count}} resultados encontrados. Selecione a lista de preços:",
+    "searchClient": "Pesquisar cliente...",
+    "selectMaterial": "Selecionar material",
+    "selectionRequiredMessage": "Vários materiais encontrados. Selecione a lista de preços correta.",
+    "selectionRequiredTitle": "Seleção necessária",
+    "unitPrice": "Preço unitário",
+    "unknownListino": "Lista de preços desconhecida"
+  }
+}

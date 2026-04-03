@@ -1,0 +1,148 @@
+{
+  "app": {
+    "title": "Quote App",
+    "subtitle": "Оферти с гласов AI"
+  },
+  "auth": {
+    "register": "Регистрация",
+    "login": "Вход",
+    "email": "Email",
+    "password": "Парола",
+    "confirmPassword": "Потвърдете паролата",
+    "passwordMismatch": "Паролите не съвпадат",
+    "registrationComplete": "Регистрацията е завършена. Проверете имейла си за потвърждение."
+  },
+  "legal": {
+    "title": "Правни документи",
+    "privacy": "Политика за поверителност",
+    "terms": "Условия за ползване",
+    "security": "Политика за сигурност",
+    "accept": "Приемам"
+  },
+  "onboarding": {
+    "title": "Бърз ръководство",
+    "voice": "Гласов бутон",
+    "voiceDesc": "Натиснете за запис.",
+    "listini": "Ценови листи",
+    "listiniDesc": "Качете CSV.",
+    "preventivo": "Оферта",
+    "preventivoDesc": "Генерирайте и изпратете оферта по email.",
+    "next": "Напред",
+    "start": "Започни"
+  },
+  "main": {
+    "record": "Запис",
+    "stop": "Спри и изпрати",
+    "jobs": "Работи",
+    "listini": "Ценови листи",
+    "profile": "Профил",
+    "generateQuote": "Генерирай оферта"
+  },
+  "profile": {
+    "company": "Фирма",
+    "vatNumber": "ДДС номер",
+    "materialMarkupVAT": "ДДС надценка за материали %",
+    "fiscalCode": "ЕИК",
+    "country": "Държава",
+    "language": "Език",
+    "swiftBic": "SWIFT/BIC",
+    "iban": "IBAN",
+    "vatPercent": "ДДС %"
+  },
+  "messages": {
+    "error": "Грешка",
+    "success": "Успех",
+    "loading": "Зареждане...",
+    "address": "Адрес",
+    "city": "Град",
+    "postalCode": "Пощенски код",
+    "saved": "Профилът е запазен",
+    "saving": "Записване...",
+    "save": "Запази",
+    "emailSent": "Имейлът е изпратен",
+    "notAuthenticated": "Не е удостоверен",
+    "permission": "Разрешение",
+    "permissionDescription": "Необходимо е разрешение за микрофона."
+  },
+  "navigation": {
+    "login": "Вход",
+    "register": "Регистрация",
+    "quote": "Генериране на оферта",
+    "profile": "Профил",
+    "listini": "Ценови листи",
+    "subscription": "Абонамент"
+  },
+  "buttons": {
+    "save": "Запази",
+    "cancel": "Отказ",
+    "delete": "Изтрий",
+    "loading": "...",
+    "generatePreview": "Генериране на визуализация",
+    "openBrowser": "Отвори в браузъра",
+    "send": "Изпрати",
+    "sendEmail": "Изпрати имейл",
+    "validateApprove": "Валидирай и одобри"
+  },
+  "sections": {
+    "clients": "Клиенти",
+    "jobs": "Работи",
+    "details": "Детайли",
+    "detailsLabel": "Детайли:",
+    "selectListino": "Изберете ценова листа",
+    "selectClientToViewJobs": "Изберете клиент, за да видите работите",
+    "description": "Описание"
+  },
+  "actions": {
+    "add": "Добави",
+    "addClient": "Добави клиент",
+    "addJob": "Добави работа",
+    "addCost": "Добави разход",
+    "edit": "Редактирай",
+    "delete": "Изтрий",
+    "deleteConfirm": "Сигурни ли сте?",
+    "deleted": "Изтрито"
+  },
+  "listini": {
+    "newListino": "Нова ценова листа",
+    "uploadCsv": "Импорт CSV/Excel",
+    "addManual": "Ръчно добавяне",
+    "promptNewListino": "Въведете име на ценовата листа",
+    "itemsAdded": "позиции добавени",
+    "newItem": "Нова позиция",
+    "description": "Описание",
+    "price": "Цена",
+    "markup": "Надценка %",
+    "emptyFile": "Файлът е празен или невалиден"
+  },
+  "modals": {
+    "confirmEmail": "Потвърдете изпращането на имейл"
+  },
+  "subscription": {
+    "title": "Абонамент",
+    "monthly": "Месечен",
+    "yearly": "Годишен",
+    "active": "Активен абонамент",
+    "inactive": "Няма активен абонамент",
+    "expires": "Изтича на",
+    "manage": "Управление на абонамента",
+    "cancel": "Отменяне на абонамента",
+    "change": "Промяна на плана",
+    "subscribe": "Абонирай се",
+    "saveTwoMonths": "Спестете 2 месеца!",
+    "perMonth": "/месец",
+    "perYear": "/година",
+    "chooseYourPlan": "Изберете вашия план"
+  },
+  "dashboard": {
+    "noMaterialFound": "Не е намерен материал в ценовите листи",
+    "notFoundTitle": "Не е намерено",
+    "quantity": "Количество",
+    "resultsFound": "Намерени {{count}} резултата. Изберете от кой ценови лист:",
+    "searchClient": "Търсене на клиент...",
+    "selectMaterial": "Избери материал",
+    "selectionRequiredMessage": "Намерени са множество материали. Изберете правилния ценови лист.",
+    "selectionRequiredTitle": "Необходим е избор",
+    "unitPrice": "Единична цена",
+    "unknownListino": "Неизвестен ценови лист"
+  }
+}

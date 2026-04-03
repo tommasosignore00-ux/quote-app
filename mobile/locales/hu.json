@@ -1,0 +1,148 @@
+{
+  "app": {
+    "title": "Quote App",
+    "subtitle": "Árajánlatok hangos AI-val"
+  },
+  "auth": {
+    "register": "Regisztráció",
+    "login": "Bejelentkezés",
+    "email": "Email",
+    "password": "Jelszó",
+    "confirmPassword": "Jelszó megerősítése",
+    "passwordMismatch": "A jelszavak nem egyeznek",
+    "registrationComplete": "Regisztráció kész. Ellenőrizze e-mailjét."
+  },
+  "legal": {
+    "title": "Jogi dokumentumok",
+    "privacy": "Adatvédelmi irányelvek",
+    "terms": "Szolgáltatási feltételek",
+    "security": "Biztonsági irányelvek",
+    "accept": "Elfogadom"
+  },
+  "onboarding": {
+    "title": "Gyors útmutató",
+    "voice": "Hang gomb",
+    "voiceDesc": "Nyomja meg a felvételhez.",
+    "listini": "Árlisták",
+    "listiniDesc": "Töltse fel CSV-t.",
+    "preventivo": "Árajánlat",
+    "preventivoDesc": "Hozzon létre és küldjön árajánlatot e-mailben.",
+    "next": "Következő",
+    "start": "Kezdés"
+  },
+  "main": {
+    "record": "Felvétel",
+    "stop": "Leállítás és küldés",
+    "jobs": "Munkák",
+    "listini": "Árlisták",
+    "profile": "Profil",
+    "generateQuote": "Árajánlat készítése"
+  },
+  "profile": {
+    "company": "Cég",
+    "vatNumber": "Adószám",
+    "materialMarkupVAT": "Anyagfelár ÁFA %",
+    "fiscalCode": "Adóazonosító",
+    "country": "Ország",
+    "language": "Nyelv",
+    "swiftBic": "SWIFT/BIC",
+    "iban": "IBAN",
+    "vatPercent": "ÁFA %"
+  },
+  "messages": {
+    "error": "Hiba",
+    "success": "Sikeres",
+    "loading": "Betöltés...",
+    "address": "Cím",
+    "city": "Város",
+    "postalCode": "Irányítószám",
+    "saved": "Profil mentve",
+    "saving": "Mentés...",
+    "save": "Mentés",
+    "emailSent": "E-mail elküldve",
+    "notAuthenticated": "Nincs hitelesítve",
+    "permission": "Engedély",
+    "permissionDescription": "Mikrofon engedély szükséges."
+  },
+  "navigation": {
+    "login": "Bejelentkezés",
+    "register": "Regisztráció",
+    "quote": "Ajánlat létrehozása",
+    "profile": "Profil",
+    "listini": "Árlisták",
+    "subscription": "Előfizetés"
+  },
+  "buttons": {
+    "save": "Mentés",
+    "cancel": "Mégse",
+    "delete": "Törlés",
+    "loading": "...",
+    "generatePreview": "Előnézet generálása",
+    "openBrowser": "Megnyitás böngészőben",
+    "send": "Küldés",
+    "sendEmail": "E-mail küldése",
+    "validateApprove": "Érvényesítés és jóváhagyás"
+  },
+  "sections": {
+    "clients": "Ügyfelek",
+    "jobs": "Munkák",
+    "details": "Részletek",
+    "detailsLabel": "Részletek:",
+    "selectListino": "Válasszon árlistát",
+    "selectClientToViewJobs": "Válasszon ügyfelet a munkák megtekintéséhez",
+    "description": "Leírás"
+  },
+  "actions": {
+    "add": "Hozzáadás",
+    "addClient": "Ügyfél hozzáadása",
+    "addJob": "Munka hozzáadása",
+    "addCost": "Költség hozzáadása",
+    "edit": "Szerkesztés",
+    "delete": "Törlés",
+    "deleteConfirm": "Biztos benne?",
+    "deleted": "Törölve"
+  },
+  "listini": {
+    "newListino": "Új árlista",
+    "uploadCsv": "CSV/Excel importálás",
+    "addManual": "Kézi hozzáadás",
+    "promptNewListino": "Adja meg az árlista nevét",
+    "itemsAdded": "tétel hozzáadva",
+    "newItem": "Új tétel",
+    "description": "Leírás",
+    "price": "Ár",
+    "markup": "Haszonkulcs %",
+    "emptyFile": "A fájl üres vagy érvénytelen"
+  },
+  "modals": {
+    "confirmEmail": "Email küldés megerősítése"
+  },
+  "subscription": {
+    "title": "Előfizetés",
+    "monthly": "Havi",
+    "yearly": "Éves",
+    "active": "Aktív előfizetés",
+    "inactive": "Nincs aktív előfizetés",
+    "expires": "Lejár",
+    "manage": "Előfizetés kezelése",
+    "cancel": "Előfizetés lemondása",
+    "change": "Csomag módosítása",
+    "subscribe": "Feliratkozás",
+    "saveTwoMonths": "Takarítson meg 2 hónapot!",
+    "perMonth": "/hó",
+    "perYear": "/év",
+    "chooseYourPlan": "Válassza ki a csomagját"
+  },
+  "dashboard": {
+    "noMaterialFound": "Nem található anyag az árlistákban",
+    "notFoundTitle": "Nem található",
+    "quantity": "Mennyiség",
+    "resultsFound": "{{count}} eredmény található. Válassza ki az árlistát:",
+    "searchClient": "Ügyfél keresése...",
+    "selectMaterial": "Anyag kiválasztása",
+    "selectionRequiredMessage": "Több anyag található. Válassza ki a megfelelő árlistát.",
+    "selectionRequiredTitle": "Kiválasztás szükséges",
+    "unitPrice": "Egységár",
+    "unknownListino": "Ismeretlen árlista"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "cb6ad4a0-49e0-44aa-885c-e6f3847895d8"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.tommuzz.quoteappmonorepo",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    }
+  }
+}

@@ -1,0 +1,148 @@
+{
+  "app": {
+    "title": "Quote App",
+    "subtitle": "Προσφορές με φωνητικό AI"
+  },
+  "auth": {
+    "register": "Εγγραφή",
+    "login": "Σύνδεση",
+    "email": "Email",
+    "password": "Κωδικός",
+    "confirmPassword": "Επιβεβαίωση κωδικού",
+    "passwordMismatch": "Οι κωδικοί δεν ταιριάζουν",
+    "registrationComplete": "Η εγγραφή ολοκληρώθηκε. Ελέγξτε το email σας."
+  },
+  "legal": {
+    "title": "Νομικά έγγραφα",
+    "privacy": "Πολιτική απορρήτου",
+    "terms": "Όροι χρήσης",
+    "security": "Πολιτική ασφαλείας",
+    "accept": "Αποδέχομαι"
+  },
+  "onboarding": {
+    "title": "Γρήγορος οδηγός",
+    "voice": "Φωνητικό κουμπί",
+    "voiceDesc": "Πατήστε για εγγραφή.",
+    "listini": "Τιμοκατάλογοι",
+    "listiniDesc": "Ανεβάστε CSV.",
+    "preventivo": "Προσφορά",
+    "preventivoDesc": "Δημιουργήστε προσφορά και στείλτε με email.",
+    "next": "Επόμενο",
+    "start": "Έναρξη"
+  },
+  "main": {
+    "record": "Εγγραφή",
+    "stop": "Σταμάτα και στείλε",
+    "jobs": "Έργα",
+    "listini": "Τιμοκατάλογοι",
+    "profile": "Προφίλ",
+    "generateQuote": "Δημιουργία προσφοράς"
+  },
+  "profile": {
+    "company": "Εταιρεία",
+    "vatNumber": "ΑΦΜ",
+    "materialMarkupVAT": "ΦΠΑ προσαύξηση υλικών %",
+    "fiscalCode": "ΑΦΜ",
+    "country": "Χώρα",
+    "language": "Γλώσσα",
+    "swiftBic": "SWIFT/BIC",
+    "iban": "IBAN",
+    "vatPercent": "ΦΠΑ %"
+  },
+  "messages": {
+    "error": "Σφάλμα",
+    "success": "Επιτυχία",
+    "loading": "Φόρτωση...",
+    "address": "Διεύθυνση",
+    "city": "Πόλη",
+    "postalCode": "Ταχυδρομικός κώδικας",
+    "saved": "Το προφίλ αποθηκεύτηκε",
+    "saving": "Αποθήκευση...",
+    "save": "Αποθήκευση",
+    "emailSent": "Το email στάλθηκε",
+    "notAuthenticated": "Μη πιστοποιημένος",
+    "permission": "Άδεια",
+    "permissionDescription": "Απαιτείται άδεια μικροφώνου."
+  },
+  "navigation": {
+    "login": "Σύνδεση",
+    "register": "Εγγραφή",
+    "quote": "Δημιουργία προσφοράς",
+    "profile": "Προφίλ",
+    "listini": "Τιμοκατάλογοι",
+    "subscription": "Συνδρομή"
+  },
+  "buttons": {
+    "save": "Αποθήκευση",
+    "cancel": "Ακύρωση",
+    "delete": "Διαγραφή",
+    "loading": "...",
+    "generatePreview": "Δημιουργία προεπισκόπησης",
+    "openBrowser": "Άνοιγμα στον browser",
+    "send": "Αποστολή",
+    "sendEmail": "Αποστολή email",
+    "validateApprove": "Επικύρωση και έγκριση"
+  },
+  "sections": {
+    "clients": "Πελάτες",
+    "jobs": "Εργασίες",
+    "details": "Λεπτομέρειες",
+    "detailsLabel": "Λεπτομέρειες:",
+    "selectListino": "Επιλέξτε τιμοκατάλογο",
+    "selectClientToViewJobs": "Επιλέξτε πελάτη για προβολή εργασιών",
+    "description": "Περιγραφή"
+  },
+  "actions": {
+    "add": "Προσθήκη",
+    "addClient": "Προσθήκη πελάτη",
+    "addJob": "Προσθήκη εργασίας",
+    "addCost": "Προσθήκη κόστους",
+    "edit": "Επεξεργασία",
+    "delete": "Διαγραφή",
+    "deleteConfirm": "Είστε σίγουροι;",
+    "deleted": "Διαγράφηκε"
+  },
+  "listini": {
+    "newListino": "Νέος τιμοκατάλογος",
+    "uploadCsv": "Εισαγωγή CSV/Excel",
+    "addManual": "Χειροκίνητη προσθήκη",
+    "promptNewListino": "Εισάγετε όνομα τιμοκαταλόγου",
+    "itemsAdded": "στοιχεία προστέθηκαν",
+    "newItem": "Νέο στοιχείο",
+    "description": "Περιγραφή",
+    "price": "Τιμή",
+    "markup": "Προσαύξηση %",
+    "emptyFile": "Το αρχείο είναι κενό ή μη έγκυρο"
+  },
+  "modals": {
+    "confirmEmail": "Επιβεβαίωση αποστολής email"
+  },
+  "subscription": {
+    "title": "Συνδρομή",
+    "monthly": "Μηνιαία",
+    "yearly": "Ετήσια",
+    "active": "Ενεργή συνδρομή",
+    "inactive": "Καμία ενεργή συνδρομή",
+    "expires": "Λήγει",
+    "manage": "Διαχείριση συνδρομής",
+    "cancel": "Ακύρωση συνδρομής",
+    "change": "Αλλαγή πλάνου",
+    "subscribe": "Εγγραφή",
+    "saveTwoMonths": "Εξοικονομήστε 2 μήνες!",
+    "perMonth": "/μήνα",
+    "perYear": "/έτος",
+    "chooseYourPlan": "Επιλέξτε το πλάνο σας"
+  },
+  "dashboard": {
+    "noMaterialFound": "Δεν βρέθηκε υλικό στους τιμοκαταλόγους",
+    "notFoundTitle": "Δεν βρέθηκε",
+    "quantity": "Ποσότητα",
+    "resultsFound": "Βρέθηκαν {{count}} αποτελέσματα. Επιλέξτε τιμοκατάλογο:",
+    "searchClient": "Αναζήτηση πελάτη...",
+    "selectMaterial": "Επιλογή υλικού",
+    "selectionRequiredMessage": "Βρέθηκαν πολλαπλά υλικά. Επιλέξτε τον σωστό τιμοκατάλογο.",
+    "selectionRequiredTitle": "Απαιτείται επιλογή",
+    "unitPrice": "Τιμή μονάδας",
+    "unknownListino": "Άγνωστος τιμοκατάλογος"
+  }
+}

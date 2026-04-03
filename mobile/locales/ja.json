@@ -1,0 +1,148 @@
+{
+  "app": {
+    "title": "Quote App",
+    "subtitle": "音声AIで見積もり"
+  },
+  "auth": {
+    "register": "登録",
+    "login": "ログイン",
+    "email": "メール",
+    "password": "パスワード",
+    "confirmPassword": "パスワード確認",
+    "passwordMismatch": "パスワードが一致しません",
+    "registrationComplete": "登録完了。メールを確認してください。"
+  },
+  "legal": {
+    "title": "法的文書",
+    "privacy": "プライバシーポリシー",
+    "terms": "利用規約",
+    "security": "セキュリティポリシー",
+    "accept": "同意する"
+  },
+  "onboarding": {
+    "title": "クイックガイド",
+    "voice": "音声ボタン",
+    "voiceDesc": "押して録音。",
+    "listini": "価格表",
+    "listiniDesc": "CSVをアップロード。",
+    "preventivo": "見積もり",
+    "preventivoDesc": "見積もりを生成してメールで送信。",
+    "next": "次へ",
+    "start": "開始"
+  },
+  "main": {
+    "record": "録音",
+    "stop": "停止して送信",
+    "jobs": "仕事",
+    "listini": "価格表",
+    "profile": "プロフィール",
+    "generateQuote": "見積もり作成"
+  },
+  "profile": {
+    "company": "会社",
+    "vatNumber": "税番号",
+    "materialMarkupVAT": "材料マークアップの消費税 %",
+    "fiscalCode": "法人番号",
+    "country": "国",
+    "language": "言語",
+    "swiftBic": "SWIFT/BIC",
+    "iban": "IBAN",
+    "vatPercent": "消費税 %"
+  },
+  "messages": {
+    "error": "エラー",
+    "success": "成功",
+    "loading": "読み込み中...",
+    "address": "住所",
+    "city": "市区町村",
+    "postalCode": "郵便番号",
+    "saved": "プロフィールが保存されました",
+    "saving": "保存中...",
+    "save": "保存",
+    "emailSent": "メール送信済み",
+    "notAuthenticated": "未認証",
+    "permission": "許可",
+    "permissionDescription": "マイクの許可が必要です。"
+  },
+  "navigation": {
+    "login": "ログイン",
+    "register": "登録",
+    "quote": "見積もり作成",
+    "profile": "プロフィール",
+    "listini": "価格表",
+    "subscription": "サブスクリプション"
+  },
+  "buttons": {
+    "save": "保存",
+    "cancel": "キャンセル",
+    "delete": "削除",
+    "loading": "...",
+    "generatePreview": "プレビュー生成",
+    "openBrowser": "ブラウザで開く",
+    "send": "送信",
+    "sendEmail": "メール送信",
+    "validateApprove": "検証して承認"
+  },
+  "sections": {
+    "clients": "顧客",
+    "jobs": "仕事",
+    "details": "詳細",
+    "detailsLabel": "詳細：",
+    "selectListino": "価格表を選択",
+    "selectClientToViewJobs": "顧客を選択して仕事を表示",
+    "description": "説明"
+  },
+  "actions": {
+    "add": "追加",
+    "addClient": "顧客を追加",
+    "addJob": "仕事を追加",
+    "addCost": "費用を追加",
+    "edit": "編集",
+    "delete": "削除",
+    "deleteConfirm": "よろしいですか？",
+    "deleted": "削除されました"
+  },
+  "listini": {
+    "newListino": "新しい価格表",
+    "uploadCsv": "CSV/Excelをインポート",
+    "addManual": "手動で追加",
+    "promptNewListino": "価格表名を入力",
+    "itemsAdded": "項目が追加されました",
+    "newItem": "新しい項目",
+    "description": "説明",
+    "price": "価格",
+    "markup": "マークアップ %",
+    "emptyFile": "ファイルが空または無効です"
+  },
+  "modals": {
+    "confirmEmail": "メール送信を確認"
+  },
+  "subscription": {
+    "title": "サブスクリプション",
+    "monthly": "月額",
+    "yearly": "年額",
+    "active": "有効なサブスクリプション",
+    "inactive": "有効なサブスクリプションがありません",
+    "expires": "有効期限",
+    "manage": "サブスクリプションを管理",
+    "cancel": "サブスクリプションをキャンセル",
+    "change": "プランを変更",
+    "subscribe": "登録",
+    "saveTwoMonths": "2ヶ月分お得!",
+    "perMonth": "/月",
+    "perYear": "/年",
+    "chooseYourPlan": "プランを選択"
+  },
+  "dashboard": {
+    "noMaterialFound": "価格表に資材が見つかりません",
+    "notFoundTitle": "見つかりません",
+    "quantity": "数量",
+    "resultsFound": "{{count}}件の結果。価格表を選択してください：",
+    "searchClient": "顧客を検索...",
+    "selectMaterial": "資材を選択",
+    "selectionRequiredMessage": "複数の資材が見つかりました。正しい価格表を選択してください。",
+    "selectionRequiredTitle": "選択が必要です",
+    "unitPrice": "単価",
+    "unknownListino": "不明な価格表"
+  }
+}

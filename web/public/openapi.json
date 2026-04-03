@@ -1,0 +1,435 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "QuoteApp API",
+    "description": "API per la gestione di preventivi con input vocale, ricerca semantica e sincronizzazione real-time.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "QuoteApp Team",
+      "email": "support@quoteapp.it"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Development"
+    },
+    {
+      "url": "https://api.quoteapp.it",
+      "description": "Production"
+    }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Health Check",
+        "description": "Verifica lo stato del server e dei servizi collegati.",
+        "tags": ["System"],
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "summary": "Registra nuovo utente",
+        "description": "Crea un nuovo utente con email/password. Configura automaticamente il profilo e invia email di benvenuto (se configurata).",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Registrazione completata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "429": { "$ref": "#/components/responses/RateLimitError" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/voice/process": {
+      "post": {
+        "summary": "Processa comando vocale",
+        "description": "Accetta audio, lo trascrive con Whisper e lo interpreta con GPT-4 per eseguire azioni (creare clienti, lavori, aggiungere costi).",
+        "tags": ["Voice AI"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["audio"],
+                "properties": {
+                  "audio": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "File audio (webm, mp3, wav)"
+                  },
+                  "clienti": {
+                    "type": "string",
+                    "description": "JSON array dei clienti dell'utente [{id, name}]"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Comando interpretato",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceProcessResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "429": { "$ref": "#/components/responses/RateLimitError" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/stripe/create-checkout-session": {
+      "post": {
+        "summary": "Crea sessione Stripe Checkout",
+        "description": "Genera una sessione Stripe per il pagamento dell'abbonamento (mensile/annuale con 7gg trial).",
+        "tags": ["Payments"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckoutSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sessione creata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sessionId": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/quote/send-email": {
+      "post": {
+        "summary": "Invia preventivo via email",
+        "description": "Invia il preventivo approvato al cliente tramite email.",
+        "tags": ["Quotes"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendEmailRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Email inviata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/listini/upload": {
+      "post": {
+        "summary": "Carica listino prezzi",
+        "description": "Carica un file Excel/CSV con i listini prezzi dell'utente.",
+        "tags": ["Listini"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file", "profileId"],
+                "properties": {
+                  "file": { "type": "string", "format": "binary" },
+                  "profileId": { "type": "string", "format": "uuid" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Listino caricato" },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/listini/text-search": {
+      "post": {
+        "summary": "Ricerca nel listino",
+        "description": "Cerca un materiale nel listino dell'utente con matching testuale e semantico.",
+        "tags": ["Listini"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TextSearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Risultati ricerca",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TextSearchResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/semantic/search": {
+      "post": {
+        "summary": "Ricerca semantica",
+        "description": "Ricerca semantica tra i listini usando embeddings vettoriali (pgvector).",
+        "tags": ["AI"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["query", "profileId"],
+                "properties": {
+                  "query": { "type": "string" },
+                  "profileId": { "type": "string", "format": "uuid" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Risultati ricerca semantica" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Supabase JWT token"
+      }
+    },
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "ok" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "version": { "type": "string", "example": "1.0.0" },
+          "services": {
+            "type": "object",
+            "properties": {
+              "database": { "type": "string", "enum": ["ok", "error"] },
+              "stripe": { "type": "string", "enum": ["ok", "error", "not_configured"] },
+              "openai": { "type": "string", "enum": ["ok", "error", "not_configured"] }
+            }
+          }
+        }
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "required": ["email", "password"],
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "password": { "type": "string", "minLength": 8 },
+          "country_code": { "type": "string", "maxLength": 2, "example": "IT" },
+          "language": { "type": "string", "example": "it" },
+          "legalAccepted": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string", "format": "uuid" },
+                "version": { "type": "string" }
+              }
+            }
+          }
+        }
+      },
+      "RegisterResponse": {
+        "type": "object",
+        "properties": {
+          "ok": { "type": "boolean" },
+          "user": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "format": "uuid" },
+              "email": { "type": "string", "format": "email" }
+            }
+          }
+        }
+      },
+      "VoiceProcessResponse": {
+        "type": "object",
+        "properties": {
+          "action": { "type": "string", "enum": ["create_cliente", "create_lavoro", "add_costo", "none"] },
+          "data": { "type": "object" },
+          "text": { "type": "string", "description": "Testo trascritto da Whisper" }
+        }
+      },
+      "CheckoutSessionRequest": {
+        "type": "object",
+        "required": ["userId", "priceId"],
+        "properties": {
+          "userId": { "type": "string", "format": "uuid" },
+          "email": { "type": "string", "format": "email" },
+          "companyName": { "type": "string" },
+          "priceId": { "type": "string" }
+        }
+      },
+      "SendEmailRequest": {
+        "type": "object",
+        "required": ["to", "subject", "html"],
+        "properties": {
+          "to": { "type": "string", "format": "email" },
+          "subject": { "type": "string" },
+          "html": { "type": "string" },
+          "lavoroId": { "type": "string", "format": "uuid" },
+          "revision": { "type": "integer" }
+        }
+      },
+      "TextSearchRequest": {
+        "type": "object",
+        "required": ["query", "profileId"],
+        "properties": {
+          "query": { "type": "string" },
+          "profileId": { "type": "string", "format": "uuid" }
+        }
+      },
+      "TextSearchResponse": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "id": { "type": "string" },
+              "description": { "type": "string" },
+              "unit_price": { "type": "number" },
+              "markup_percent": { "type": "number" }
+            }
+          },
+          "alternatives": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "description": { "type": "string" },
+                "unit_price": { "type": "number" }
+              }
+            }
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" }
+        }
+      }
+    },
+    "responses": {
+      "ValidationError": {
+        "description": "Errore di validazione",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "RateLimitError": {
+        "description": "Troppe richieste",
+        "headers": {
+          "X-RateLimit-Limit": { "schema": { "type": "integer" } },
+          "X-RateLimit-Remaining": { "schema": { "type": "integer" } },
+          "X-RateLimit-Reset": { "schema": { "type": "string", "format": "date-time" } }
+        },
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Errore interno del server",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      }
+    }
+  }
+}

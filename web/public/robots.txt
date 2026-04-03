@@ -1,0 +1,13 @@
+# https://www.robotstxt.org/robotstxt.html
+User-agent: *
+Allow: /
+
+# Disallow private/api routes
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /onboarding/
+Disallow: /profile/
+Disallow: /subscription/
+
+# Sitemap
+Sitemap: https://quoteapp.it/sitemap.xml

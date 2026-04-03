@@ -1,0 +1,148 @@
+{
+  "app": {
+    "title": "Quote App",
+    "subtitle": "Wycenienia z AI głosowym"
+  },
+  "auth": {
+    "register": "Zarejestruj się",
+    "login": "Zaloguj",
+    "email": "Email",
+    "password": "Hasło",
+    "confirmPassword": "Potwierdź",
+    "passwordMismatch": "Hasła nie są identyczne",
+    "registrationComplete": "Rejestracja zakończona. Sprawdź swój e-mail."
+  },
+  "legal": {
+    "title": "Prawne",
+    "privacy": "Prywatność",
+    "terms": "Regulamin",
+    "security": "Bezpieczeństwo",
+    "accept": "Akceptuję"
+  },
+  "onboarding": {
+    "title": "Szybki przewodnik",
+    "voice": "Przycisk głosowy",
+    "voiceDesc": "Naciśnij aby nagrać.",
+    "listini": "Cenniki",
+    "listiniDesc": "Wgraj CSV.",
+    "preventivo": "Wycena",
+    "preventivoDesc": "Generuj i wysyłaj wyceny.",
+    "next": "Dalej",
+    "start": "Start"
+  },
+  "main": {
+    "record": "Nagrywaj",
+    "stop": "Zatrzymaj i wyślij",
+    "jobs": "Zlecenia",
+    "listini": "Cenniki",
+    "profile": "Profil",
+    "generateQuote": "Generuj wycenę"
+  },
+  "profile": {
+    "company": "Firma",
+    "vatNumber": "NIP",
+    "materialMarkupVAT": "VAT narzut materiałów %",
+    "fiscalCode": "NIP",
+    "country": "Kraj",
+    "language": "Język",
+    "swiftBic": "SWIFT/BIC",
+    "iban": "IBAN",
+    "vatPercent": "VAT %"
+  },
+  "messages": {
+    "error": "Błąd",
+    "success": "Sukces",
+    "loading": "Ładowanie...",
+    "address": "Adres",
+    "city": "Miasto",
+    "postalCode": "Kod pocztowy",
+    "saved": "Profil zapisany",
+    "saving": "Zapisywanie...",
+    "save": "Zapisz",
+    "emailSent": "E-mail wysłany",
+    "notAuthenticated": "Nie uwierzytelniony",
+    "permission": "Uprawnienie",
+    "permissionDescription": "Wymagane uprawnienie do mikrofonu."
+  },
+  "navigation": {
+    "login": "Zaloguj",
+    "register": "Zarejestruj",
+    "quote": "Generuj ofertę",
+    "profile": "Profil",
+    "listini": "Cenniki",
+    "subscription": "Abonament"
+  },
+  "buttons": {
+    "save": "Zapisz",
+    "cancel": "Anuluj",
+    "delete": "Usuń",
+    "loading": "...",
+    "generatePreview": "Generuj podgląd",
+    "openBrowser": "Otwórz w przeglądarce",
+    "send": "Wyślij",
+    "sendEmail": "Wyślij e-mail",
+    "validateApprove": "Zatwierdź i zaakceptuj"
+  },
+  "sections": {
+    "clients": "Klienci",
+    "jobs": "Zlecenia",
+    "details": "Szczegóły",
+    "detailsLabel": "Szczegóły:",
+    "selectListino": "Wybierz cennik",
+    "selectClientToViewJobs": "Wybierz klienta, aby zobaczyć zlecenia",
+    "description": "Opis"
+  },
+  "actions": {
+    "add": "Dodaj",
+    "addClient": "Dodaj klienta",
+    "addJob": "Dodaj zlecenie",
+    "addCost": "Dodaj koszt",
+    "edit": "Edytuj",
+    "delete": "Usuń",
+    "deleteConfirm": "Czy jesteś pewien?",
+    "deleted": "Usunięto"
+  },
+  "listini": {
+    "newListino": "Nowy cennik",
+    "uploadCsv": "Importuj CSV/Excel",
+    "addManual": "Dodaj ręcznie",
+    "promptNewListino": "Wprowadź nazwę cennika",
+    "itemsAdded": "pozycji dodanych",
+    "newItem": "Nowa pozycja",
+    "description": "Opis",
+    "price": "Cena",
+    "markup": "Marża %",
+    "emptyFile": "Plik pusty lub nieprawidłowy"
+  },
+  "modals": {
+    "confirmEmail": "Potwierdź wysyłkę emaila"
+  },
+  "subscription": {
+    "title": "Abonament",
+    "monthly": "Miesięczny",
+    "yearly": "Roczny",
+    "active": "Aktywny abonament",
+    "inactive": "Brak aktywnego abonamentu",
+    "expires": "Wygasa",
+    "manage": "Zarządzaj abonamentem",
+    "cancel": "Anuluj abonament",
+    "change": "Zmień plan",
+    "subscribe": "Subskrybuj",
+    "saveTwoMonths": "Oszczędź 2 miesiące!",
+    "perMonth": "/miesiąc",
+    "perYear": "/rok",
+    "chooseYourPlan": "Wybierz swój plan"
+  },
+  "dashboard": {
+    "noMaterialFound": "Nie znaleziono materiału w cennikach",
+    "notFoundTitle": "Nie znaleziono",
+    "quantity": "Ilość",
+    "resultsFound": "Znaleziono {{count}} wyników. Wybierz cennik:",
+    "searchClient": "Szukaj klienta...",
+    "selectMaterial": "Wybierz materiał",
+    "selectionRequiredMessage": "Znaleziono wiele materiałów. Wybierz właściwy cennik.",
+    "selectionRequiredTitle": "Wymagany wybór",
+    "unitPrice": "Cena jednostkowa",
+    "unknownListino": "Nieznany cennik"
+  }
+}

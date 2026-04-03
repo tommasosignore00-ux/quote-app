@@ -1,0 +1,27 @@
+-- Legal documents for additional countries (GDPR, PIPL, etc.)
+INSERT INTO public.legal_documents (type, country_code, version, content, effective_date) VALUES
+('privacy_policy', 'DE', '1.0', 'Datenschutzerklärung gemäß DSGVO. Ihre Daten werden sicher und transparent verarbeitet.', NOW()),
+('terms_of_service', 'DE', '1.0', 'Allgemeine Geschäftsbedingungen. Durch die Nutzung akzeptieren Sie die Bedingungen.', NOW()),
+('security_policy', 'DE', '1.0', 'Sicherheitsrichtlinie. Verschlüsselte Daten, regelmäßige Backups.', NOW()),
+('privacy_policy', 'FR', '1.0', 'Politique de confidentialité conforme au RGPD. Vos données sont traitées de manière sécurisée.', NOW()),
+('terms_of_service', 'FR', '1.0', 'Conditions générales d''utilisation. En utilisant le service vous acceptez les conditions.', NOW()),
+('security_policy', 'FR', '1.0', 'Politique de sécurité. Données cryptées, sauvegardes régulières.', NOW()),
+('privacy_policy', 'ES', '1.0', 'Política de privacidad conforme al RGPD. Sus datos se tratan de forma segura.', NOW()),
+('terms_of_service', 'ES', '1.0', 'Términos de servicio. Al usar el servicio acepta las condiciones.', NOW()),
+('security_policy', 'ES', '1.0', 'Política de seguridad. Datos cifrados, copias de seguridad regulares.', NOW()),
+('privacy_policy', 'GB', '1.0', 'Privacy Policy compliant with UK GDPR. Your data is handled securely.', NOW()),
+('terms_of_service', 'GB', '1.0', 'Terms of Service. By using the service you accept the conditions.', NOW()),
+('security_policy', 'GB', '1.0', 'Security Policy. Encrypted data, regular backups.', NOW()),
+('privacy_policy', 'CN', '1.0', '隐私政策符合《个人信息保护法》(PIPL)。您的数据将被安全处理。', NOW()),
+('terms_of_service', 'CN', '1.0', '服务条款。使用服务即表示您接受条款。', NOW()),
+('security_policy', 'CN', '1.0', '安全政策。加密数据，定期备份。', NOW()),
+('privacy_policy', 'RU', '1.0', 'Политика конфиденциальности. Ваши данные обрабатываются безопасно.', NOW()),
+('terms_of_service', 'RU', '1.0', 'Условия использования. Используя сервис, вы принимаете условия.', NOW()),
+('security_policy', 'RU', '1.0', 'Политика безопасности. Шифрованные данные, регулярные резервные копии.', NOW()),
+('privacy_policy', 'PL', '1.0', 'Polityka prywatności zgodna z RODO. Twoje dane są bezpiecznie przetwarzane.', NOW()),
+('terms_of_service', 'PL', '1.0', 'Regulamin. Korzystając z usługi akceptujesz warunki.', NOW()),
+('security_policy', 'PL', '1.0', 'Polityka bezpieczeństwa. Szyfrowane dane, regularne kopie zapasowe.', NOW()),
+('privacy_policy', 'CZ', '1.0', 'Zásady ochrany osobních údajů v souladu s GDPR. Vaše údaje jsou zpracovávány bezpečně.', NOW()),
+('terms_of_service', 'CZ', '1.0', 'Podmínky služby. Používáním služby přijímáte podmínky.', NOW()),
+('security_policy', 'CZ', '1.0', 'Bezpečnostní politika. Šifrovaná data, pravidelné zálohy.', NOW())
+;

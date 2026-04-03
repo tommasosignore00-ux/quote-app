@@ -1,0 +1,148 @@
+{
+  "app": {
+    "title": "Quote App",
+    "subtitle": "음성 AI 견적"
+  },
+  "auth": {
+    "register": "가입",
+    "login": "로그인",
+    "email": "이메일",
+    "password": "비밀번호",
+    "confirmPassword": "비밀번호 확인",
+    "passwordMismatch": "비밀번호가 일치하지 않습니다",
+    "registrationComplete": "등록 완료. 이메일을 확인하세요."
+  },
+  "legal": {
+    "title": "법적 문서",
+    "privacy": "개인정보처리방침",
+    "terms": "서비스 약관",
+    "security": "보안 정책",
+    "accept": "동의합니다"
+  },
+  "onboarding": {
+    "title": "빠른 가이드",
+    "voice": "음성 버튼",
+    "voiceDesc": "눌러서 녹음.",
+    "listini": "가격표",
+    "listiniDesc": "CSV 업로드.",
+    "preventivo": "견적",
+    "preventivoDesc": "견적을 생성하고 이메일로 전송.",
+    "next": "다음",
+    "start": "시작"
+  },
+  "main": {
+    "record": "녹음",
+    "stop": "중지 및 전송",
+    "jobs": "작업",
+    "listini": "가격표",
+    "profile": "프로필",
+    "generateQuote": "견적 생성"
+  },
+  "profile": {
+    "company": "회사",
+    "vatNumber": "사업자등록번호",
+    "materialMarkupVAT": "재료 부가세 마크업 %",
+    "fiscalCode": "세무등록번호",
+    "country": "국가",
+    "language": "언어",
+    "swiftBic": "SWIFT/BIC",
+    "iban": "IBAN",
+    "vatPercent": "부가세 %"
+  },
+  "messages": {
+    "error": "오류",
+    "success": "성공",
+    "loading": "로딩 중...",
+    "address": "주소",
+    "city": "도시",
+    "postalCode": "우편번호",
+    "saved": "프로필이 저장되었습니다",
+    "saving": "저장 중...",
+    "save": "저장",
+    "emailSent": "이메일 전송됨",
+    "notAuthenticated": "인증되지 않음",
+    "permission": "권한",
+    "permissionDescription": "마이크 권한이 필요합니다."
+  },
+  "navigation": {
+    "login": "로그인",
+    "register": "등록",
+    "quote": "견적 생성",
+    "profile": "프로필",
+    "listini": "가격표",
+    "subscription": "구독"
+  },
+  "buttons": {
+    "save": "저장",
+    "cancel": "취소",
+    "delete": "삭제",
+    "loading": "...",
+    "generatePreview": "미리보기 생성",
+    "openBrowser": "브라우저에서 열기",
+    "send": "보내기",
+    "sendEmail": "이메일 보내기",
+    "validateApprove": "검증 및 승인"
+  },
+  "sections": {
+    "clients": "고객",
+    "jobs": "작업",
+    "details": "세부정보",
+    "detailsLabel": "세부정보:",
+    "selectListino": "가격표 선택",
+    "selectClientToViewJobs": "고객을 선택하여 작업 보기",
+    "description": "설명"
+  },
+  "actions": {
+    "add": "추가",
+    "addClient": "고객 추가",
+    "addJob": "작업 추가",
+    "addCost": "비용 추가",
+    "edit": "편집",
+    "delete": "삭제",
+    "deleteConfirm": "확실합니까?",
+    "deleted": "삭제됨"
+  },
+  "listini": {
+    "newListino": "새 가격표",
+    "uploadCsv": "CSV/Excel 가져오기",
+    "addManual": "수동으로 추가",
+    "promptNewListino": "가격표 이름 입력",
+    "itemsAdded": "항목 추가됨",
+    "newItem": "새 항목",
+    "description": "설명",
+    "price": "가격",
+    "markup": "마크업 %",
+    "emptyFile": "파일이 비어 있거나 유효하지 않습니다"
+  },
+  "modals": {
+    "confirmEmail": "이메일 전송 확인"
+  },
+  "subscription": {
+    "title": "구독",
+    "monthly": "월간",
+    "yearly": "연간",
+    "active": "활성 구독",
+    "inactive": "활성 구독 없음",
+    "expires": "만료일",
+    "manage": "구독 관리",
+    "cancel": "구독 취소",
+    "change": "플랜 변경",
+    "subscribe": "구독하기",
+    "saveTwoMonths": "2개월 절약!",
+    "perMonth": "/월",
+    "perYear": "/년",
+    "chooseYourPlan": "플랜 선택"
+  },
+  "dashboard": {
+    "noMaterialFound": "가격표에서 자재를 찾을 수 없습니다",
+    "notFoundTitle": "찾을 수 없음",
+    "quantity": "수량",
+    "resultsFound": "{{count}}개의 결과. 가격표를 선택하세요:",
+    "searchClient": "고객 검색...",
+    "selectMaterial": "자재 선택",
+    "selectionRequiredMessage": "여러 자재가 발견되었습니다. 올바른 가격표를 선택하세요.",
+    "selectionRequiredTitle": "선택 필요",
+    "unitPrice": "단가",
+    "unknownListino": "알 수 없는 가격표"
+  }
+}

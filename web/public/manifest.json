@@ -1,0 +1,22 @@
+{
+  "name": "QuoteApp - Preventivi con AI Vocale",
+  "short_name": "QuoteApp",
+  "description": "Gestione preventivi con input vocale, ricerca semantica e sincronizzazione real-time.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#dc2626",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

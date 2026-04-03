@@ -1,0 +1,148 @@
+{
+  "app": {
+    "title": "Quote App",
+    "subtitle": "Offertes met stem AI"
+  },
+  "auth": {
+    "register": "Registreren",
+    "login": "Inloggen",
+    "email": "Email",
+    "password": "Wachtwoord",
+    "confirmPassword": "Bevestigen",
+    "passwordMismatch": "Wachtwoorden komen niet overeen",
+    "registrationComplete": "Registratie voltooid. Controleer uw e-mail."
+  },
+  "legal": {
+    "title": "Juridisch",
+    "privacy": "Privacy",
+    "terms": "Voorwaarden",
+    "security": "Beveiliging",
+    "accept": "Ik ga akkoord"
+  },
+  "onboarding": {
+    "title": "Snelstart",
+    "voice": "Spraakknop",
+    "voiceDesc": "Druk om op te nemen.",
+    "listini": "Prijslijsten",
+    "listiniDesc": "Upload CSV.",
+    "preventivo": "Offerte",
+    "preventivoDesc": "Offertes genereren en versturen.",
+    "next": "Volgende",
+    "start": "Start"
+  },
+  "main": {
+    "record": "Opnemen",
+    "stop": "Stop & Verstuur",
+    "jobs": "Opdrachten",
+    "listini": "Prijslijsten",
+    "profile": "Profiel",
+    "generateQuote": "Offerte genereren"
+  },
+  "profile": {
+    "company": "Bedrijf",
+    "vatNumber": "BTW",
+    "materialMarkupVAT": "BTW-opslag materialen %",
+    "fiscalCode": "KvK",
+    "country": "Land",
+    "language": "Taal",
+    "swiftBic": "SWIFT/BIC",
+    "iban": "IBAN",
+    "vatPercent": "BTW %"
+  },
+  "messages": {
+    "error": "Fout",
+    "success": "Succes",
+    "loading": "Laden...",
+    "address": "Adres",
+    "city": "Stad",
+    "postalCode": "Postcode",
+    "saved": "Profiel opgeslagen",
+    "saving": "Opslaan...",
+    "save": "Opslaan",
+    "emailSent": "E-mail verzonden",
+    "notAuthenticated": "Niet geverifieerd",
+    "permission": "Toestemming",
+    "permissionDescription": "Microfoontoestemming is vereist."
+  },
+  "navigation": {
+    "login": "Inloggen",
+    "register": "Registreren",
+    "quote": "Offerte genereren",
+    "profile": "Profiel",
+    "listini": "Prijslijsten",
+    "subscription": "Abonnement"
+  },
+  "buttons": {
+    "save": "Opslaan",
+    "cancel": "Annuleren",
+    "delete": "Verwijderen",
+    "loading": "...",
+    "generatePreview": "Voorbeeld genereren",
+    "openBrowser": "Openen in browser",
+    "send": "Verzenden",
+    "sendEmail": "E-mail verzenden",
+    "validateApprove": "Valideren en goedkeuren"
+  },
+  "sections": {
+    "clients": "Klanten",
+    "jobs": "Opdrachten",
+    "details": "Details",
+    "detailsLabel": "Details:",
+    "selectListino": "Selecteer prijslijst",
+    "selectClientToViewJobs": "Selecteer een klant om opdrachten te zien",
+    "description": "Beschrijving"
+  },
+  "actions": {
+    "add": "Toevoegen",
+    "addClient": "Klant toevoegen",
+    "addJob": "Opdracht toevoegen",
+    "addCost": "Kosten toevoegen",
+    "edit": "Bewerken",
+    "delete": "Verwijderen",
+    "deleteConfirm": "Weet u het zeker?",
+    "deleted": "Verwijderd"
+  },
+  "listini": {
+    "newListino": "Nieuwe prijslijst",
+    "uploadCsv": "CSV/Excel importeren",
+    "addManual": "Handmatig toevoegen",
+    "promptNewListino": "Voer naam prijslijst in",
+    "itemsAdded": "items toegevoegd",
+    "newItem": "Nieuw item",
+    "description": "Beschrijving",
+    "price": "Prijs",
+    "markup": "Opslag %",
+    "emptyFile": "Bestand is leeg of ongeldig"
+  },
+  "modals": {
+    "confirmEmail": "Bevestig email verzending"
+  },
+  "subscription": {
+    "title": "Abonnement",
+    "monthly": "Maandelijks",
+    "yearly": "Jaarlijks",
+    "active": "Actief abonnement",
+    "inactive": "Geen actief abonnement",
+    "expires": "Verloopt op",
+    "manage": "Beheer abonnement",
+    "cancel": "Abonnement opzeggen",
+    "change": "Plan wijzigen",
+    "subscribe": "Abonneren",
+    "saveTwoMonths": "Bespaar 2 maanden!",
+    "perMonth": "/maand",
+    "perYear": "/jaar",
+    "chooseYourPlan": "Kies uw plan"
+  },
+  "dashboard": {
+    "noMaterialFound": "Geen materiaal gevonden in de prijslijsten",
+    "notFoundTitle": "Niet gevonden",
+    "quantity": "Aantal",
+    "resultsFound": "{{count}} resultaten gevonden. Selecteer de prijslijst:",
+    "searchClient": "Klant zoeken...",
+    "selectMaterial": "Materiaal selecteren",
+    "selectionRequiredMessage": "Meerdere materialen gevonden. Selecteer de juiste prijslijst.",
+    "selectionRequiredTitle": "Selectie vereist",
+    "unitPrice": "Eenheidsprijs",
+    "unknownListino": "Onbekende prijslijst"
+  }
+}

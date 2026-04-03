@@ -1,0 +1,148 @@
+{
+  "app": {
+    "title": "Quote App",
+    "subtitle": "Кошториси з голосовим ШІ"
+  },
+  "auth": {
+    "register": "Реєстрація",
+    "login": "Вхід",
+    "email": "Email",
+    "password": "Пароль",
+    "confirmPassword": "Підтвердіть пароль",
+    "passwordMismatch": "Паролі не збігаються",
+    "registrationComplete": "Реєстрацію завершено. Перевірте свою пошту."
+  },
+  "legal": {
+    "title": "Правові документи",
+    "privacy": "Політика конфіденційності",
+    "terms": "Умови використання",
+    "security": "Політика безпеки",
+    "accept": "Приймаю"
+  },
+  "onboarding": {
+    "title": "Швидкий старт",
+    "voice": "Голосова кнопка",
+    "voiceDesc": "Натисніть для запису.",
+    "listini": "Прайс-листи",
+    "listiniDesc": "Завантажте CSV.",
+    "preventivo": "Кошторис",
+    "preventivoDesc": "Створіть і надішліть кошторис по email.",
+    "next": "Далі",
+    "start": "Почати"
+  },
+  "main": {
+    "record": "Запис",
+    "stop": "Стоп і надіслати",
+    "jobs": "Роботи",
+    "listini": "Прайс-листи",
+    "profile": "Профіль",
+    "generateQuote": "Створити кошторис"
+  },
+  "profile": {
+    "company": "Компанія",
+    "vatNumber": "ЄДРПОУ",
+    "materialMarkupVAT": "ПДВ на націнку матеріалів %",
+    "fiscalCode": "РНОКПП",
+    "country": "Країна",
+    "language": "Мова",
+    "swiftBic": "SWIFT/BIC",
+    "iban": "IBAN",
+    "vatPercent": "ПДВ %"
+  },
+  "messages": {
+    "error": "Помилка",
+    "success": "Успіх",
+    "loading": "Завантаження...",
+    "address": "Адреса",
+    "city": "Місто",
+    "postalCode": "Поштовий індекс",
+    "saved": "Профіль збережено",
+    "saving": "Збереження...",
+    "save": "Зберегти",
+    "emailSent": "Email надіслано",
+    "notAuthenticated": "Не автентифіковано",
+    "permission": "Дозвіл",
+    "permissionDescription": "Потрібен дозвіл на мікрофон."
+  },
+  "navigation": {
+    "login": "Увійти",
+    "register": "Реєстрація",
+    "quote": "Створити пропозицію",
+    "profile": "Профіль",
+    "listini": "Прайс-листи",
+    "subscription": "Підписка"
+  },
+  "buttons": {
+    "save": "Зберегти",
+    "cancel": "Скасувати",
+    "delete": "Видалити",
+    "loading": "...",
+    "generatePreview": "Згенерувати попередній перегляд",
+    "openBrowser": "Відкрити в браузері",
+    "send": "Надіслати",
+    "sendEmail": "Надіслати email",
+    "validateApprove": "Перевірити і затвердити"
+  },
+  "sections": {
+    "clients": "Клієнти",
+    "jobs": "Замовлення",
+    "details": "Деталі",
+    "detailsLabel": "Деталі:",
+    "selectListino": "Виберіть прайс-лист",
+    "selectClientToViewJobs": "Виберіть клієнта для перегляду замовлень",
+    "description": "Опис"
+  },
+  "actions": {
+    "add": "Додати",
+    "addClient": "Додати клієнта",
+    "addJob": "Додати замовлення",
+    "addCost": "Додати витрати",
+    "edit": "Редагувати",
+    "delete": "Видалити",
+    "deleteConfirm": "Ви впевнені?",
+    "deleted": "Видалено"
+  },
+  "listini": {
+    "newListino": "Новий прайс-лист",
+    "uploadCsv": "Імпорт CSV/Excel",
+    "addManual": "Додати вручну",
+    "promptNewListino": "Введіть назву прайс-листа",
+    "itemsAdded": "елементів додано",
+    "newItem": "Новий елемент",
+    "description": "Опис",
+    "price": "Ціна",
+    "markup": "Націнка %",
+    "emptyFile": "Файл порожній або недійсний"
+  },
+  "modals": {
+    "confirmEmail": "Підтвердіть надсилання email"
+  },
+  "subscription": {
+    "title": "Підписка",
+    "monthly": "Щомісячна",
+    "yearly": "Щорічна",
+    "active": "Активна підписка",
+    "inactive": "Немає активної підписки",
+    "expires": "Закінчується",
+    "manage": "Керувати підпискою",
+    "cancel": "Скасувати підписку",
+    "change": "Змінити план",
+    "subscribe": "Підписатися",
+    "saveTwoMonths": "Заощадьте 2 місяці!",
+    "perMonth": "/місяць",
+    "perYear": "/рік",
+    "chooseYourPlan": "Оберіть свій план"
+  },
+  "dashboard": {
+    "noMaterialFound": "Матеріал не знайдено в прайс-листах",
+    "notFoundTitle": "Не знайдено",
+    "quantity": "Кількість",
+    "resultsFound": "Знайдено {{count}} результатів. Оберіть прайс-лист:",
+    "searchClient": "Пошук клієнта...",
+    "selectMaterial": "Обрати матеріал",
+    "selectionRequiredMessage": "Знайдено кілька матеріалів. Оберіть правильний прайс-лист.",
+    "selectionRequiredTitle": "Необхідний вибір",
+    "unitPrice": "Ціна за одиницю",
+    "unknownListino": "Невідомий прайс-лист"
+  }
+}

@@ -1,0 +1,148 @@
+{
+  "app": {
+    "title": "Quote App",
+    "subtitle": "Ponuky s hlasovým AI"
+  },
+  "auth": {
+    "register": "Registrácia",
+    "login": "Prihlásenie",
+    "email": "Email",
+    "password": "Heslo",
+    "confirmPassword": "Potvrďte heslo",
+    "passwordMismatch": "Heslá sa nezhodujú",
+    "registrationComplete": "Registrácia dokončená. Skontrolujte svoj e-mail."
+  },
+  "legal": {
+    "title": "Právne dokumenty",
+    "privacy": "Zásady ochrany osobných údajov",
+    "terms": "Podmienky služby",
+    "security": "Bezpečnostná politika",
+    "accept": "Súhlasím"
+  },
+  "onboarding": {
+    "title": "Rýchly sprievodca",
+    "voice": "Hlasové tlačidlo",
+    "voiceDesc": "Stlačte pre nahrávanie.",
+    "listini": "Cenníky",
+    "listiniDesc": "Nahrajte CSV.",
+    "preventivo": "Ponuka",
+    "preventivoDesc": "Vytvorte ponuku a odošlite emailom.",
+    "next": "Ďalej",
+    "start": "Začať"
+  },
+  "main": {
+    "record": "Nahrať",
+    "stop": "Zastaviť a odoslať",
+    "jobs": "Zákazky",
+    "listini": "Cenníky",
+    "profile": "Profil",
+    "generateQuote": "Vytvoriť ponuku"
+  },
+  "profile": {
+    "company": "Spoločnosť",
+    "vatNumber": "IČ DPH",
+    "materialMarkupVAT": "DPH prirážka materiálu %",
+    "fiscalCode": "IČ",
+    "country": "Krajina",
+    "language": "Jazyk",
+    "swiftBic": "SWIFT/BIC",
+    "iban": "IBAN",
+    "vatPercent": "DPH %"
+  },
+  "messages": {
+    "error": "Chyba",
+    "success": "Úspech",
+    "loading": "Načítavanie...",
+    "address": "Adresa",
+    "city": "Mesto",
+    "postalCode": "PSČ",
+    "saved": "Profil uložený",
+    "saving": "Ukladanie...",
+    "save": "Uložiť",
+    "emailSent": "E-mail odoslaný",
+    "notAuthenticated": "Neoverený",
+    "permission": "Oprávnenie",
+    "permissionDescription": "Je vyžadované oprávnenie mikrofónu."
+  },
+  "navigation": {
+    "login": "Prihlásiť",
+    "register": "Registrovať",
+    "quote": "Vytvoriť ponuku",
+    "profile": "Profil",
+    "listini": "Cenníky",
+    "subscription": "Predplatné"
+  },
+  "buttons": {
+    "save": "Uložiť",
+    "cancel": "Zrušiť",
+    "delete": "Vymazať",
+    "loading": "...",
+    "generatePreview": "Generovať náhľad",
+    "openBrowser": "Otvoriť v prehliadači",
+    "send": "Odoslať",
+    "sendEmail": "Odoslať e-mail",
+    "validateApprove": "Overiť a schváliť"
+  },
+  "sections": {
+    "clients": "Klienti",
+    "jobs": "Zákazky",
+    "details": "Detaily",
+    "detailsLabel": "Detaily:",
+    "selectListino": "Vyberte cenník",
+    "selectClientToViewJobs": "Vyberte klienta pre zobrazenie zákaziek",
+    "description": "Popis"
+  },
+  "actions": {
+    "add": "Pridať",
+    "addClient": "Pridať klienta",
+    "addJob": "Pridať zákazku",
+    "addCost": "Pridať náklad",
+    "edit": "Upraviť",
+    "delete": "Vymazať",
+    "deleteConfirm": "Ste si istí?",
+    "deleted": "Vymazané"
+  },
+  "listini": {
+    "newListino": "Nový cenník",
+    "uploadCsv": "Importovať CSV/Excel",
+    "addManual": "Pridať ručne",
+    "promptNewListino": "Zadajte názov cenníka",
+    "itemsAdded": "položiek pridaných",
+    "newItem": "Nová položka",
+    "description": "Popis",
+    "price": "Cena",
+    "markup": "Prirážka %",
+    "emptyFile": "Súbor je prázdny alebo neplatný"
+  },
+  "modals": {
+    "confirmEmail": "Potvrďte odoslanie emailu"
+  },
+  "subscription": {
+    "title": "Predplatné",
+    "monthly": "Mesačné",
+    "yearly": "Ročné",
+    "active": "Aktívne predplatné",
+    "inactive": "Nie je aktívne predplatné",
+    "expires": "Vyprší",
+    "manage": "Spravovať predplatné",
+    "cancel": "Zrušiť predplatné",
+    "change": "Zmeniť plán",
+    "subscribe": "Prihlásiť sa",
+    "saveTwoMonths": "Ušetrite 2 mesiace!",
+    "perMonth": "/mesiac",
+    "perYear": "/rok",
+    "chooseYourPlan": "Vyberte si svoj plán"
+  },
+  "dashboard": {
+    "noMaterialFound": "V cenníkoch sa nenašiel žiadny materiál",
+    "notFoundTitle": "Nenájdené",
+    "quantity": "Množstvo",
+    "resultsFound": "Nájdených {{count}} výsledkov. Vyberte cenník:",
+    "searchClient": "Hľadať klienta...",
+    "selectMaterial": "Vybrať materiál",
+    "selectionRequiredMessage": "Nájdených viac materiálov. Vyberte správny cenník.",
+    "selectionRequiredTitle": "Výber je povinný",
+    "unitPrice": "Jednotková cena",
+    "unknownListino": "Neznámy cenník"
+  }
+}

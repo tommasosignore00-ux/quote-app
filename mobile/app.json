@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "Quote App",
+    "slug": "quote-app-mobile",
+    "scheme": "quoteapp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "backgroundColor": "#dc2626"
+    },
+    "plugins": [
+      "expo-dev-client",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Permetti l'accesso al microfono per registrare comandi vocali."
+        }
+      ],
+      "expo-localization",
+      "expo-font",
+      "expo-asset"
+    ],
+    "ios": {
+      "bundleIdentifier": "com.quoteapp.mobile",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Permetti l'accesso al microfono per registrare comandi vocali.",
+        "NSSpeechRecognitionUsageDescription": "Permetti il riconoscimento vocale per i comandi.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.quoteapp.mobile",
+      "permissions": [
+        "RECORD_AUDIO",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
+    },
+    "extra": {
+      "eas": {
+        "projectId": "29156a58-8257-4377-8f08-896e4e855a17"
+      }
+    }
+  }
+}

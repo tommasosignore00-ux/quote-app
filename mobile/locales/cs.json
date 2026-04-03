@@ -1,0 +1,148 @@
+{
+  "app": {
+    "title": "Quote App",
+    "subtitle": "Nabídky s hlasovým AI"
+  },
+  "auth": {
+    "register": "Registrace",
+    "login": "Přihlásit",
+    "email": "Email",
+    "password": "Heslo",
+    "confirmPassword": "Potvrdit heslo",
+    "passwordMismatch": "Hesla se neshodují",
+    "registrationComplete": "Registrace dokončena. Zkontrolujte svůj e-mail."
+  },
+  "legal": {
+    "title": "Právní dokumenty",
+    "privacy": "Zásady ochrany soukromí",
+    "terms": "Podmínky služby",
+    "security": "Bezpečnostní politika",
+    "accept": "Souhlasím"
+  },
+  "onboarding": {
+    "title": "Rychlý průvodce",
+    "voice": "Hlasové tlačítko",
+    "voiceDesc": "Stiskněte pro nahrání.",
+    "listini": "Ceníky",
+    "listiniDesc": "Nahrajte CSV.",
+    "preventivo": "Nabídka",
+    "preventivoDesc": "Vytvořte a odešlete nabídku emailem.",
+    "next": "Další",
+    "start": "Začít"
+  },
+  "main": {
+    "record": "Nahrát",
+    "stop": "Zastavit a odeslat",
+    "jobs": "Zakázky",
+    "listini": "Ceníky",
+    "profile": "Profil",
+    "generateQuote": "Vytvořit nabídku"
+  },
+  "profile": {
+    "company": "Firma",
+    "vatNumber": "IČ",
+    "materialMarkupVAT": "DPH příplatek na materiál %",
+    "fiscalCode": "DIČ",
+    "country": "Země",
+    "language": "Jazyk",
+    "swiftBic": "SWIFT/BIC",
+    "iban": "IBAN",
+    "vatPercent": "DPH %"
+  },
+  "messages": {
+    "error": "Chyba",
+    "success": "Úspěch",
+    "loading": "Načítání...",
+    "address": "Adresa",
+    "city": "Město",
+    "postalCode": "PSČ",
+    "saved": "Profil uložen",
+    "saving": "Ukládání...",
+    "save": "Uložit",
+    "emailSent": "E-mail odeslán",
+    "notAuthenticated": "Neověřen",
+    "permission": "Oprávnění",
+    "permissionDescription": "Je vyžadováno oprávnění mikrofonu."
+  },
+  "navigation": {
+    "login": "Přihlásit",
+    "register": "Registrovat",
+    "quote": "Vytvořit nabídku",
+    "profile": "Profil",
+    "listini": "Ceníky",
+    "subscription": "Předplatné"
+  },
+  "buttons": {
+    "save": "Uložit",
+    "cancel": "Zrušit",
+    "delete": "Smazat",
+    "loading": "...",
+    "generatePreview": "Generovat náhled",
+    "openBrowser": "Otevřít v prohlížeči",
+    "send": "Odeslat",
+    "sendEmail": "Odeslat e-mail",
+    "validateApprove": "Ověřit a schválit"
+  },
+  "sections": {
+    "clients": "Klienti",
+    "jobs": "Zakázky",
+    "details": "Detaily",
+    "detailsLabel": "Detaily:",
+    "selectListino": "Vyberte ceník",
+    "selectClientToViewJobs": "Vyberte klienta pro zobrazení zakázek",
+    "description": "Popis"
+  },
+  "actions": {
+    "add": "Přidat",
+    "addClient": "Přidat klienta",
+    "addJob": "Přidat zakázku",
+    "addCost": "Přidat náklad",
+    "edit": "Upravit",
+    "delete": "Smazat",
+    "deleteConfirm": "Jste si jisti?",
+    "deleted": "Smazáno"
+  },
+  "listini": {
+    "newListino": "Nový ceník",
+    "uploadCsv": "Importovat CSV/Excel",
+    "addManual": "Přidat ručně",
+    "promptNewListino": "Zadejte název ceníku",
+    "itemsAdded": "položek přidáno",
+    "newItem": "Nová položka",
+    "description": "Popis",
+    "price": "Cena",
+    "markup": "Přirážka %",
+    "emptyFile": "Soubor je prázdný nebo neplatný"
+  },
+  "modals": {
+    "confirmEmail": "Potvrďte odeslání emailu"
+  },
+  "subscription": {
+    "title": "Předplatné",
+    "monthly": "Měsíčně",
+    "yearly": "Ročně",
+    "active": "Aktivní předplatné",
+    "inactive": "Není aktivní předplatné",
+    "expires": "Vyprší",
+    "manage": "Spravovat předplatné",
+    "cancel": "Zrušit předplatné",
+    "change": "Změnit plán",
+    "subscribe": "Přihlásit se",
+    "saveTwoMonths": "Ušetřete 2 měsíce!",
+    "perMonth": "/měsíc",
+    "perYear": "/rok",
+    "chooseYourPlan": "Vyberte svůj plán"
+  },
+  "dashboard": {
+    "noMaterialFound": "V cenících nebyl nalezen žádný materiál",
+    "notFoundTitle": "Nenalezeno",
+    "quantity": "Množství",
+    "resultsFound": "Nalezeno {{count}} výsledků. Vyberte z jakého ceníku:",
+    "searchClient": "Hledat klienta...",
+    "selectMaterial": "Vybrat materiál",
+    "selectionRequiredMessage": "Bylo nalezeno více materiálů. Vyberte správný ceník.",
+    "selectionRequiredTitle": "Výběr je povinný",
+    "unitPrice": "Jednotková cena",
+    "unknownListino": "Neznámý ceník"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "quote-app-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "web": "cd web && npm run dev",
+    "mobile": "cd mobile && npm run start",
+    "android:dev": "bash ./scripts/start-android-dev.sh",
+    "android:dev:web": "START_WEB=1 bash ./scripts/start-android-dev.sh",
+    "dev": "bash ./scripts/dev-start.sh",
+    "supabase:start": "supabase start",
+    "supabase:reset": "supabase db reset",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.0",
+    "lint-staged": "^16.1.0",
+    "supabase": "^2.76.15"
+  },
+  "lint-staged": {
+    "web/**/*.{ts,tsx}": [
+      "prettier --write",
+      "eslint --fix --no-warn-ignored"
+    ],
+    "web/**/*.{json,css,md}": [
+      "prettier --write"
+    ]
+  }
+}

@@ -1,0 +1,148 @@
+{
+  "app": {
+    "title": "Quote App",
+    "subtitle": "Angebote mit Sprach-KI"
+  },
+  "auth": {
+    "register": "Registrieren",
+    "login": "Anmelden",
+    "email": "E-Mail",
+    "password": "Passwort",
+    "confirmPassword": "Passwort bestätigen",
+    "passwordMismatch": "Passwörter stimmen nicht überein",
+    "registrationComplete": "Registrierung abgeschlossen. Überprüfen Sie Ihre E-Mail."
+  },
+  "legal": {
+    "title": "Rechtliches",
+    "privacy": "Datenschutz",
+    "terms": "AGB",
+    "security": "Sicherheit",
+    "accept": "Ich akzeptiere"
+  },
+  "onboarding": {
+    "title": "Schnellstart",
+    "voice": "Sprach-Button",
+    "voiceDesc": "Drücken zum Aufnehmen.",
+    "listini": "Preislisten",
+    "listiniDesc": "CSV hochladen.",
+    "preventivo": "Angebot",
+    "preventivoDesc": "Angebote erstellen und senden.",
+    "next": "Weiter",
+    "start": "Starten"
+  },
+  "main": {
+    "record": "Aufnehmen",
+    "stop": "Stoppen & Senden",
+    "jobs": "Aufträge",
+    "listini": "Preislisten",
+    "profile": "Profil",
+    "generateQuote": "Angebot erstellen"
+  },
+  "profile": {
+    "company": "Unternehmen",
+    "vatNumber": "USt-IdNr.",
+    "materialMarkupVAT": "Materialaufschlag (MwSt) %",
+    "fiscalCode": "Steuernummer",
+    "country": "Land",
+    "language": "Sprache",
+    "swiftBic": "SWIFT/BIC",
+    "iban": "IBAN",
+    "vatPercent": "MwSt. %"
+  },
+  "messages": {
+    "error": "Fehler",
+    "success": "Erfolg",
+    "loading": "Lädt...",
+    "address": "Adresse",
+    "city": "Stadt",
+    "postalCode": "Postleitzahl",
+    "saved": "Profil gespeichert",
+    "saving": "Wird gespeichert...",
+    "save": "Speichern",
+    "emailSent": "E-Mail gesendet",
+    "notAuthenticated": "Nicht authentifiziert",
+    "permission": "Berechtigung",
+    "permissionDescription": "Mikrofonberechtigung erforderlich."
+  },
+  "navigation": {
+    "login": "Anmelden",
+    "register": "Registrieren",
+    "quote": "Angebot erstellen",
+    "profile": "Profil",
+    "listini": "Preislisten",
+    "subscription": "Abonnement"
+  },
+  "buttons": {
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "delete": "Löschen",
+    "loading": "...",
+    "generatePreview": "Vorschau generieren",
+    "openBrowser": "Im Browser öffnen",
+    "send": "Senden",
+    "sendEmail": "E-Mail senden",
+    "validateApprove": "Validieren und genehmigen"
+  },
+  "sections": {
+    "clients": "Kunden",
+    "jobs": "Aufträge",
+    "details": "Details",
+    "detailsLabel": "Details:",
+    "selectListino": "Preisliste auswählen",
+    "selectClientToViewJobs": "Wählen Sie einen Kunden aus, um Aufträge anzuzeigen",
+    "description": "Beschreibung"
+  },
+  "actions": {
+    "add": "Hinzufügen",
+    "addClient": "Kunde hinzufügen",
+    "addJob": "Auftrag hinzufügen",
+    "addCost": "Kosten hinzufügen",
+    "edit": "Bearbeiten",
+    "delete": "Löschen",
+    "deleteConfirm": "Sind Sie sicher?",
+    "deleted": "Gelöscht"
+  },
+  "listini": {
+    "newListino": "Neue Preisliste",
+    "uploadCsv": "CSV/Excel importieren",
+    "addManual": "Manuell hinzufügen",
+    "promptNewListino": "Name der Preisliste eingeben",
+    "itemsAdded": "Einträge hinzugefügt",
+    "newItem": "Neuer Eintrag",
+    "description": "Beschreibung",
+    "price": "Preis",
+    "markup": "Aufschlag %",
+    "emptyFile": "Datei ist leer oder ungültig"
+  },
+  "modals": {
+    "confirmEmail": "E-Mail-Versand bestätigen"
+  },
+  "subscription": {
+    "title": "Abonnement",
+    "monthly": "Monatlich",
+    "yearly": "Jährlich",
+    "active": "Aktives Abonnement",
+    "inactive": "Kein aktives Abonnement",
+    "expires": "Läuft ab am",
+    "manage": "Abonnement verwalten",
+    "cancel": "Abonnement kündigen",
+    "change": "Plan ändern",
+    "subscribe": "Abonnieren",
+    "saveTwoMonths": "Sparen Sie 2 Monate!",
+    "perMonth": "/Monat",
+    "perYear": "/Jahr",
+    "chooseYourPlan": "Wählen Sie Ihren Plan"
+  },
+  "dashboard": {
+    "noMaterialFound": "Kein Material in den Preislisten gefunden",
+    "notFoundTitle": "Nicht gefunden",
+    "quantity": "Menge",
+    "resultsFound": "{{count}} Ergebnisse gefunden. Wählen Sie die Preisliste:",
+    "searchClient": "Kunde suchen...",
+    "selectMaterial": "Material auswählen",
+    "selectionRequiredMessage": "Mehrere Materialien gefunden. Wählen Sie die richtige Preisliste.",
+    "selectionRequiredTitle": "Auswahl erforderlich",
+    "unitPrice": "Stückpreis",
+    "unknownListino": "Unbekannte Preisliste"
+  }
+}

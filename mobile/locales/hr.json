@@ -1,0 +1,148 @@
+{
+  "app": {
+    "title": "Quote App",
+    "subtitle": "Ponude s glasovnim AI"
+  },
+  "auth": {
+    "register": "Registracija",
+    "login": "Prijava",
+    "email": "Email",
+    "password": "Lozinka",
+    "confirmPassword": "Potvrdi lozinku",
+    "passwordMismatch": "Lozinke se ne podudaraju",
+    "registrationComplete": "Registracija dovršena. Provjerite svoj e-mail."
+  },
+  "legal": {
+    "title": "Pravni dokumenti",
+    "privacy": "Pravila privatnosti",
+    "terms": "Uvjeti korištenja",
+    "security": "Sigurnosna politika",
+    "accept": "Prihvaćam"
+  },
+  "onboarding": {
+    "title": "Brzi vodič",
+    "voice": "Glasovni gumb",
+    "voiceDesc": "Pritisnite za snimanje.",
+    "listini": "Cjenici",
+    "listiniDesc": "Učitajte CSV.",
+    "preventivo": "Ponuda",
+    "preventivoDesc": "Generirajte i pošaljite ponudu emailom.",
+    "next": "Sljedeće",
+    "start": "Počni"
+  },
+  "main": {
+    "record": "Snimi",
+    "stop": "Zaustavi i pošalji",
+    "jobs": "Poslovi",
+    "listini": "Cjenici",
+    "profile": "Profil",
+    "generateQuote": "Generiraj ponudu"
+  },
+  "profile": {
+    "company": "Tvrtka",
+    "vatNumber": "OIB",
+    "materialMarkupVAT": "PDV marža materijala %",
+    "fiscalCode": "OIB",
+    "country": "Država",
+    "language": "Jezik",
+    "swiftBic": "SWIFT/BIC",
+    "iban": "IBAN",
+    "vatPercent": "PDV %"
+  },
+  "messages": {
+    "error": "Greška",
+    "success": "Uspjeh",
+    "loading": "Učitavanje...",
+    "address": "Adresa",
+    "city": "Grad",
+    "postalCode": "Poštanski broj",
+    "saved": "Profil spremljen",
+    "saving": "Spremanje...",
+    "save": "Spremi",
+    "emailSent": "E-mail poslan",
+    "notAuthenticated": "Nije autentificiran",
+    "permission": "Dozvola",
+    "permissionDescription": "Potrebna je dozvola za mikrofon."
+  },
+  "navigation": {
+    "login": "Prijava",
+    "register": "Registracija",
+    "quote": "Generiraj ponudu",
+    "profile": "Profil",
+    "listini": "Cjenici",
+    "subscription": "Pretplata"
+  },
+  "buttons": {
+    "save": "Spremi",
+    "cancel": "Odustani",
+    "delete": "Obriši",
+    "loading": "...",
+    "generatePreview": "Generiraj pregled",
+    "openBrowser": "Otvori u pregledniku",
+    "send": "Pošalji",
+    "sendEmail": "Pošalji e-mail",
+    "validateApprove": "Provjeri i odobri"
+  },
+  "sections": {
+    "clients": "Klijenti",
+    "jobs": "Poslovi",
+    "details": "Detalji",
+    "detailsLabel": "Detalji:",
+    "selectListino": "Odaberite cjenik",
+    "selectClientToViewJobs": "Odaberite klijenta za prikaz poslova",
+    "description": "Opis"
+  },
+  "actions": {
+    "add": "Dodaj",
+    "addClient": "Dodaj klijenta",
+    "addJob": "Dodaj posao",
+    "addCost": "Dodaj trošak",
+    "edit": "Uredi",
+    "delete": "Obriši",
+    "deleteConfirm": "Jeste li sigurni?",
+    "deleted": "Obrisano"
+  },
+  "listini": {
+    "newListino": "Novi cjenik",
+    "uploadCsv": "Uvezi CSV/Excel",
+    "addManual": "Dodaj ručno",
+    "promptNewListino": "Unesite naziv cjenika",
+    "itemsAdded": "stavki dodano",
+    "newItem": "Nova stavka",
+    "description": "Opis",
+    "price": "Cijena",
+    "markup": "Marža %",
+    "emptyFile": "Datoteka je prazna ili nevažeća"
+  },
+  "modals": {
+    "confirmEmail": "Potvrdite slanje emaila"
+  },
+  "subscription": {
+    "title": "Pretplata",
+    "monthly": "Mjesečno",
+    "yearly": "Godišnje",
+    "active": "Aktivna pretplata",
+    "inactive": "Nema aktivne pretplate",
+    "expires": "Ističe",
+    "manage": "Upravljaj pretplatom",
+    "cancel": "Otkaži pretplatu",
+    "change": "Promijeni plan",
+    "subscribe": "Pretplati se",
+    "saveTwoMonths": "Uštedite 2 mjeseca!",
+    "perMonth": "/mjesec",
+    "perYear": "/godina",
+    "chooseYourPlan": "Odaberite svoj plan"
+  },
+  "dashboard": {
+    "noMaterialFound": "Nema materijala u cjenicima",
+    "notFoundTitle": "Nije pronađeno",
+    "quantity": "Količina",
+    "resultsFound": "Pronađeno {{count}} rezultata. Odaberite cjenik:",
+    "searchClient": "Traži klijenta...",
+    "selectMaterial": "Odaberi materijal",
+    "selectionRequiredMessage": "Pronađeno više materijala. Odaberite ispravan cjenik.",
+    "selectionRequiredTitle": "Potreban odabir",
+    "unitPrice": "Jedinična cijena",
+    "unknownListino": "Nepoznat cjenik"
+  }
+}

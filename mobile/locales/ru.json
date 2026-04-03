@@ -1,0 +1,148 @@
+{
+  "app": {
+    "title": "Quote App",
+    "subtitle": "Сметы с голосовым ИИ"
+  },
+  "auth": {
+    "register": "Регистрация",
+    "login": "Вход",
+    "email": "Email",
+    "password": "Пароль",
+    "confirmPassword": "Подтвердите пароль",
+    "passwordMismatch": "Пароли не совпадают",
+    "registrationComplete": "Регистрация завершена. Проверьте вашу почту."
+  },
+  "legal": {
+    "title": "Правовые документы",
+    "privacy": "Политика конфиденциальности",
+    "terms": "Условия использования",
+    "security": "Политика безопасности",
+    "accept": "Принимаю"
+  },
+  "onboarding": {
+    "title": "Быстрый старт",
+    "voice": "Голосовая кнопка",
+    "voiceDesc": "Нажмите для записи. ИИ создаёт клиентов и работы.",
+    "listini": "Прайс-листы",
+    "listiniDesc": "Загрузите CSV.",
+    "preventivo": "Смета",
+    "preventivoDesc": "Создайте и отправьте смету по email.",
+    "next": "Далее",
+    "start": "Начать"
+  },
+  "main": {
+    "record": "Запись",
+    "stop": "Стоп и отправить",
+    "jobs": "Работы",
+    "listini": "Прайс-листы",
+    "profile": "Профиль",
+    "generateQuote": "Создать смету"
+  },
+  "profile": {
+    "company": "Компания",
+    "vatNumber": "ИНН",
+    "materialMarkupVAT": "НДС на наценку материалов %",
+    "fiscalCode": "ИНН",
+    "country": "Страна",
+    "language": "Язык",
+    "swiftBic": "SWIFT/BIC",
+    "iban": "IBAN",
+    "vatPercent": "НДС %"
+  },
+  "messages": {
+    "error": "Ошибка",
+    "success": "Успех",
+    "loading": "Загрузка...",
+    "address": "Адрес",
+    "city": "Город",
+    "postalCode": "Почтовый индекс",
+    "saved": "Профиль сохранён",
+    "saving": "Сохранение...",
+    "save": "Сохранить",
+    "emailSent": "Email отправлен",
+    "notAuthenticated": "Не аутентифицирован",
+    "permission": "Разрешение",
+    "permissionDescription": "Требуется разрешение на микрофон."
+  },
+  "navigation": {
+    "login": "Войти",
+    "register": "Регистрация",
+    "quote": "Создать предложение",
+    "profile": "Профиль",
+    "listini": "Прайс-листы",
+    "subscription": "Подписка"
+  },
+  "buttons": {
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "delete": "Удалить",
+    "loading": "...",
+    "generatePreview": "Сгенерировать превью",
+    "openBrowser": "Открыть в браузере",
+    "send": "Отправить",
+    "sendEmail": "Отправить email",
+    "validateApprove": "Проверить и утвердить"
+  },
+  "sections": {
+    "clients": "Клиенты",
+    "jobs": "Заказы",
+    "details": "Детали",
+    "detailsLabel": "Детали:",
+    "selectListino": "Выберите прайс-лист",
+    "selectClientToViewJobs": "Выберите клиента, чтобы увидеть заказы",
+    "description": "Описание"
+  },
+  "actions": {
+    "add": "Добавить",
+    "addClient": "Добавить клиента",
+    "addJob": "Добавить заказ",
+    "addCost": "Добавить расход",
+    "edit": "Редактировать",
+    "delete": "Удалить",
+    "deleteConfirm": "Вы уверены?",
+    "deleted": "Удалено"
+  },
+  "listini": {
+    "newListino": "Новый прайс-лист",
+    "uploadCsv": "Импорт CSV/Excel",
+    "addManual": "Добавить вручную",
+    "promptNewListino": "Введите название прайс-листа",
+    "itemsAdded": "элементов добавлено",
+    "newItem": "Новый элемент",
+    "description": "Описание",
+    "price": "Цена",
+    "markup": "Наценка %",
+    "emptyFile": "Файл пустой или недействителен"
+  },
+  "modals": {
+    "confirmEmail": "Подтвердите отправку email"
+  },
+  "subscription": {
+    "title": "Подписка",
+    "monthly": "Ежемесячно",
+    "yearly": "Ежегодно",
+    "active": "Активная подписка",
+    "inactive": "Нет активной подписки",
+    "expires": "Истекает",
+    "manage": "Управление подпиской",
+    "cancel": "Отменить подписку",
+    "change": "Изменить план",
+    "subscribe": "Подписаться",
+    "saveTwoMonths": "Сэкономьте 2 месяца!",
+    "perMonth": "/месяц",
+    "perYear": "/год",
+    "chooseYourPlan": "Выберите ваш план"
+  },
+  "dashboard": {
+    "noMaterialFound": "Материал не найден в прайс-листах",
+    "notFoundTitle": "Не найдено",
+    "quantity": "Количество",
+    "resultsFound": "Найдено {{count}} результатов. Выберите прайс-лист:",
+    "searchClient": "Поиск клиента...",
+    "selectMaterial": "Выбрать материал",
+    "selectionRequiredMessage": "Найдено несколько материалов. Выберите правильный прайс-лист.",
+    "selectionRequiredTitle": "Необходим выбор",
+    "unitPrice": "Цена за единицу",
+    "unknownListino": "Неизвестный прайс-лист"
+  }
+}

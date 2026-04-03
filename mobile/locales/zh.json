@@ -1,0 +1,148 @@
+{
+  "app": {
+    "title": "Quote App",
+    "subtitle": "语音AI报价"
+  },
+  "auth": {
+    "register": "注册",
+    "login": "登录",
+    "email": "邮箱",
+    "password": "密码",
+    "confirmPassword": "确认密码",
+    "passwordMismatch": "密码不匹配",
+    "registrationComplete": "注册完成。请查看您的邮箱。"
+  },
+  "legal": {
+    "title": "法律文件",
+    "privacy": "隐私政策",
+    "terms": "服务条款",
+    "security": "安全政策",
+    "accept": "我接受"
+  },
+  "onboarding": {
+    "title": "快速指南",
+    "voice": "语音按钮",
+    "voiceDesc": "按下录制语音指令。AI创建客户、项目和成本项。",
+    "listini": "价目表",
+    "listiniDesc": "上传CSV或手动添加。",
+    "preventivo": "报价",
+    "preventivoDesc": "生成并通过邮件发送报价。",
+    "next": "下一步",
+    "start": "开始"
+  },
+  "main": {
+    "record": "录制",
+    "stop": "停止并发送",
+    "jobs": "项目",
+    "listini": "价目表",
+    "profile": "个人资料",
+    "generateQuote": "生成报价"
+  },
+  "profile": {
+    "company": "公司",
+    "vatNumber": "税号",
+    "materialMarkupVAT": "材料增值税附加 %",
+    "fiscalCode": "纳税人识别号",
+    "country": "国家",
+    "language": "语言",
+    "swiftBic": "SWIFT/BIC",
+    "iban": "IBAN",
+    "vatPercent": "增值税 %"
+  },
+  "messages": {
+    "error": "错误",
+    "success": "成功",
+    "loading": "加载中...",
+    "address": "地址",
+    "city": "城市",
+    "postalCode": "邮政编码",
+    "saved": "个人资料已保存",
+    "saving": "保存中...",
+    "save": "保存",
+    "emailSent": "邮件已发送",
+    "notAuthenticated": "未认证",
+    "permission": "权限",
+    "permissionDescription": "需要麦克风权限。"
+  },
+  "navigation": {
+    "login": "登录",
+    "register": "注册",
+    "quote": "生成报价",
+    "profile": "个人资料",
+    "listini": "价目表",
+    "subscription": "订阅"
+  },
+  "buttons": {
+    "save": "保存",
+    "cancel": "取消",
+    "delete": "删除",
+    "loading": "...",
+    "generatePreview": "生成预览",
+    "openBrowser": "在浏览器中打开",
+    "send": "发送",
+    "sendEmail": "发送邮件",
+    "validateApprove": "验证并批准"
+  },
+  "sections": {
+    "clients": "客户",
+    "jobs": "工作",
+    "details": "详细信息",
+    "detailsLabel": "详细信息：",
+    "selectListino": "选择价目表",
+    "selectClientToViewJobs": "选择客户以查看工作",
+    "description": "描述"
+  },
+  "actions": {
+    "add": "添加",
+    "addClient": "添加客户",
+    "addJob": "添加工作",
+    "addCost": "添加成本",
+    "edit": "编辑",
+    "delete": "删除",
+    "deleteConfirm": "您确定吗？",
+    "deleted": "已删除"
+  },
+  "listini": {
+    "newListino": "新价目表",
+    "uploadCsv": "导入CSV/Excel",
+    "addManual": "手动添加",
+    "promptNewListino": "输入价目表名称",
+    "itemsAdded": "项已添加",
+    "newItem": "新项目",
+    "description": "描述",
+    "price": "价格",
+    "markup": "加价 %",
+    "emptyFile": "文件为空或无效"
+  },
+  "modals": {
+    "confirmEmail": "确认发送邮件"
+  },
+  "subscription": {
+    "title": "订阅",
+    "monthly": "月付",
+    "yearly": "年付",
+    "active": "有效订阅",
+    "inactive": "无有效订阅",
+    "expires": "到期日",
+    "manage": "管理订阅",
+    "cancel": "取消订阅",
+    "change": "更改计划",
+    "subscribe": "订阅",
+    "saveTwoMonths": "节省2个月!",
+    "perMonth": "/月",
+    "perYear": "/年",
+    "chooseYourPlan": "选择您的计划"
+  },
+  "dashboard": {
+    "noMaterialFound": "在价格表中未找到材料",
+    "notFoundTitle": "未找到",
+    "quantity": "数量",
+    "resultsFound": "找到 {{count}} 个结果。请选择价格表：",
+    "searchClient": "搜索客户...",
+    "selectMaterial": "选择材料",
+    "selectionRequiredMessage": "找到多个材料。请选择正确的价格表。",
+    "selectionRequiredTitle": "需要选择",
+    "unitPrice": "单价",
+    "unknownListino": "未知价格表"
+  }
+}
