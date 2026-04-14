@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 
 export const dynamic = 'force-dynamic';
 
-export default function SubscriptionSuccessPage() {
+function SubscriptionSuccessContent() {
   const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -115,5 +115,13 @@ export default function SubscriptionSuccessPage() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function SubscriptionSuccessPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800" />}>
+      <SubscriptionSuccessContent />
+    </Suspense>
   );
 }
