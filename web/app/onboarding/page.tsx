@@ -16,10 +16,13 @@ const TUTORIAL_STEPS = [
   { key: 'preventivo', icon: '📄', title_key: 'onboarding.preventivo', desc_key: 'onboarding.preventivoDesc' },
 ];
 
+const LEGAL_DOCUMENT_TYPES = ['privacy_policy', 'terms_of_service'] as const;
+type LegalDocumentType = (typeof LEGAL_DOCUMENT_TYPES)[number];
+
 export default function OnboardingPage() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
-  const [mainStep, setMainStep] = useState(1); // 1: Welcome, 2: Tutorial, 3: Company Info, 4: Plan, 5: Done
+  const [mainStep, setMainStep] = useState(1); // 1: Welcome, 2: Tutorial, 3: Legal Consent, 4: Company Info, 5: Plan, 6: Done
   const [tutorialStep, setTutorialStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
@@ -30,6 +33,13 @@ export default function OnboardingPage() {
     vat_number: '',
     country_code: 'IT',
     language: i18n.language || 'en',
+  });
+  const [legalConsent, setLegalConsent] = useState<{
+    privacy_policy: boolean;
+    terms_of_service: boolean;
+  }>({
+    privacy_policy: false,
+    terms_of_service: false,
   });
 
   useEffect(() => {
@@ -113,7 +123,50 @@ export default function OnboardingPage() {
   };
 
   const handleSkipToTrial = async () => {
+    await handleSaveLegalConsent();
     await finishOnboarding();
+  };
+
+  const handleSaveLegalConsent = async () => {
+    try {
+      const legalDocs = await Promise.all(
+        LEGAL_DOCUMENT_TYPES.map(async (type) => {
+          const { data } = await supabase
+            .from('legal_documents')
+            .select('id, version')
+            .eq('type', type)
+            .eq('country_code', formData.country_code)
+            .order('effective_date', { ascending: false })
+            .limit(1)
+            .single();
+          return data ? { type, id: data.id, version: data.version } : null;
+        })
+      );
+
+      const validDocs = legalDocs.filter(Boolean) as Array<{
+        type: LegalDocumentType;
+        id: string;
+        version: string;
+      }>;
+
+      if (validDocs.length === 0) {
+        console.warn('No legal documents found, skipping consent save');
+        return;
+      }
+
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) return;
+
+      const acceptances = validDocs.map((doc) => ({
+        user_id: currentUser.id,
+        document_id: doc.id,
+        document_version: doc.version,
+      }));
+
+      await supabase.from('legal_acceptances').insert(acceptances);
+    } catch (err) {
+      console.error('Error saving legal consent:', err);
+    }
   };
 
   const finishOnboarding = async () => {
@@ -133,7 +186,7 @@ export default function OnboardingPage() {
       if (error) throw error;
 
       await setLanguage(formData.language);
-      setMainStep(5);
+      setMainStep(6);
       setTimeout(() => router.push('/dashboard'), 2000);
     } catch (err: any) {
       console.error('Finish onboarding error:', err);
@@ -232,8 +285,74 @@ export default function OnboardingPage() {
     );
   }
 
-  // Step 3: Company Info
+  // Step 3: Legal Consent
   if (mainStep === 3) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-6">
+        <div className="max-w-lg w-full bg-white/10 backdrop-blur rounded-2xl p-8 text-white">
+          <h2 className="text-2xl font-bold mb-2">Accordi Legali</h2>
+          <p className="text-slate-300 mb-6">Prima di continuare, devi accettare i nostri termini</p>
+
+          <div className="space-y-4">
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={legalConsent.privacy_policy}
+                onChange={(e) => setLegalConsent({ ...legalConsent, privacy_policy: e.target.checked })}
+                className="mt-1 w-5 h-5 text-blue-600 bg-white/10 border-white/20 rounded focus:ring-blue-500"
+              />
+              <span className="text-sm">
+                Ho letto e accetto la{' '}
+                <a href="/privacy" target="_blank" className="text-blue-400 hover:text-blue-300 underline">
+                  Informativa sulla Privacy
+                </a>
+              </span>
+            </label>
+
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={legalConsent.terms_of_service}
+                onChange={(e) => setLegalConsent({ ...legalConsent, terms_of_service: e.target.checked })}
+                className="mt-1 w-5 h-5 text-blue-600 bg-white/10 border-white/20 rounded focus:ring-blue-500"
+              />
+              <span className="text-sm">
+                Ho letto e accetto i{' '}
+                <a href="/terms" target="_blank" className="text-blue-400 hover:text-blue-300 underline">
+                  Termini di Servizio
+                </a>
+              </span>
+            </label>
+          </div>
+
+          <div className="flex gap-4 mt-8">
+            <button
+              onClick={() => setMainStep(2)}
+              className="flex-1 py-3 rounded-lg bg-white/20 hover:bg-white/30 transition"
+            >
+              Back
+            </button>
+            <button
+              onClick={async () => {
+                if (!legalConsent.privacy_policy || !legalConsent.terms_of_service) {
+                  toast.error('Devi accettare entrambi i documenti legali');
+                  return;
+                }
+                await handleSaveLegalConsent();
+                setMainStep(4);
+              }}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition"
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Step 4: Company Info
+  if (mainStep === 4) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-6">
         <div className="max-w-lg w-full bg-white/10 backdrop-blur rounded-2xl p-8 text-white">
@@ -298,7 +417,7 @@ export default function OnboardingPage() {
 
           <div className="flex gap-4 mt-8">
             <button
-              onClick={() => setMainStep(2)}
+              onClick={() => setMainStep(3)}
               className="flex-1 py-3 rounded-lg bg-white/20 hover:bg-white/30 transition"
             >
               Back
@@ -315,8 +434,8 @@ export default function OnboardingPage() {
     );
   }
 
-  // Step 4: Choose Plan
-  if (mainStep === 4) {
+  // Step 5: Choose Plan
+  if (mainStep === 5) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-6">
         <div className="max-w-2xl w-full">
@@ -364,7 +483,7 @@ export default function OnboardingPage() {
 
           <div className="flex gap-4">
             <button
-              onClick={() => setMainStep(3)}
+              onClick={() => setMainStep(4)}
               className="flex-1 py-3 rounded-lg bg-white/20 hover:bg-white/30 text-white transition"
             >
               Back
@@ -381,8 +500,8 @@ export default function OnboardingPage() {
     );
   }
 
-  // Step 5: Done
-  if (mainStep === 5) {
+  // Step 6: Done
+  if (mainStep === 6) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-6">
         <div className="max-w-lg w-full bg-white/10 backdrop-blur rounded-2xl p-8 text-white text-center">

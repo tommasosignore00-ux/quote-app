@@ -37,6 +37,8 @@
     "react-dom": "^18.2.0",
     "react-hot-toast": "^2.4.1",
     "react-i18next": "^14.0.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "stripe": "^14.0.0",
     "styled-jsx": "^5.1.1",
     "web-vitals": "^5.1.0",

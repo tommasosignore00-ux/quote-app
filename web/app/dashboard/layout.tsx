@@ -7,6 +7,8 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
 import { useSubscription } from '@/lib/useSubscription';
 
+import LegalConsentPopup from '@/components/LegalConsentPopup';
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   const router = useRouter();
@@ -55,6 +57,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen flex">
+      <LegalConsentPopup />
       <aside className="w-64 bg-slate-900 text-white flex flex-col">
         <div className="p-4 border-b border-slate-700">
           <Link href="/dashboard" className="font-bold text-lg">Quote App</Link>
