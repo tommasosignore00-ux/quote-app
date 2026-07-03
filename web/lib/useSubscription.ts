@@ -8,7 +8,7 @@ export function useSubscription() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [hasAccess, setHasAccess] = useState(false);
-  const [profile, setProfile] = useState<{ onboarding_completed?: boolean; subscription_status?: string; trial_ends_at?: string } | null>(null);
+  const [profile, setProfile] = useState<{ onboarding_completed?: boolean; subscription_status?: string; trial_ends_at?: string; subscription_plan?: string } | null>(null);
 
   useEffect(() => {
     const check = async () => {
@@ -17,11 +17,12 @@ export function useSubscription() {
         router.push('/auth/login');
         return;
       }
-      const { data: p } = await supabase.from('profiles').select('onboarding_completed, subscription_status, trial_ends_at').eq('id', session.user.id).single();
+      const { data: p } = await supabase.from('profiles').select('onboarding_completed, subscription_status, trial_ends_at, subscription_plan').eq('id', session.user.id).single();
       setProfile(p || null);
       const active = process.env.NEXT_PUBLIC_SKIP_SUBSCRIPTION === 'true'
         || p?.subscription_status === 'trialing'
         || p?.subscription_status === 'active'
+        || p?.subscription_status === 'team'
         || (p?.trial_ends_at && new Date(p.trial_ends_at) > new Date());
       setHasAccess(!!active);
       setLoading(false);

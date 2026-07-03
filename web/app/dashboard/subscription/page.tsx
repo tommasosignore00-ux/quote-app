@@ -34,10 +34,11 @@ export default function SubscriptionPage() {
   }, []);
 
   const status = subscription?.subscription_status || '';
+  const plan = subscription?.subscription_plan || '';
   const trialEndsAt = subscription?.trial_ends_at ? new Date(subscription.trial_ends_at) : null;
   const skipSub = process.env.NEXT_PUBLIC_SKIP_SUBSCRIPTION === 'true';
   const isActive = status === 'active';
-  const isTeam = status === 'team';
+  const isTeam = status === 'team' || plan === 'team';
   const isTrial = status === 'trialing' || (!isActive && !isTeam && trialEndsAt && trialEndsAt > new Date());
   const isSubscribed = isActive || isTeam || isTrial || skipSub;
   const currentPlan = isTeam ? 'team' : (subscription?.subscription_plan || '');
