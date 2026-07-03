@@ -69,41 +69,55 @@ export default function FatturePage() {
   });
 
   const fetchData = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setLoading(false);
+        return;
+      }
 
-    // Ottieni profilo per l'aliquota IVA
-    const { data: profile } = await supabase.from('profiles').select('id, vat_percent').eq('id', user.id).single();
-    if (profile) {
-      setProfileId(profile.id);
-      setProfileVatPercent(Number(profile.vat_percent) || 22);
-    } else {
-      setProfileId(user.id);
+      // Ottieni profilo per l'aliquota IVA
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, vat_percent')
+        .eq('id', user.id)
+        .single();
+
+      if (profile) {
+        setProfileId(profile.id);
+        setProfileVatPercent(Number(profile.vat_percent) || 22);
+      } else {
+        setProfileId(user.id);
+      }
+
+      // Carica clienti
+      const { data: c } = await supabase
+        .from('clienti')
+        .select('id, name, email')
+        .eq('profile_id', profile?.id || user.id);
+      setClienti(c || []);
+
+      // Carica fatture
+      const { data, error } = await supabase
+        .from('fatture')
+        .select(`
+          *,
+          clienti(name, email, vat_number, fiscal_code, address, city, postal_code, country_code),
+          lavori!fatture_lavoro_id_fkey(title),
+          fatture_righe(*)
+        `)
+        .eq('profile_id', profile?.id || user.id)
+        .order('data_emissione', { ascending: false });
+
+      if (error) {
+        console.error('Errore caricamento fatture:', error);
+        toast.error('Errore caricamento fatture');
+      } else {
+        setFatture(data || []);
+      }
+    } finally {
+      setLoading(false);
     }
-
-    // Carica clienti
-    const { data: c } = await supabase.from('clienti').select('id, name, email').eq('profile_id', profile?.id || user.id);
-    setClienti(c || []);
-
-    // Carica fatture
-    const { data, error } = await supabase
-      .from('fatture')
-      .select(`
-        *,
-        clienti(name, email, vat_number, fiscal_code, address, city, postal_code, country_code),
-        lavori(title),
-        fatture_righe(*)
-      `)
-      .eq('profile_id', profile?.id || user.id)
-      .order('data_emissione', { ascending: false });
-
-    if (error) {
-      console.error('Errore caricamento fatture:', error);
-      toast.error('Errore caricamento fatture');
-    } else {
-      setFatture(data || []);
-    }
-    setLoading(false);
   }, []);
 
   useEffect(() => {
