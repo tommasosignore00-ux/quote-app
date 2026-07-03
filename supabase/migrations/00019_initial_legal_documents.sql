@@ -31,7 +31,7 @@ Hai il diritto di:
 - Richiedere la portabilità dei tuoi dati
 
 ## 6. Contatti
-Per qualsiasi domanda, contattaci all'indirizzo email: info@example.com
+Per qualsiasi domanda, contattaci all'indirizzo email: quote.app.support@gmail.com
 
 Ultimo aggiornamento: Luglio 2026$quote$,
   NOW()
