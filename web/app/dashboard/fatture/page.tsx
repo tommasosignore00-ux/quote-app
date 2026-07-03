@@ -21,7 +21,7 @@ interface Fattura {
   lavoro_id?: string;
   note?: string;
   profile_id: string;
-  clienti: { name: string; email?: string; partita_iva?: string; codice_fiscale?: string; indirizzo?: string; citta?: string; cap?: string; paese?: string };
+  clienti: { name: string; email?: string; vat_number?: string; fiscal_code?: string; address?: string; city?: string; postal_code?: string; country_code?: string };
   lavori?: { title: string };
   fatture_righe?: Array<{
     id: string;
@@ -90,7 +90,7 @@ export default function FatturePage() {
       .from('fatture')
       .select(`
         *,
-        clienti(name, email, partita_iva, codice_fiscale, indirizzo, citta, cap, paese),
+        clienti(name, email, vat_number, fiscal_code, address, city, postal_code, country_code),
         lavori(title),
         fatture_righe(*)
       `)
@@ -232,12 +232,12 @@ export default function FatturePage() {
       },
       committenteCessionario: {
         denominazione: fattura.clienti?.name,
-        partitaIva: fattura.clienti?.partita_iva,
-        codiceFiscale: fattura.clienti?.codice_fiscale,
-        indirizzo: fattura.clienti?.indirizzo || 'Via Esempio 1',
-        cap: fattura.clienti?.cap || '00100',
-        comune: fattura.clienti?.citta || 'Roma',
-        nazione: fattura.clienti?.paese || 'IT',
+        partitaIva: fattura.clienti?.vat_number,
+        codiceFiscale: fattura.clienti?.fiscal_code,
+        indirizzo: fattura.clienti?.address || 'Via Esempio 1',
+        cap: fattura.clienti?.postal_code || '00100',
+        comune: fattura.clienti?.city || 'Roma',
+        nazione: fattura.clienti?.country_code || 'IT',
       },
       righe: (fattura.fatture_righe || []).map(r => ({
         numeroLinea: r.sort_order + 1,
