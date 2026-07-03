@@ -8,9 +8,10 @@ type Cliente = { id: string; name: string };
 type VoiceButtonProps = {
   onResult: (result: { action: string; data?: Record<string, unknown> }) => void;
   clienti?: Cliente[];
+  context?: Record<string, unknown>;
 };
 
-export default function VoiceButton({ onResult, clienti = [] }: VoiceButtonProps) {
+export default function VoiceButton({ onResult, clienti = [], context }: VoiceButtonProps) {
   const { t } = useTranslation();
   const [recording, setRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -30,6 +31,9 @@ export default function VoiceButton({ onResult, clienti = [] }: VoiceButtonProps
         const formData = new FormData();
         formData.append('audio', blob, 'recording.webm');
         formData.append('clienti', JSON.stringify(clienti.map(c => ({ id: c.id, name: c.name }))));
+        if (context) {
+          formData.append('context', JSON.stringify(context));
+        }
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
         const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
         const res = await fetch(`${supabaseUrl}/functions/v1/voice-process`, {

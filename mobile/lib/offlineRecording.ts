@@ -14,6 +14,7 @@ export interface OfflineRecording {
   uri: string;
   timestamp: number;
   clienti: { id: string; name: string }[];
+  context?: Record<string, unknown>;
   retries: number;
 }
 
@@ -36,7 +37,8 @@ async function saveRecordings(recordings: OfflineRecording[]): Promise<void> {
  */
 export async function saveOfflineRecording(
   tempUri: string,
-  clienti: { id: string; name: string }[]
+  clienti: { id: string; name: string }[],
+  context?: Record<string, unknown>
 ): Promise<string> {
   const id = `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   const persistDir = `${FileSystem.documentDirectory}offline_recordings/`;
@@ -56,6 +58,7 @@ export async function saveOfflineRecording(
     uri: persistUri,
     timestamp: Date.now(),
     clienti,
+    context,
     retries: 0,
   });
   await saveRecordings(recordings);
@@ -102,6 +105,9 @@ export async function syncOfflineRecordings(
         'clienti',
         JSON.stringify(rec.clienti.map((c) => ({ id: c.id, name: c.name })))
       );
+      if (rec.context) {
+        formData.append('context', JSON.stringify(rec.context));
+      }
 
       const res = await fetch(`${supabaseUrl}/functions/v1/voice-process`, {
         method: 'POST',

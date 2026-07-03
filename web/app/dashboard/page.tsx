@@ -16,7 +16,7 @@ type Lavoro = { id: string; title: string; cliente_id: string; status: string; c
 type Costo = { id: string; description: string; quantity: number; unit_price: number; tax_rate?: number };
 
 export default function DashboardPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   useSessionTimeout(); // Monitor inactivity and auto-logout
   const [clienti, setClienti] = useState<Cliente[]>([]);
   const [lavori, setLavori] = useState<Lavoro[]>([]);
@@ -25,6 +25,7 @@ export default function DashboardPage() {
   const [costi, setCosti] = useState<Costo[]>([]);
   const [loading, setLoading] = useState(true);
   const [profileId, setProfileId] = useState<string | null>(null);
+  const [profileCountryCode, setProfileCountryCode] = useState<string | null>(null);
   const [profileVatPercent, setProfileVatPercent] = useState<number>(22);
   const [profileMaterialMarkup, setProfileMaterialMarkup] = useState<number>(0);
   const [semanticAlternatives, setSemanticAlternatives] = useState<{ id: string; description: string; unit_price: number; markup_percent?: number }[] | null>(null);
@@ -52,16 +53,20 @@ export default function DashboardPage() {
     if (!user) return;
     // Try with vat_percent and material_markup first; fall back to id-only if columns don't exist yet
     let pid = user.id;
-    const { data: profile, error: profileErr } = await supabase.from('profiles').select('id, vat_percent, material_markup').eq('id', user.id).single();
+    const { data: profile, error: profileErr } = await supabase.from('profiles').select('id, vat_percent, material_markup, country_code').eq('id', user.id).single();
     if (profile) {
       pid = profile.id;
+      setProfileCountryCode(profile.country_code || null);
       setProfileVatPercent(Number(profile.vat_percent) || 22);
       setProfileMaterialMarkup(Number(profile.material_markup) || 0);
     } else if (profileErr) {
       // Columns might not exist yet – try without them
       console.warn('Profile fetch with vat_percent/material_markup failed, retrying:', profileErr.message);
-      const { data: profileFallback } = await supabase.from('profiles').select('id').eq('id', user.id).single();
-      if (profileFallback) pid = profileFallback.id;
+      const { data: profileFallback } = await supabase.from('profiles').select('id, country_code').eq('id', user.id).single();
+      if (profileFallback) {
+        pid = profileFallback.id;
+        setProfileCountryCode(profileFallback.country_code || null);
+      }
     }
     setProfileId(pid);
 
@@ -275,6 +280,57 @@ export default function DashboardPage() {
     setSelectedLavoro(null);
   };
 
+  const selectedCliente = clienti.find((cliente) => cliente.id === selectedClienteId) || null;
+  const voiceContext = {
+    appLanguage: i18n.language,
+    selectedInputLanguage: i18n.language,
+    userIntentMode: 'voice',
+    company: {
+      country: profileCountryCode,
+      locale: i18n.language,
+      defaultVatRate: profileVatPercent,
+      vatMode: 'standard',
+    },
+    currentCustomer: selectedCliente
+      ? {
+          id: selectedCliente.id,
+          name: selectedCliente.name,
+          companyName: selectedCliente.name,
+        }
+      : null,
+    currentJob: selectedLavoro
+      ? {
+          id: selectedLavoro.id,
+          customerId: selectedLavoro.cliente_id,
+          title: selectedLavoro.title,
+        }
+      : null,
+    currentQuote: selectedLavoro
+      ? {
+          jobId: selectedLavoro.id,
+          customerId: selectedLavoro.cliente_id,
+          language: i18n.language,
+          items: costi.map((costo) => ({
+            id: costo.id,
+            description: costo.description,
+            quantity: costo.quantity,
+            unitPrice: costo.unit_price,
+            vatRate: costo.tax_rate,
+          })),
+        }
+      : null,
+    existingCustomers: clienti.map((cliente) => ({
+      id: cliente.id,
+      name: cliente.name,
+      companyName: cliente.name,
+    })),
+    existingJobs: lavori.map((lavoro) => ({
+      id: lavoro.id,
+      customerId: lavoro.cliente_id,
+      title: lavoro.title,
+    })),
+  };
+
   const handleVoiceResult = async (result: { action: string; data?: Record<string, unknown> }) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -322,7 +378,7 @@ export default function DashboardPage() {
         <div className="flex-1">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-2xl font-bold">{t('main.jobs')}</h1>
-            <VoiceButton onResult={handleVoiceResult} clienti={clienti} />
+            <VoiceButton onResult={handleVoiceResult} clienti={clienti} context={voiceContext} />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -17,6 +17,8 @@ import ProfileScreen from './screens/ProfileScreen';
 import ListiniScreen from './screens/ListiniScreen';
 import QuoteScreen from './screens/QuoteScreen';
 import SubscriptionScreen from './screens/SubscriptionScreen';
+import FattureScreen from './screens/FattureScreen';
+import IntegrazioniScreen from './screens/IntegrazioniScreen';
 
 const Stack = createNativeStackNavigator();
 export const navigationRef = createNavigationContainerRef();
@@ -84,6 +86,8 @@ function AppNavigator() {
         <Stack.Screen name="Quote" component={QuoteScreen} options={{ title: i18n.t('navigation.quote') }} />
         <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: i18n.t('navigation.profile') }} />
         <Stack.Screen name="Listini" component={ListiniScreen} options={{ title: i18n.t('navigation.listini') }} />
+        <Stack.Screen name="Fatture" component={FattureScreen} options={{ title: 'Fatture' }} />
+        <Stack.Screen name="Integrazioni" component={IntegrazioniScreen} options={{ title: 'Integrazioni' }} />
         <Stack.Screen name="Subscription" component={SubscriptionScreen} options={{ title: i18n.t('navigation.subscription') || 'Abbonamento' }} />
       </Stack.Navigator>
     </NavigationContainer>

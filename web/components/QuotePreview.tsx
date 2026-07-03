@@ -7,6 +7,7 @@ import { generateQuoteHTML, QuoteData } from '@/lib/QuoteTemplate';
 import toast from 'react-hot-toast';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
+import { ExternalLink, Copy } from 'lucide-react';
 
 type Lavoro = { id: string; title: string; cliente_id: string; clienti?: { name: string; email?: string } };
 

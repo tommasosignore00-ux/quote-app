@@ -9,6 +9,7 @@ import NetInfo from '@react-native-community/netinfo';
 type VoiceButtonProps = {
   onResult: (result: { action: string; data?: Record<string, unknown> }) => void;
   clienti?: { id: string; name: string }[];
+  context?: Record<string, unknown>;
   size?: number;
   /** Punto 2: FAB mode - position fixed bottom-right */
   floating?: boolean;
@@ -18,7 +19,7 @@ type VoiceButtonProps = {
   listenToWatchEvents?: boolean;
 };
 
-export default function VoiceButton({ onResult, clienti = [], size = 64, floating = false, onMicDenied, listenToWatchEvents = false }: VoiceButtonProps) {
+export default function VoiceButton({ onResult, clienti = [], context, size = 64, floating = false, onMicDenied, listenToWatchEvents = false }: VoiceButtonProps) {
   const { t } = useTranslation();
   const [recording, setRecording] = useState(false);
   const [pendingOffline, setPendingOffline] = useState(0);
@@ -109,7 +110,7 @@ export default function VoiceButton({ onResult, clienti = [], size = 64, floatin
       // Punto 1: Check network - if offline, save for later
       const netState = await NetInfo.fetch();
       if (!netState.isConnected) {
-        await saveOfflineRecording(uri, clienti);
+        await saveOfflineRecording(uri, clienti, context);
         const count = await getPendingRecordingsCount();
         setPendingOffline(count);
         Alert.alert(
@@ -122,6 +123,9 @@ export default function VoiceButton({ onResult, clienti = [], size = 64, floatin
       const formData = new FormData();
       formData.append('audio', { uri, name: 'recording.m4a', type: 'audio/m4a' } as any);
       formData.append('clienti', JSON.stringify(clienti.map((client) => ({ id: client.id, name: client.name }))));
+      if (context) {
+        formData.append('context', JSON.stringify(context));
+      }
 
       const res = await fetch(`${supabaseUrl}/functions/v1/voice-process`, {
         method: 'POST',

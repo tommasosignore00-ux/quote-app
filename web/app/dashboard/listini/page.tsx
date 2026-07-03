@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
+import { parseUniversalCsvText, parseUniversalSpreadsheetRows, type UniversalImportSummary } from '@/lib/listinoUniversalImport';
 
 type Listino = { id: string; name: string };
 type ListinoItem = { id: string; description: string; unit_price: number; markup_percent: number };
@@ -99,30 +100,38 @@ export default function ListiniPage() {
     }
   };
 
-  const parseFileToItems = async (file: File, profileId: string): Promise<{ listino_id: string; profile_id: string; description: string; unit_price: number; markup_percent: number }[]> => {
+  const parseFileToItems = async (file: File, profileId: string): Promise<{ items: { listino_id: string; profile_id: string; description: string; unit_price: number; markup_percent: number }[]; summary: UniversalImportSummary }> => {
     const ext = file.name.split('.').pop()?.toLowerCase();
     if (ext === 'xlsx' || ext === 'xls') {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1 }) as (string | number)[][];
-      const header = rows[0];
-      const descIdx = header.findIndex((h: unknown) => String(h).toLowerCase().includes('desc') || String(h).toLowerCase().includes('voce'));
-      const priceIdx = header.findIndex((h: unknown) => String(h).toLowerCase().includes('prezzo') || String(h).toLowerCase().includes('price'));
-      return rows.slice(1)
-        .map((row) => {
-          const desc = (row[descIdx ?? 0] ?? row[0] ?? '').toString().trim();
-          const price = parseFloat(String(row[priceIdx ?? 1] ?? row[1] ?? 0)) || 0;
-          return { listino_id: selectedListino!.id, profile_id: profileId, description: desc, unit_price: price, markup_percent: 0 };
-        })
-        .filter((i) => i.description);
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as unknown[][];
+      const parsed = parseUniversalSpreadsheetRows(rows);
+      return {
+        items: parsed.items.map((row) => ({
+          listino_id: selectedListino!.id,
+          profile_id: profileId,
+          description: row.description,
+          unit_price: row.unit_price,
+          markup_percent: row.markup_percent,
+        })),
+        summary: parsed.summary,
+      };
     }
+
     const text = await file.text();
-    const lines = text.split('\n').slice(1).filter(Boolean);
-    return lines.map((line) => {
-      const [desc, price] = line.split(/[;,]\s*/);
-      return { listino_id: selectedListino!.id, profile_id: profileId, description: (desc || '').trim(), unit_price: parseFloat(price || '0') || 0, markup_percent: 0 };
-    }).filter((i) => i.description);
+    const parsed = parseUniversalCsvText(text);
+    return {
+      items: parsed.items.map((row) => ({
+        listino_id: selectedListino!.id,
+        profile_id: profileId,
+        description: row.description,
+        unit_price: row.unit_price,
+        markup_percent: row.markup_percent,
+      })),
+      summary: parsed.summary,
+    };
   };
 
   const handleUploadCsv = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -133,7 +142,7 @@ export default function ListiniPage() {
     const profileId = (await supabase.from('profiles').select('id').eq('id', user.id).single()).data?.id;
     if (!profileId) return;
 
-    const items = await parseFileToItems(file, profileId);
+    const { items, summary } = await parseFileToItems(file, profileId);
 
     for (const item of items) {
       const res = await fetch('/api/listini/embed', {
@@ -144,7 +153,10 @@ export default function ListiniPage() {
       const { embedding } = await res.json();
       await supabase.from('listini_vettoriali').insert({ ...item, embedding });
     }
-      toast.success(`${items.length} ${t('listini.itemsAdded')}`);
+
+    toast.success(
+      `${summary.parsedRows}/${summary.totalRows} ${t('listini.itemsAdded')} · normalize: ${summary.normalizedPriceRows} · unita rilevate: ${summary.unitDetectedRows}`
+    );
     fetchItems(selectedListino.id);
   };
 

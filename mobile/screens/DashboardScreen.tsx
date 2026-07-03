@@ -15,7 +15,7 @@ type Lavoro = { id: string; title: string; cliente_id: string; clienti?: any };
 type Costo = { id: string; description: string; quantity: number; unit_price: number; tax_rate: number };
 
 export default function DashboardScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigation = useNavigation();
   const route = useRoute<any>();
   const { colors } = useTheme();
@@ -25,6 +25,7 @@ export default function DashboardScreen() {
   const [selectedLavoro, setSelectedLavoro] = useState<Lavoro | null>(null);
   const [costi, setCosti] = useState<Costo[]>([]);
   const [profileId, setProfileId] = useState<string | null>(null);
+  const [profileCountryCode, setProfileCountryCode] = useState<string | null>(null);
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
   // Helper: gating
   const isProOrTeam = subscriptionStatus === 'active' || subscriptionStatus === 'team';
@@ -124,6 +125,7 @@ export default function DashboardScreen() {
     const { data: profile, error: profileErr } = await supabase.from('profiles').select('*').eq('id', user.id).single();
     if (profile) {
       pid = profile.id;
+      setProfileCountryCode((profile as any).country_code || null);
       setProfileVatPercent(Number((profile as any).vat_percent) || 22);
       setProfileMaterialMarkup(Number((profile as any).material_markup) || 0);
       setSubscriptionStatus(profile.subscription_status || null);
@@ -242,6 +244,57 @@ export default function DashboardScreen() {
       if (dettagliChannel) supabase.removeChannel(dettagliChannel);
     };
   }, [profileId, selectedLavoro?.id, fetchData]);
+
+  const selectedCliente = clienti.find((cliente) => cliente.id === selectedClienteId) || null;
+  const voiceContext = {
+    appLanguage: i18n.language,
+    selectedInputLanguage: i18n.language,
+    userIntentMode: 'voice',
+    company: {
+      country: profileCountryCode,
+      locale: i18n.language,
+      defaultVatRate: profileVatPercent,
+      vatMode: 'standard',
+    },
+    currentCustomer: selectedCliente
+      ? {
+          id: selectedCliente.id,
+          name: selectedCliente.name,
+          companyName: selectedCliente.name,
+        }
+      : null,
+    currentJob: selectedLavoro
+      ? {
+          id: selectedLavoro.id,
+          customerId: selectedLavoro.cliente_id,
+          title: selectedLavoro.title,
+        }
+      : null,
+    currentQuote: selectedLavoro
+      ? {
+          jobId: selectedLavoro.id,
+          customerId: selectedLavoro.cliente_id,
+          language: i18n.language,
+          items: costi.map((costo) => ({
+            id: costo.id,
+            description: costo.description,
+            quantity: costo.quantity,
+            unitPrice: costo.unit_price,
+            vatRate: costo.tax_rate,
+          })),
+        }
+      : null,
+    existingCustomers: clienti.map((cliente) => ({
+      id: cliente.id,
+      name: cliente.name,
+      companyName: cliente.name,
+    })),
+    existingJobs: lavori.map((lavoro) => ({
+      id: lavoro.id,
+      customerId: lavoro.cliente_id,
+      title: lavoro.title,
+    })),
+  };
 
   const handleVoiceResult = async (result: { action: string; data?: Record<string, unknown> }) => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -718,7 +771,7 @@ export default function DashboardScreen() {
       {!selectedClienteId && (
         <View style={styles.voiceCenterWrap}>
           {subscriptionStatus === 'active' && (
-            <VoiceButton onResult={handleVoiceResult} clienti={clienti} size={260} onMicDenied={handleMicDenied} />
+            <VoiceButton onResult={handleVoiceResult} clienti={clienti} context={voiceContext} size={260} onMicDenied={handleMicDenied} />
           )}
         </View>
       )}
@@ -947,6 +1000,12 @@ export default function DashboardScreen() {
         </TouchableOpacity>
         <TouchableOpacity style={styles.navBtn} onPress={() => (navigation as any).navigate('Listini')}>
           <Text style={[styles.navText, { color: colors.textSecondary }]}>📋 {t('main.listini')}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.navBtn} onPress={() => (navigation as any).navigate('Fatture')}>
+          <Text style={[styles.navText, { color: colors.textSecondary }]}>📄 Fatture</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.navBtn} onPress={() => (navigation as any).navigate('Integrazioni')}>
+          <Text style={[styles.navText, { color: colors.textSecondary }]}>🔗 Integrazioni</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navBtn} onPress={() => (navigation as any).navigate('Profile')}>
           <Text style={[styles.navText, { color: colors.textSecondary }]}>👤 {t('main.profile')}</Text>

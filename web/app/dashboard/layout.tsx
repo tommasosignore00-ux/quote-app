@@ -73,6 +73,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {t('main.listini')}
           </Link>
           <Link
+            href="/dashboard/fatture"
+            className={`block py-2 px-3 rounded-lg ${pathname === '/dashboard/fatture' ? 'bg-primary' : 'hover:bg-slate-700'}`}
+          >
+            Fatture
+          </Link>
+          <Link
+            href="/dashboard/integrazioni"
+            className={`block py-2 px-3 rounded-lg ${pathname === '/dashboard/integrazioni' ? 'bg-primary' : 'hover:bg-slate-700'}`}
+          >
+            Integrazioni
+          </Link>
+          <Link
             href="/dashboard/profile"
             className={`block py-2 px-3 rounded-lg ${pathname === '/dashboard/profile' ? 'bg-primary' : 'hover:bg-slate-700'}`}
           >

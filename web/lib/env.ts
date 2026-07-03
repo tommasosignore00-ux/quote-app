@@ -16,6 +16,7 @@ const serverSchema = z.object({
 
   // OpenAI
   OPENAI_API_KEY: z.string().min(1, 'OPENAI_API_KEY is required'),
+  OPENAI_AGENT_MODEL: z.string().default('gpt-4o-mini'),
   OPENAI_EMBEDDING_MODEL: z.string().default('text-embedding-3-small'),
   OPENAI_TRANSCRIBE_MODEL: z.string().default('whisper-1'),
 
@@ -153,6 +154,7 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 # SENTRY_ORG=your-org
 # SENTRY_PROJECT=your-project
 # SENTRY_AUTH_TOKEN=sntrys_...
+# OPENAI_AGENT_MODEL=gpt-4o-mini
 # OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 # OPENAI_TRANSCRIBE_MODEL=whisper-1
 # NEXT_PUBLIC_SKIP_SUBSCRIPTION=false

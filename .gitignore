@@ -34,3 +34,5 @@ MANUAL_STEPS.md
 MOBILE_VS_WEB.md
 POST_DOMINIO.md
 TEST_RESULTS.md
+.vercel
+.env*

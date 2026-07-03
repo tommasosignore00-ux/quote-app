@@ -7,6 +7,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as XLSX from 'xlsx';
 import { useTheme } from '../lib/darkMode';
+import { parseUniversalCsvText, parseUniversalSpreadsheetRows } from '../lib/listinoUniversalImport';
 
 type Listino = { id: string; name: string };
 type ListinoItem = { id: string; description: string; unit_price: number; markup_percent?: number };
@@ -89,31 +90,20 @@ export default function ListiniScreen() {
       const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
       const wb = XLSX.read(base64, { type: 'base64' });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as (string | number)[][];
-      if (!rows.length) return [];
-      const header = rows[0].map((h) => String(h).toLowerCase());
-      const descIdx = header.findIndex((h) => h.includes('desc') || h.includes('voce'));
-      const priceIdx = header.findIndex((h) => h.includes('prezzo') || h.includes('price'));
-      const markupIdx = header.findIndex((h) => h.includes('markup') || h.includes('ricarico'));
-      return rows.slice(1).map((row) => ({
-        description: String(row[descIdx >= 0 ? descIdx : 0] ?? '').trim(),
-        unit_price: parseFloat(String(row[priceIdx >= 0 ? priceIdx : 1] ?? '0')) || 0,
-        markup_percent: parseFloat(String(row[markupIdx >= 0 ? markupIdx : 2] ?? '0')) || 0,
-      })).filter((row) => row.description);
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as unknown[][];
+      const parsed = parseUniversalSpreadsheetRows(rows);
+      return {
+        rows: parsed.items,
+        summary: parsed.summary,
+      };
     }
 
     const text = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.UTF8 });
-    const lines = text.split('\n').map((line) => line.trim()).filter(Boolean);
-    if (!lines.length) return [];
-    const linesNoHeader = lines.slice(1);
-    return linesNoHeader.map((line) => {
-      const [description, unitPrice, markupPercent] = line.split(/[;,]\s*/);
-      return {
-        description: (description || '').trim(),
-        unit_price: parseFloat(unitPrice || '0') || 0,
-        markup_percent: parseFloat(markupPercent || '0') || 0,
-      };
-    }).filter((row) => row.description);
+    const parsed = parseUniversalCsvText(text);
+    return {
+      rows: parsed.items,
+      summary: parsed.summary,
+    };
   };
 
   const handleCreateOrUpdateListino = async () => {
@@ -225,7 +215,8 @@ export default function ListiniScreen() {
       });
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
-      const rows = await parseImportedFile(asset.uri, asset.name);
+      const parsed = await parseImportedFile(asset.uri, asset.name);
+      const rows = parsed.rows;
       if (!rows.length) {
         Alert.alert(t('messages.error'), t('listini.emptyFile') || 'File vuoto o non valido');
         return;
@@ -240,7 +231,12 @@ export default function ListiniScreen() {
       const { error } = await supabase.from('listini_vettoriali').insert(payload);
       if (error) throw error;
       fetchItems(selectedListino.id);
-      Alert.alert(t('messages.success'), `${rows.length} ${t('listini.itemsAdded') || 'voci aggiunte'}`);
+      Alert.alert(
+        t('messages.success'),
+        `${parsed.summary.parsedRows}/${parsed.summary.totalRows} ${t('listini.itemsAdded') || 'voci aggiunte'}\n` +
+          `Prezzo normalizzato: ${parsed.summary.normalizedPriceRows}\n` +
+          `Unita rilevate: ${parsed.summary.unitDetectedRows}`
+      );
     } catch (err) {
       Alert.alert(t('messages.error'), (err as Error).message);
     }

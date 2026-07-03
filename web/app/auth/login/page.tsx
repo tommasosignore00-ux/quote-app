@@ -32,7 +32,17 @@ export default function LoginPage() {
         window.location.href = '/onboarding';
       }
     } catch (err: unknown) {
-      toast.error((err as Error).message);
+      const msg = (err as Error).message ?? '';
+      if (
+        msg === 'Load failed' ||
+        msg === 'Failed to fetch' ||
+        msg.includes('NetworkError') ||
+        msg.includes('fetch')
+      ) {
+        toast.error('Errore di connessione al server. Verifica la tua connessione e riprova.');
+      } else {
+        toast.error(msg || 'Errore durante il login');
+      }
     } finally {
       setLoading(false);
     }

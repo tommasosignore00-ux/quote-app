@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { sendEmail } from '../lib/supabaseFunctions';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import * as Print from 'expo-print';
 import { WebView } from 'react-native-webview';
 import { generateQuoteHTML, QuoteData } from '../lib/QuoteTemplate';
 import { validateQuote, formatValidationMessage } from '../lib/quoteValidation';
@@ -242,6 +243,28 @@ export default function QuoteScreen() {
     }
   };
 
+  const shareAsPdf = async () => {
+    if (!preview || !lavoro) return;
+    try {
+      const { uri } = await Print.printToFileAsync({
+        html: preview,
+        base64: false,
+      });
+
+      const filename = `preventivo_${lavoro.title.replace(/\s+/g, '_')}_rev${revision}.pdf`;
+      const newPath = FileSystem.cacheDirectory + filename;
+      await FileSystem.copyAsync({ from: uri, to: newPath });
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(newPath, { mimeType: 'application/pdf', dialogTitle: `Preventivo - ${lavoro.title}` });
+      } else {
+        Alert.alert(t('messages.error'), 'Condivisione non disponibile su questo dispositivo');
+      }
+    } catch (err) {
+      Alert.alert(t('messages.error'), (err as Error).message);
+    }
+  };
+
   if (!lavoro) return null;
 
   // Punto 46: Export helper
@@ -363,8 +386,11 @@ export default function QuoteScreen() {
           <TouchableOpacity style={styles.btn} onPress={() => setShowEmailModal(true)}>
             <Text style={styles.btnText}>📧 {t('buttons.sendEmail') || 'Invia via email'}</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={[styles.btn, { backgroundColor: '#059669' }]} onPress={shareAsPdf}>
+            <Text style={styles.btnText}>📄 Condividi PDF</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={shareAsFile}>
-            <Text style={styles.btnText}>📤 {t('quote.share') || 'Condividi file'}</Text>
+            <Text style={styles.btnText}>📤 {t('quote.share') || 'Condividi HTML'}</Text>
           </TouchableOpacity>
 
           {/* Export multi-formato solo per abbonati */}
