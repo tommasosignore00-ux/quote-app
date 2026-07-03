@@ -1,11 +1,7 @@
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
-
 export interface DatiFattura {
   numeroFattura: string;
   dataEmissione: Date;
-  tipoFattura: 'TD01' | 'TD04'; // TD01 = fattura, TD04 = nota di credito
-  
+  tipoFattura: 'TD01' | 'TD04';
   cedentePrestatore: {
     denominazione?: string;
     nome?: string;
@@ -19,7 +15,6 @@ export interface DatiFattura {
     provincia?: string;
     nazione: string;
   };
-  
   committenteCessionario: {
     denominazione?: string;
     nome?: string;
@@ -33,7 +28,6 @@ export interface DatiFattura {
     provincia?: string;
     nazione: string;
   };
-  
   righe: Array<{
     numeroLinea: number;
     descrizione: string;
@@ -42,7 +36,6 @@ export interface DatiFattura {
     prezzoUnitario: number;
     aliquotaIVA: number;
   }>;
-  
   datiPagamento?: {
     modalitaPagamento: string;
     dataScadenzaPagamento?: Date;
@@ -77,9 +70,7 @@ export function generaFatturaPA(dati: DatiFattura): string {
 
   const imponibileTotale = importiRighe.reduce((sum, r) => sum + r.imponibile, 0);
   const impostaTotale = importiRighe.reduce((sum, r) => sum + r.imposta, 0);
-  const totale = imponibileTotale + impostaTotale;
 
-  // Raggruppa per aliquota IVA
   const riepilogoIVA = importiRighe.reduce((acc, r) => {
     const key = r.aliquotaIVA.toString();
     if (!acc[key]) {
@@ -89,8 +80,6 @@ export function generaFatturaPA(dati: DatiFattura): string {
     acc[key].imposta += r.imposta;
     return acc;
   }, {} as Record<string, { aliquota: number; imponibile: number; imposta: number }>);
-
-  const nomeFile = `${dati.cedentePrestatore.partitaIva}_${dati.numeroFattura.replace('/', '_')}.xml`;
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <p:FatturaElettronica versione="FPR12" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:p="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2 http://www.fatturapa.gov.it/export/fatturazione/sdi/fatturapa/v1.2/Schema_del_file_xml_FatturaPA_versione_1.2.xsd">
@@ -176,32 +165,24 @@ export function generaFatturaPA(dati: DatiFattura): string {
         <Imposta>${iva.imposta.toFixed(2)}</Imposta>
       </DatiRiepilogo>`).join('')}
     </DatiBeniServizi>
+    ${dati.datiPagamento ? `
     <DatiPagamento>
       <CondizioniPagamento>TP02</CondizioniPagamento>
       <DettaglioPagamento>
-        <ModalitaPagamento>MP01</ModalitaPagamento>
-        ${dati.datiPagamento?.dataScadenzaPagamento ? `<DataScadenzaPagamento>${formatDate(dati.datiPagamento.dataScadenzaPagamento)}</DataScadenzaPagamento>` : ''}
-        ${dati.datiPagamento?.importoPagamento ? `<ImportoPagamento>${dati.datiPagamento.importoPagamento.toFixed(2)}</ImportoPagamento>` : ''}
+        <ModalitaPagamento>${dati.datiPagamento.modalitaPagamento}</ModalitaPagamento>
+        ${dati.datiPagamento.dataScadenzaPagamento ? `<DataScadenzaPagamento>${formatDate(dati.datiPagamento.dataScadenzaPagamento)}</DataScadenzaPagamento>` : ''}
+        ${dati.datiPagamento.importoPagamento ? `<ImportoPagamento>${dati.datiPagamento.importoPagamento.toFixed(2)}</ImportoPagamento>` : ''}
       </DettaglioPagamento>
-    </DatiPagamento>
+    </DatiPagamento>` : ''}
   </FatturaElettronicaBody>
 </p:FatturaElettronica>`;
-
   return xml;
 }
 
-export async function shareFatturaPA(dati: DatiFattura) {
-  try {
-    const xml = generaFatturaPA(dati);
-    const nomeFile = `${dati.cedentePrestatore.partitaIva}_${dati.numeroFattura.replace('/', '_')}.xml`;
-    const path = FileSystem.cacheDirectory + nomeFile;
-    await FileSystem.writeAsStringAsync(path, xml, { encoding: FileSystem.EncodingType.UTF8 });
-
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(path, { mimeType: 'application/xml', dialogTitle: `FatturaPA ${dati.numeroFattura}` });
-    }
-  } catch (error) {
-    console.error('Error sharing FatturaPA:', error);
-    throw error;
+export function downloadFatturaPA(dati: DatiFattura, returnXmlOnly: boolean = false): any {
+  const xml = generaFatturaPA(dati);
+  if (returnXmlOnly) {
+    return xml;
   }
+  return xml;
 }
