@@ -97,8 +97,13 @@ export default function FatturePage() {
       .eq('profile_id', profile?.id || user.id)
       .order('data_emissione', { ascending: false });
 
-    if (error) throw error;
-    setFatture(data || []);
+    if (error) {
+      console.error('Errore caricamento fatture:', error);
+      toast.error('Errore caricamento fatture');
+    } else {
+      setFatture(data || []);
+    }
+    setLoading(false);
   }, []);
 
   useEffect(() => {
