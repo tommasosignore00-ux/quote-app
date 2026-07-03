@@ -1,7 +1,7 @@
-'use client'
+'use client';
 
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@/utils/supabase/client';
+import { supabase } from '@/lib/supabase';
 import { Plus, FileText, Eye, Download, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { downloadFatturaPA, DatiFattura } from '@/lib/fatturaPA';
@@ -56,7 +56,6 @@ export default function FatturePage() {
     stato: 'bozza',
     note: '',
   });
-  const supabase = createClient();
 
   useEffect(() => {
     fetchFatture();

@@ -1,7 +1,7 @@
-'use client'
+'use client';
 
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@/utils/supabase/client';
+import { supabase } from '@/lib/supabase';
 import { Calendar, Users, Building2, CheckCircle2, XCircle, Link2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -28,7 +28,6 @@ const PROVIDERS = [
 export default function IntegrazioniPage() {
   const [integrazioni, setIntegrazioni] = useState<Record<string, Integrazione>>({});
   const [loading, setLoading] = useState(true);
-  const supabase = createClient();
 
   useEffect(() => {
     fetchIntegrazioni();
