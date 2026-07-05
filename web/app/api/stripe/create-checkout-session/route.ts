@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { createClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import { checkoutSessionSchema, validateRequest } from '../../../../lib/validations';
 
@@ -18,7 +17,11 @@ export async function POST(req: Request) {
 
     // Create or update Stripe customer
     let customerId: string | null = null;
-    const { data: existing } = await supabase.from('profiles').select('stripe_customer_id').eq('id', userId).single();
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('stripe_customer_id, stripe_subscription_id, subscription_status, trial_ends_at')
+      .eq('id', userId)
+      .single();
     customerId = existing?.stripe_customer_id || null;
 
     if (!customerId) {
@@ -36,6 +39,11 @@ export async function POST(req: Request) {
     // Check if user is a founding member for coupon discount
     const { data: profileData } = await supabase.from('profiles').select('is_founding_member').eq('id', userId).single();
     const isFoundingMember = profileData?.is_founding_member === true;
+    const hadSubscriptionBefore = Boolean(
+      existing?.stripe_subscription_id ||
+      existing?.subscription_status ||
+      existing?.trial_ends_at
+    );
 
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
@@ -47,8 +55,8 @@ export async function POST(req: Request) {
       success_url: `${process.env.NEXT_PUBLIC_APP_URL}/subscription/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/subscription/cancel`,
       subscription_data: {
-        trial_period_days: 7,
         metadata: { userId },
+        ...(!hadSubscriptionBefore ? { trial_period_days: 7 } : {}),
       },
     });
 

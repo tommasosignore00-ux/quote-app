@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import { supabaseAdmin } from '@/lib/supabase-server';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+const supabase = supabaseAdmin;
 
 export async function POST(req: Request) {
   try {
@@ -24,13 +26,29 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing checkout payload' }, { status: 400 });
     }
 
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('stripe_subscription_id, subscription_status, trial_ends_at')
+      .eq('id', userId)
+      .single();
+
+    if (profileError) {
+      return NextResponse.json({ error: 'Unable to load subscription profile' }, { status: 500 });
+    }
+
+    const hadSubscriptionBefore = Boolean(
+      profile?.stripe_subscription_id ||
+      profile?.subscription_status ||
+      profile?.trial_ends_at
+    );
+
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       payment_method_types: ['card'],
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
-        trial_period_days: 7,
         metadata: { userId },
+        ...(!hadSubscriptionBefore ? { trial_period_days: 7 } : {}),
       },
       customer_email: email,
       success_url: `${appUrl}/subscription/success?session_id={CHECKOUT_SESSION_ID}`,

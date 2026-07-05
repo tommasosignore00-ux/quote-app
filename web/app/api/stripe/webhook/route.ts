@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { createClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -78,7 +77,7 @@ export async function POST(req: Request) {
           stripe_customer_id: customerId,
           stripe_subscription_id: subscription.id,
           subscription_status: subscription.status as any,
-          trial_expires_at: trialEnd,
+          trial_ends_at: trialEnd,
           updated_at: now,
         })
         .eq('id', userId);
@@ -133,7 +132,7 @@ export async function POST(req: Request) {
         .from('profiles')
         .update({
           subscription_status: 'canceled' as any,
-          trial_expires_at: null,
+          trial_ends_at: null,
           updated_at: now,
         })
         .eq('id', userId);

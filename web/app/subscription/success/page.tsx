@@ -45,7 +45,7 @@ function SubscriptionSuccessContent() {
         while (attempts < maxAttempts && !subscriptionActive) {
           const { data: profile } = await supabase
             .from('profiles')
-            .select('subscription_status, trial_expires_at')
+            .select('subscription_status, trial_ends_at')
             .eq('id', user.id)
             .single();
 
