@@ -1,14 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 
 export default function SubscriptionPage() {
   const { t } = useTranslation();
-  const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [subscription, setSubscription] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -56,11 +54,15 @@ export default function SubscriptionPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id, email: user.email, plan }),
       });
-      const { url } = await res.json();
+      const payload = await res.json();
+      if (!res.ok) {
+        throw new Error(payload?.error || 'Stripe checkout failed');
+      }
+      const { url } = payload;
       if (url) {
         window.location.href = url;
       } else {
-        throw new Error('No checkout URL');
+        throw new Error(payload?.error || 'No checkout URL');
       }
     } catch (err) {
       toast.error((err as Error).message);
@@ -84,11 +86,15 @@ export default function SubscriptionPage() {
         body: JSON.stringify({ customerId: subscription.stripe_customer_id }),
       });
 
-      const { url } = await res.json();
+      const payload = await res.json();
+      if (!res.ok) {
+        throw new Error(payload?.error || 'Stripe portal failed');
+      }
+      const { url } = payload;
       if (url) {
         window.location.href = url;
       } else {
-        throw new Error('No portal URL returned');
+        throw new Error(payload?.error || 'No portal URL returned');
       }
     } catch (err) {
       toast.error((err as Error).message);
