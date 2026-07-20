@@ -2,12 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { DEFAULT_TERMS_OF_SERVICE_IT } from '@/lib/legalDocuments';
 
 export default function TermsPage() {
-  const { t } = useTranslation();
   const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
@@ -21,18 +20,18 @@ export default function TermsPage() {
           .eq('country_code', 'IT')
           .order('effective_date', { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
 
         if (error) throw error;
 
         if (data) {
           setContent(data.content);
         } else {
-          setContent('# Termini di Servizio\n\nContenuto di esempio...');
+          setContent(DEFAULT_TERMS_OF_SERVICE_IT);
         }
       } catch (err) {
         console.error('Error loading terms of service:', err);
-        setContent('# Termini di Servizio\n\nContenuto di esempio...');
+        setContent(DEFAULT_TERMS_OF_SERVICE_IT);
       } finally {
         setLoading(false);
       }

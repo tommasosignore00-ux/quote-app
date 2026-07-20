@@ -3,7 +3,7 @@ export interface QuoteData {
   clienteName: string;
   clienteEmail?: string;
   revision: number;
-  items: { description: string; quantity: number; unit_price: number; material_markup: number }[];
+  items: { description: string; quantity: number; unit_price: number; material_markup?: number }[];
   vat_percent: number;
   companyName?: string;
   vatNumber?: string;
@@ -509,33 +509,98 @@ const APPROVED_LABEL: Record<string, string> = {
   default: 'Approved'
 };
 
+const FORBIDDEN_CUSTOMER_LABELS = [
+  /ricarico/i,
+  /markup/i,
+  /margine/i,
+  /prezzo\s+acquisto/i,
+  /costo\s+acquisto/i,
+  /prezzo\s+interno/i,
+  /purchase\s+price/i,
+  /cost\s+price/i,
+  /base\s+price/i,
+  /internal\s+price/i,
+];
+
+function getCustomerUnitPrice(item: QuoteData['items'][number]): number {
+  return Number(item.unit_price) || 0;
+}
+
+function getRowSubtotal(item: QuoteData['items'][number]): number {
+  return (Number(item.quantity) || 0) * getCustomerUnitPrice(item);
+}
+
+function sanitizeCustomTemplate(template: string): string {
+  let sanitized = template;
+
+  sanitized = sanitized
+    .replace(/\{\{\s*(materialMarkup|markup|purchasePrice|basePrice|costPrice|internalPrice)\s*\}\}/gi, '')
+    .replace(/<(th|td)([^>]*)>\s*([^<]*)\s*<\/\1>/gi, (full, tag, attrs, content) => {
+      const text = String(content || '').trim();
+      if (!text) return full;
+      if (FORBIDDEN_CUSTOMER_LABELS.some((pattern) => pattern.test(text))) {
+        return '';
+      }
+      return `<${tag}${attrs}>${content}</${tag}>`;
+    });
+
+  return sanitized;
+}
+
 function processCustomTemplate(template: string, data: QuoteData): string {
   const cc = data.countryCode?.toUpperCase() || 'IT';
   const currency = CURRENCIES[cc] || CURRENCIES.default;
   const taxLabel = TAX_LABELS[cc] || TAX_LABELS.default;
+  const descriptionLabel = DESCRIPTION_LABEL[cc] || DESCRIPTION_LABEL.default;
+  const quantityLabel = QUANTITY_LABEL[cc] || QUANTITY_LABEL.default;
+  const priceLabel = PRICE_LABEL[cc] || PRICE_LABEL.default;
+  const subtotalColLabel = SUBTOTAL_COL_LABEL[cc] || SUBTOTAL_COL_LABEL.default;
+  const totalLabel = TOTAL_LABEL[cc] || TOTAL_LABEL.default;
   
-  const subtotal = data.items.reduce((s, d) => s + Number(d.quantity) * Number(d.unit_price), 0);
-  const totalWithMarkup = data.items.reduce((s, d) => s + Number(d.quantity) * Number(d.unit_price) * (1 + Number(d.material_markup) / 100), 0);
-  const taxes = totalWithMarkup * (Number(data.vat_percent) / 100);
-  const total = totalWithMarkup + taxes;
+  const subtotal = data.items.reduce((sum, item) => sum + getRowSubtotal(item), 0);
+  const taxes = subtotal * (Number(data.vat_percent) / 100);
+  const total = subtotal + taxes;
 
-  // Generate items table rows
+  const itemsTableHtml = `
+    <table>
+      <thead>
+        <tr>
+          <th>${descriptionLabel}</th>
+          <th>${quantityLabel}</th>
+          <th>${priceLabel}</th>
+          <th>${subtotalColLabel}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${data.items.map((item) => {
+          const rowSubtotal = getRowSubtotal(item);
+          return `
+            <tr>
+              <td>${item.description}</td>
+              <td>${item.quantity}</td>
+              <td>${currency}${getCustomerUnitPrice(item).toFixed(2)}</td>
+              <td>${currency}${rowSubtotal.toFixed(2)}</td>
+            </tr>
+          `.trim();
+        }).join('\n')}
+      </tbody>
+    </table>
+  `.trim();
+
   const itemsHtml = data.items.map((item) => {
-    const rowSubtotal = Number(item.quantity) * Number(item.unit_price);
-    const rowWithMarkup = rowSubtotal * (1 + Number(item.material_markup) / 100);
+    const rowSubtotal = getRowSubtotal(item);
     return `
       <tr>
         <td>${item.description}</td>
         <td>${item.quantity}</td>
-        <td>${currency}${Number(item.unit_price).toFixed(2)}</td>
-        <td>${item.material_markup}%</td>
-        <td>${currency}${rowWithMarkup.toFixed(2)}</td>
+        <td>${currency}${getCustomerUnitPrice(item).toFixed(2)}</td>
+        <td>${currency}${rowSubtotal.toFixed(2)}</td>
       </tr>
     `.trim();
   }).join('\n');
 
   // Replace all placeholders
-  let html = template
+  let html = sanitizeCustomTemplate(template)
     .replace(/\{\{lavoroTitle\}\}/g, data.lavoroTitle || '')
     .replace(/\{\{clienteName\}\}/g, data.clienteName || '')
     .replace(/\{\{clienteEmail\}\}/g, data.clienteEmail || '')
@@ -552,6 +617,12 @@ function processCustomTemplate(template: string, data: QuoteData): string {
     .replace(/\{\{swift\}\}/g, data.swift || '')
     .replace(/\{\{currency\}\}/g, currency)
     .replace(/\{\{taxLabel\}\}/g, taxLabel)
+    .replace(/\{\{descriptionLabel\}\}/g, descriptionLabel)
+    .replace(/\{\{quantityLabel\}\}/g, quantityLabel)
+    .replace(/\{\{priceLabel\}\}/g, priceLabel)
+    .replace(/\{\{subtotalColLabel\}\}/g, subtotalColLabel)
+    .replace(/\{\{totalLabel\}\}/g, totalLabel)
+    .replace(/\{\{itemsTable\}\}/g, itemsTableHtml)
     .replace(/\{\{items\}\}/g, itemsHtml)
     .replace(/\{\{subtotal\}\}/g, `${currency}${subtotal.toFixed(2)}`)
     .replace(/\{\{taxes\}\}/g, `${currency}${taxes.toFixed(2)}`)
@@ -570,7 +641,6 @@ export function generateQuoteHTML(data: QuoteData): string {
 
   const templateType = data.templateType || 'classic';
   const cc = data.countryCode?.toUpperCase() || 'IT';
-  const taxLabel = TAX_LABELS[cc] || TAX_LABELS.default;
   const currency = CURRENCIES[cc] || CURRENCIES.default;
   const paymentTerms = PAYMENT_TERMS[cc] || PAYMENT_TERMS.default;
   const quoteLabel = QUOTE_LABEL[cc] || QUOTE_LABEL.default;
@@ -585,23 +655,18 @@ export function generateQuoteHTML(data: QuoteData): string {
   const signatureLabel = SIGNATURE_LABEL[cc] || SIGNATURE_LABEL.default;
   const approvedLabel = APPROVED_LABEL[cc] || APPROVED_LABEL.default;
   
-  const subtotal = data.items.reduce((s, d) => s + Number(d.quantity) * Number(d.unit_price), 0);
-  const totalWithMarkup = data.items.reduce((s, d) => s + Number(d.quantity) * Number(d.unit_price) * (1 + Number(d.material_markup) / 100), 0);
-  const taxes = totalWithMarkup * (Number(data.vat_percent) / 100);
-  const total = totalWithMarkup + taxes;
+  const subtotal = data.items.reduce((sum, item) => sum + getRowSubtotal(item), 0);
+  const taxes = subtotal * (Number(data.vat_percent) / 100);
+  const total = subtotal + taxes;
 
   const itemsHtml = data.items.map((item) => {
-    const rowSubtotal = Number(item.quantity) * Number(item.unit_price);
-    const rowWithMarkup = rowSubtotal * (1 + Number(item.material_markup) / 100);
-    const rowTax = rowWithMarkup * (Number(data.vat_percent) / 100);
+    const rowSubtotal = getRowSubtotal(item);
     return `
       <tr style="border-bottom: 1px solid #ddd;">
         <td style="padding: 10px; text-align: left;">${item.description}</td>
         <td style="padding: 10px; text-align: center;">${item.quantity}</td>
-        <td style="padding: 10px; text-align: right;">${currency}${Number(item.unit_price).toFixed(2)}</td>
-        <td style="padding: 10px; text-align: center;">${item.material_markup}%</td>
-        <td style="padding: 10px; text-align: right;">${currency}${rowWithMarkup.toFixed(2)}</td>
-        <td style="padding: 10px; text-align: right;">${currency}${rowTax.toFixed(2)}</td>
+        <td style="padding: 10px; text-align: right;">${currency}${getCustomerUnitPrice(item).toFixed(2)}</td>
+        <td style="padding: 10px; text-align: right;">${currency}${rowSubtotal.toFixed(2)}</td>
       </tr>
     `;
   }).join('');
@@ -710,9 +775,7 @@ export function generateQuoteHTML(data: QuoteData): string {
               <th>${descriptionLabel}</th>
               <th style="text-align: center;">${quantityLabel}</th>
               <th style="text-align: right;">${priceLabel}</th>
-              <th style="text-align: center;">${taxLabel}%</th>
               <th style="text-align: right;">${subtotalColLabel}</th>
-              <th style="text-align: right;">${taxLabelFull}</th>
             </tr>
           </thead>
           <tbody>

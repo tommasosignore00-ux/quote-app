@@ -4,18 +4,15 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
-import * as XLSX from 'xlsx';
-import { parseUniversalCsvText, parseUniversalSpreadsheetRows, type UniversalImportSummary } from '@/lib/listinoUniversalImport';
 
 type Listino = { id: string; name: string };
-type ListinoItem = { id: string; description: string; unit_price: number; markup_percent: number };
+type ListinoItem = { id: string; description: string; unit_price: number; markup_percent: number; category?: string | null };
 
 export default function ListiniPage() {
   const { t } = useTranslation();
   const [listini, setListini] = useState<Listino[]>([]);
   const [items, setItems] = useState<ListinoItem[]>([]);
   const [selectedListino, setSelectedListino] = useState<Listino | null>(null);
-  const [loading, setLoading] = useState(true);
   const [profileMarkupPercent, setProfileMarkupPercent] = useState<number>(0);
   
   const [showManualModal, setShowManualModal] = useState(false);
@@ -26,6 +23,8 @@ export default function ListiniPage() {
   const [editingListino, setEditingListino] = useState<Listino | null>(null);
   const [editingListinoName, setEditingListinoName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [organizingAi, setOrganizingAi] = useState(false);
 
   const fetchListini = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -35,11 +34,10 @@ export default function ListiniPage() {
     setProfileMarkupPercent(profile.material_markup_vat_percent ?? 0);
     const { data } = await supabase.from('listini').select('id, name').eq('profile_id', profile.id);
     setListini(data || []);
-    setLoading(false);
   };
 
   const fetchItems = async (listinoId: string) => {
-    const { data } = await supabase.from('listini_vettoriali').select('id, description, unit_price, markup_percent').eq('listino_id', listinoId);
+    const { data } = await supabase.from('listini_vettoriali').select('id, description, unit_price, markup_percent, category').eq('listino_id', listinoId);
     setItems(data || []);
   };
 
@@ -100,64 +98,49 @@ export default function ListiniPage() {
     }
   };
 
-  const parseFileToItems = async (file: File, profileId: string): Promise<{ items: { listino_id: string; profile_id: string; description: string; unit_price: number; markup_percent: number }[]; summary: UniversalImportSummary }> => {
-    const ext = file.name.split('.').pop()?.toLowerCase();
-    if (ext === 'xlsx' || ext === 'xls') {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: 'array' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as unknown[][];
-      const parsed = parseUniversalSpreadsheetRows(rows);
-      return {
-        items: parsed.items.map((row) => ({
-          listino_id: selectedListino!.id,
-          profile_id: profileId,
-          description: row.description,
-          unit_price: row.unit_price,
-          markup_percent: row.markup_percent,
-        })),
-        summary: parsed.summary,
-      };
-    }
-
-    const text = await file.text();
-    const parsed = parseUniversalCsvText(text);
-    return {
-      items: parsed.items.map((row) => ({
-        listino_id: selectedListino!.id,
-        profile_id: profileId,
-        description: row.description,
-        unit_price: row.unit_price,
-        markup_percent: row.markup_percent,
-      })),
-      summary: parsed.summary,
-    };
-  };
-
   const handleUploadCsv = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedListino) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const profileId = (await supabase.from('profiles').select('id').eq('id', user.id).single()).data?.id;
-    if (!profileId) return;
 
-    const { items, summary } = await parseFileToItems(file, profileId);
+    try {
+      setUploading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const profileId = (await supabase.from('profiles').select('id').eq('id', user.id).single()).data?.id;
+      if (!profileId) return;
 
-    for (const item of items) {
-      const res = await fetch('/api/listini/embed', {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('profileId', profileId);
+      formData.append('listinoId', selectedListino.id);
+
+      const res = await fetch('/api/listini/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...item }),
+        body: formData,
       });
-      const { embedding } = await res.json();
-      await supabase.from('listini_vettoriali').insert({ ...item, embedding });
-    }
 
-    toast.success(
-      `${summary.parsedRows}/${summary.totalRows} ${t('listini.itemsAdded')} · normalize: ${summary.normalizedPriceRows} · unita rilevate: ${summary.unitDetectedRows}`
-    );
-    fetchItems(selectedListino.id);
+      const payload = await res.json();
+      if (!res.ok) {
+        const summary = payload?.summary;
+        const detail = summary
+          ? ` (${summary.parsedRows}/${summary.totalRows} righe valide)`
+          : '';
+        throw new Error(`${payload?.error || 'Import non riuscito'}${detail}`);
+      }
+
+      const summary = payload.summary;
+      toast.success(
+        `${summary.parsedRows}/${summary.totalRows} ${t('listini.itemsAdded')} · normalize: ${summary.normalizedPriceRows} · unita rilevate: ${summary.unitDetectedRows}`
+      );
+      await fetchItems(selectedListino.id);
+      toast.success('Organizzazione AI avviata automaticamente');
+      await runAiOrganize(selectedListino.id, profileId);
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      e.target.value = '';
+      setUploading(false);
+    }
   };
 
   const handleAddManualItem = async () => {
@@ -207,6 +190,38 @@ export default function ListiniPage() {
     }
   };
 
+  const runAiOrganize = async (listinoId: string, profileId: string) => {
+    try {
+      setOrganizingAi(true);
+      const res = await fetch('/api/listini/ai-organize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ listinoId, profileId }),
+      });
+
+      const payload = await res.json();
+      if (!res.ok) {
+        throw new Error(payload?.error || 'Organizzazione AI non riuscita');
+      }
+
+      toast.success(`AI completata: ${payload.updatedCount} voci aggiornate`);
+      await fetchItems(listinoId);
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setOrganizingAi(false);
+    }
+  };
+
+  const handleOrganizeWithAi = async () => {
+    if (!selectedListino) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const profileId = (await supabase.from('profiles').select('id').eq('id', user.id).single()).data?.id;
+    if (!profileId) return;
+    await runAiOrganize(selectedListino.id, profileId);
+  };
+
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-6">{t('main.listini')}</h1>
@@ -215,9 +230,12 @@ export default function ListiniPage() {
         {selectedListino && (
           <>
             <label className="btn-primary cursor-pointer">
-              {t('listini.uploadCsv')}
-              <input type="file" accept=".csv,.txt,.xlsx,.xls" onChange={handleUploadCsv} className="hidden" />
+              {uploading ? 'Import in corso...' : t('listini.uploadCsv')}
+              <input type="file" accept=".csv,.txt,.xlsx,.xls" onChange={handleUploadCsv} className="hidden" disabled={uploading} />
             </label>
+            <button onClick={handleOrganizeWithAi} className="btn-secondary" disabled={organizingAi || uploading}>
+              {organizingAi ? 'AI in corso...' : 'Riorganizza con AI'}
+            </button>
             <button onClick={() => {
               setEditingItem(null);
               setNewMarkupPercent(String(profileMarkupPercent));
@@ -271,6 +289,7 @@ export default function ListiniPage() {
                 <thead>
                   <tr className="border-b">
                     <th className="text-left py-2">{t('listini.description')}</th>
+                    <th className="text-left py-2">Categoria</th>
                     <th className="text-right py-2">{t('listini.price')}</th>
                     <th className="text-right py-2">{t('listini.markup')}</th>
                     <th className="text-right py-2">{t('listini.actions')}</th>
@@ -280,6 +299,7 @@ export default function ListiniPage() {
                   {items.map((i) => (
                     <tr key={i.id} className="border-b group">
                       <td className="py-2">{i.description}</td>
+                      <td className="py-2 text-slate-500">{i.category || '-'}</td>
                       <td className="text-right py-2">€{Number(i.unit_price).toFixed(2)}</td>
                       <td className="text-right py-2">{Number(i.markup_percent).toFixed(0)}%</td>
                       <td className="text-right py-2">

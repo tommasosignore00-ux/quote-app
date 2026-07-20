@@ -1,9 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
 
-type Item = { id: string; description: string; unit_price: number; markup_percent?: number };
+type Item = {
+  id: string;
+  description: string;
+  unit_price: number;
+  markup_percent?: number;
+  listino_name?: string | null;
+  category?: string | null;
+};
 
 type Props = {
   alternatives: Item[];
@@ -13,7 +19,6 @@ type Props = {
 };
 
 export default function SemanticFallbackModal({ alternatives, onSelect, onCancel, onAddManual }: Props) {
-  const { t } = useTranslation();
   const [manualDesc, setManualDesc] = useState('');
 
   return (
@@ -30,6 +35,11 @@ export default function SemanticFallbackModal({ alternatives, onSelect, onCancel
               >
                 <span className="font-medium">{item.description}</span>
                 <span className="block text-sm text-slate-500">€{Number(item.unit_price).toFixed(2)}</span>
+                {(item.listino_name || item.category) && (
+                  <span className="block text-xs text-slate-400">
+                    {[item.listino_name, item.category].filter(Boolean).join(' • ')}
+                  </span>
+                )}
               </button>
             </li>
           ))}

@@ -14,6 +14,15 @@ import { useRealtime } from '@/lib/useRealtime';
 type Cliente = { id: string; name: string };
 type Lavoro = { id: string; title: string; cliente_id: string; status: string; clienti?: any };
 type Costo = { id: string; description: string; quantity: number; unit_price: number; tax_rate?: number };
+type ListinoMatchItem = {
+  id: string;
+  description: string;
+  unit_price: number;
+  markup_percent?: number;
+  listino_id?: string | null;
+  listino_name?: string | null;
+  category?: string | null;
+};
 
 export default function DashboardPage() {
   const { t, i18n } = useTranslation();
@@ -23,12 +32,11 @@ export default function DashboardPage() {
   const [selectedLavoro, setSelectedLavoro] = useState<Lavoro | null>(null);
   const [selectedClienteId, setSelectedClienteId] = useState<string | null>(null);
   const [costi, setCosti] = useState<Costo[]>([]);
-  const [loading, setLoading] = useState(true);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [profileCountryCode, setProfileCountryCode] = useState<string | null>(null);
   const [profileVatPercent, setProfileVatPercent] = useState<number>(22);
   const [profileMaterialMarkup, setProfileMaterialMarkup] = useState<number>(0);
-  const [semanticAlternatives, setSemanticAlternatives] = useState<{ id: string; description: string; unit_price: number; markup_percent?: number }[] | null>(null);
+  const [semanticAlternatives, setSemanticAlternatives] = useState<ListinoMatchItem[] | null>(null);
   
   const [showClientModal, setShowClientModal] = useState(false);
   const [newClientName, setNewClientName] = useState('');
@@ -44,9 +52,9 @@ export default function DashboardPage() {
   const [newCostoQty, setNewCostoQty] = useState('1');
   const [newCostoPrice, setNewCostoPrice] = useState('0');
   const [creatingCosto, setCreatingCosto] = useState(false);
-  const [matchedListinoItem, setMatchedListinoItem] = useState<{ id: string; description: string; unit_price: number; markup_percent?: number } | null>(null);
+  const [matchedListinoItem, setMatchedListinoItem] = useState<ListinoMatchItem | null>(null);
   const [clientSearch, setClientSearch] = useState('');
-  const [listinoAlternatives, setListinoAlternatives] = useState<{ id: string; description: string; unit_price: number; markup_percent?: number; listino_id?: string }[]>([]);
+  const [listinoAlternatives, setListinoAlternatives] = useState<ListinoMatchItem[]>([]);
 
   const fetchData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -80,7 +88,6 @@ export default function DashboardPage() {
       const { data: costiData } = await supabase.from('preventivi_dettaglio').select('id, description, quantity, unit_price, tax_rate').eq('lavoro_id', selectedLavoro.id);
       setCosti(costiData || []);
     }
-    setLoading(false);
   }, [selectedLavoro?.id]);
 
   useRealtime(profileId, fetchData);
@@ -128,7 +135,7 @@ export default function DashboardPage() {
     return () => clearTimeout(timer);
   }, [newCostoDesc, profileId, showCostoModal]);
 
-  const addCostoFromItem = async (item: { id: string; description: string; unit_price: number; markup_percent?: number }, qty = 1) => {
+  const addCostoFromItem = async (item: ListinoMatchItem, qty = 1) => {
     if (!selectedLavoro) return;
     await supabase.from('preventivi_dettaglio').insert({
       lavoro_id: selectedLavoro.id,
@@ -361,7 +368,9 @@ export default function DashboardPage() {
       });
       const match = await res.json();
       const qty = Number(result.data?.quantity) || 1;
-      if (match.item) {
+      if (match.item && match.alternatives?.length > 0) {
+        setSemanticAlternatives([match.item, ...match.alternatives]);
+      } else if (match.item) {
         await addCostoFromItem(match.item, qty);
       } else if (match.alternatives?.length > 0) {
         setSemanticAlternatives(match.alternatives);
@@ -530,7 +539,12 @@ export default function DashboardPage() {
                 className="w-full border rounded-lg px-3 py-2"
               />
               {matchedListinoItem && (
-                <p className="text-xs text-green-600 mt-1">✓ Trovato nel listino: €{(Number(matchedListinoItem.unit_price) * (1 + (Number(matchedListinoItem.markup_percent) || 0) / 100)).toFixed(2)}</p>
+                <p className="text-xs text-green-600 mt-1">
+                  ✓ Trovato nel listino
+                  {matchedListinoItem.listino_name ? ` ${matchedListinoItem.listino_name}` : ''}
+                  {matchedListinoItem.category ? ` • ${matchedListinoItem.category}` : ''}
+                  : €{(Number(matchedListinoItem.unit_price) * (1 + (Number(matchedListinoItem.markup_percent) || 0) / 100)).toFixed(2)}
+                </p>
               )}
 
               {/* Material alternatives picker */}
@@ -555,6 +569,11 @@ export default function DashboardPage() {
                           €{(Number(alt.unit_price) * (1 + (Number(alt.markup_percent) || 0) / 100)).toFixed(2)}
                           {alt.markup_percent ? ` (base €${Number(alt.unit_price).toFixed(2)} +${alt.markup_percent}%)` : ''}
                         </p>
+                        {(alt.listino_name || alt.category) && (
+                          <p className="text-xs text-slate-400">
+                            {[alt.listino_name, alt.category].filter(Boolean).join(' • ')}
+                          </p>
+                        )}
                       </li>
                     ))}
                   </ul>

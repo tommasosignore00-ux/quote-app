@@ -4,6 +4,7 @@ export type UniversalParsedItem = {
   description: string;
   unit_price: number;
   markup_percent: number;
+  category?: string | null;
 };
 
 export type UniversalImportSummary = {
@@ -65,9 +66,9 @@ const HEADER_ALIASES: Record<string, string[]> = {
 
   price: [
     // IT
-    'prezzo', 'costo', 'importo', 'tariffa', 'valore',
+    'prezzo', 'prezzo unitario', 'prezzo netto', 'prezzo listino', 'costo', 'costo unitario', 'importo', 'importo unitario', 'tariffa', 'valore', 'euro', 'eur', '€', 'listino',
     // EN
-    'price', 'unit price', 'unit_price',
+    'price', 'unit price', 'unit_price', 'net price', 'list price', 'amount',
     // DE
     'preis', 'einzelpreis',
     // NL
@@ -445,7 +446,8 @@ function detectLikelyHeaderIndex(rows: unknown[][]): number {
     const row = rows[i] ?? [];
     const normalized = row.map((cell) => normalizeText(cell));
     const score = Object.values(HEADER_ALIASES).reduce((acc, aliases) => {
-      const found = normalized.some((value) => aliases.some((alias) => value.includes(alias)));
+      const normalizedAliases = aliases.map((alias) => normalizeText(alias));
+      const found = normalized.some((value) => normalizedAliases.some((alias) => value.includes(alias)));
       return acc + (found ? 1 : 0);
     }, 0);
     if (score > bestScore) {
@@ -454,6 +456,171 @@ function detectLikelyHeaderIndex(rows: unknown[][]): number {
     }
   }
   return bestIndex;
+}
+
+function isLikelyCodeCell(value: string): boolean {
+  return /^[a-z0-9._/-]{2,}$/i.test(value) && !/\s/.test(value) && parseLocalizedNumber(value) === null;
+}
+
+function inferColumnIndex(
+  sampleRows: unknown[][],
+  preferredIndex: number | undefined,
+  kind: 'description' | 'price',
+  exclude: number[] = []
+): number | undefined {
+  if (preferredIndex !== undefined) return preferredIndex;
+  if (!sampleRows.length) return undefined;
+
+  const maxCols = sampleRows.reduce((max, row) => Math.max(max, row.length), 0);
+  if (!maxCols) return undefined;
+
+  const stats = Array.from({ length: maxCols }, () => ({
+    nonEmpty: 0,
+    numeric: 0,
+    text: 0,
+    longText: 0,
+    codeLike: 0,
+  }));
+
+  for (const row of sampleRows) {
+    for (let i = 0; i < maxCols; i++) {
+      const raw = row[i];
+      const text = String(raw ?? '').trim();
+      if (!text) continue;
+      const stat = stats[i];
+      stat.nonEmpty++;
+
+      const parsedNumber = parseLocalizedNumber(text);
+      if (parsedNumber !== null) {
+        stat.numeric++;
+      } else {
+        stat.text++;
+        stat.longText += text.length;
+        if (isLikelyCodeCell(text)) stat.codeLike++;
+      }
+    }
+  }
+
+  if (kind === 'description') {
+    const ranked = stats
+      .map((stat, index) => ({ index, stat }))
+      .filter(({ index, stat }) =>
+        !exclude.includes(index) &&
+        stat.nonEmpty > 0 &&
+        stat.text > 0 &&
+        stat.codeLike < stat.text
+      )
+      .sort((a, b) => {
+        if (b.stat.longText !== a.stat.longText) return b.stat.longText - a.stat.longText;
+        if (b.stat.text !== a.stat.text) return b.stat.text - a.stat.text;
+        return a.index - b.index;
+      });
+
+    return ranked[0]?.index;
+  }
+
+  const referenceDescription = inferColumnIndex(sampleRows, undefined, 'description', exclude);
+  const ranked = stats
+    .map((stat, index) => ({ index, stat }))
+    .filter(({ index, stat }) =>
+      !exclude.includes(index) &&
+      index !== referenceDescription &&
+      stat.nonEmpty > 0 &&
+      stat.numeric > 0 &&
+      stat.numeric >= stat.text
+    )
+    .sort((a, b) => {
+      const aRightOfDesc = referenceDescription !== undefined && a.index > referenceDescription ? 1 : 0;
+      const bRightOfDesc = referenceDescription !== undefined && b.index > referenceDescription ? 1 : 0;
+      if (bRightOfDesc !== aRightOfDesc) return bRightOfDesc - aRightOfDesc;
+      if (b.stat.numeric !== a.stat.numeric) return b.stat.numeric - a.stat.numeric;
+      return a.index - b.index;
+    });
+
+  return ranked[0]?.index;
+}
+
+function mergeSummaries(results: UniversalImportResult[]): UniversalImportResult {
+  return results.reduce<UniversalImportResult>(
+    (acc, current) => ({
+      items: acc.items.concat(current.items),
+      summary: {
+        totalRows: acc.summary.totalRows + current.summary.totalRows,
+        parsedRows: acc.summary.parsedRows + current.summary.parsedRows,
+        skippedRows: acc.summary.skippedRows + current.summary.skippedRows,
+        normalizedPriceRows: acc.summary.normalizedPriceRows + current.summary.normalizedPriceRows,
+        unitDetectedRows: acc.summary.unitDetectedRows + current.summary.unitDetectedRows,
+      },
+    }),
+    {
+      items: [],
+      summary: { totalRows: 0, parsedRows: 0, skippedRows: 0, normalizedPriceRows: 0, unitDetectedRows: 0 },
+    }
+  );
+}
+
+function getNonEmptyCellTexts(row: unknown[]): string[] {
+  return row
+    .map((cell) => String(cell ?? '').trim())
+    .filter((cell) => cell.length > 0);
+}
+
+function isLikelyHeaderText(value: string): boolean {
+  const normalized = normalizeText(value);
+  if (!normalized) return false;
+  return Object.values(HEADER_ALIASES)
+    .flat()
+    .map((alias) => normalizeText(alias))
+    .some((alias) => normalized.includes(alias));
+}
+
+function isLikelyContextLabel(value: string): boolean {
+  const raw = String(value ?? '').trim();
+  const normalized = normalizeText(raw);
+  if (!normalized) return false;
+  if (normalized.length < 3) return false;
+  if (parseLocalizedNumber(raw) !== null) return false;
+  if (isLikelyHeaderText(raw)) return false;
+  if (/^(totale|subtotal|subtotale|pagina|page|pag\.?|codice|cod\.?)$/i.test(normalized)) return false;
+  return /[a-z]/i.test(raw) || /[A-ZÀ-ÖØ-Ý]/.test(raw);
+}
+
+function isMostlyUppercase(value: string): boolean {
+  const letters = value.match(/[A-Za-zÀ-ÖØ-öø-ÿ]/g) || [];
+  if (!letters.length) return false;
+  const uppercase = value.match(/[A-ZÀ-ÖØ-Ý]/g) || [];
+  return uppercase.length / letters.length >= 0.65;
+}
+
+function extractDocumentTitle(rowsBeforeHeader: unknown[][]): string | null {
+  const candidates = rowsBeforeHeader
+    .map((row) => getNonEmptyCellTexts(row))
+    .filter((cells) => cells.length > 0 && cells.length <= 2)
+    .map((cells) => cells.join(' ').trim())
+    .filter((label) => isLikelyContextLabel(label))
+    .filter((label) => !isMostlyUppercase(label) || label.length >= 8)
+    .filter((label) => !isLikelyHeaderText(label));
+
+  const best = candidates
+    .sort((a, b) => b.length - a.length)[0];
+
+  return best || null;
+}
+
+function extractContextLabelFromRow(row: unknown[], description: string, directPrice: number | null): string | null {
+  const cells = getNonEmptyCellTexts(row);
+  if (!cells.length) return null;
+  if (directPrice !== null) return null;
+
+  const combined = cells.join(' ').trim();
+  const singleLabel = cells.length === 1 ? cells[0] : combined;
+  if (!isLikelyContextLabel(singleLabel)) return null;
+
+  if (cells.length === 1) return singleLabel;
+  if (description && description === cells[0] && isMostlyUppercase(description)) return description;
+  if (combined.length <= 80 && isMostlyUppercase(combined)) return combined;
+
+  return null;
 }
 
 function normalizeUnit(value: unknown): string | null {
@@ -529,6 +696,14 @@ function parseRows(rows: unknown[][]): UniversalImportResult {
   const headerRowIdx = detectLikelyHeaderIndex(rows);
   const header = (rows[headerRowIdx] ?? []).map((cell) => normalizeText(cell));
   const headerMap = buildHeaderMap(header);
+  const sampleRows = rows
+    .slice(headerRowIdx + 1)
+    .filter((row) => row?.some((cell) => String(cell ?? '').trim() !== ''))
+    .slice(0, 30);
+  const inferredDescriptionIndex = inferColumnIndex(sampleRows, headerMap.description, 'description');
+  const inferredPriceIndex = inferColumnIndex(sampleRows, headerMap.price ?? headerMap.priceUnit, 'price', inferredDescriptionIndex !== undefined ? [inferredDescriptionIndex] : []);
+  const documentTitle = extractDocumentTitle(rows.slice(0, headerRowIdx));
+  let currentContextLabel = documentTitle;
 
   const items: UniversalParsedItem[] = [];
   let skippedRows = 0;
@@ -548,20 +723,31 @@ function parseRows(rows: unknown[][]): UniversalImportResult {
 
     const descriptionRaw =
       (headerMap.description !== undefined ? row[headerMap.description] : null) ??
+      (inferredDescriptionIndex !== undefined ? row[inferredDescriptionIndex] : null) ??
       (headerMap.code !== undefined ? row[headerMap.code] : null) ??
       row[0] ??
       '';
     const description = String(descriptionRaw ?? '').trim();
 
-    if (!description) {
+    if (!description || /^(totale|subtotal|subtotale|pagina|page|pag\.?)$/i.test(normalizeText(description))) {
       skippedRows++;
       continue;
     }
 
     const directPriceRaw =
       (headerMap.price !== undefined ? row[headerMap.price] : null) ??
+      (headerMap.priceUnit !== undefined ? row[headerMap.priceUnit] : null) ??
+      (inferredPriceIndex !== undefined ? row[inferredPriceIndex] : null) ??
       row[1] ??
       null;
+
+    const directPrice = parseLocalizedNumber(directPriceRaw);
+    const contextLabel = extractContextLabelFromRow(row, description, directPrice);
+    if (contextLabel) {
+      currentContextLabel = contextLabel;
+      skippedRows++;
+      continue;
+    }
 
     const markupRaw = headerMap.markup !== undefined ? row[headerMap.markup] : null;
     const unitRaw = headerMap.unit !== undefined ? row[headerMap.unit] : null;
@@ -569,7 +755,6 @@ function parseRows(rows: unknown[][]): UniversalImportResult {
     const packRaw = headerMap.packQty !== undefined ? row[headerMap.packQty] : null;
     const quantityRaw = headerMap.quantity !== undefined ? row[headerMap.quantity] : null;
 
-    const directPrice = parseLocalizedNumber(directPriceRaw);
     if (directPrice === null || directPrice < 0) {
       skippedRows++;
       continue;
@@ -599,13 +784,14 @@ function parseRows(rows: unknown[][]): UniversalImportResult {
       description,
       unit_price: Number(unitPrice.toFixed(6)),
       markup_percent: Number(markup.toFixed(2)),
+      category: currentContextLabel || null,
     });
   }
 
   return {
     items,
     summary: {
-      totalRows: Math.max(rows.length - 1, 0),
+      totalRows: Math.max(rows.length - (headerRowIdx + 1), 0),
       parsedRows: items.length,
       skippedRows,
       normalizedPriceRows,
@@ -616,6 +802,10 @@ function parseRows(rows: unknown[][]): UniversalImportResult {
 
 export function parseUniversalSpreadsheetRows(rows: unknown[][]): UniversalImportResult {
   return parseRows(rows);
+}
+
+export function mergeUniversalImportResults(results: UniversalImportResult[]): UniversalImportResult {
+  return mergeSummaries(results);
 }
 
 export function parseUniversalCsvText(text: string): UniversalImportResult {

@@ -1,0 +1,11 @@
+mobile/ios/Pods
+mobile/android/.gradle
+mobile/android/build
+mobile/android/app/build
+mobile/node_modules
+web/node_modules
+node_modules
+.git
+.next
+dist
+build

@@ -52,7 +52,7 @@ export default function TemplateUploader() {
       setHasTemplate(true);
       setTemplateSize(new Blob([content]).size);
       toast.success(
-        'Template caricato con successo!\n\nPlaceholder disponibili: {{lavoroTitle}}, {{clienteName}}, {{revision}}, {{items}}, {{subtotal}}, {{taxes}}, {{total}}, {{companyName}}, {{vatNumber}}, {{iban}}, {{swift}}, {{currency}}, {{taxLabel}}, {{date}}, {{dateTime}}'
+        'Template caricato con successo!\n\nPlaceholder disponibili: {{lavoroTitle}}, {{clienteName}}, {{revision}}, {{items}}, {{itemsTable}}, {{subtotal}}, {{taxes}}, {{total}}, {{companyName}}, {{vatNumber}}, {{iban}}, {{swift}}, {{currency}}, {{taxLabel}}, {{descriptionLabel}}, {{quantityLabel}}, {{priceLabel}}, {{subtotalColLabel}}, {{totalLabel}}, {{date}}, {{dateTime}}.\n\nIl renderer mostra solo valori cliente-facing e prova a rimuovere diciture interne come ricarico o prezzo acquisto.'
       );
     } catch (err) {
       toast.error((err as Error).message);

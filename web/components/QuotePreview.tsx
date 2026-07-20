@@ -7,7 +7,6 @@ import { generateQuoteHTML, QuoteData } from '@/lib/QuoteTemplate';
 import toast from 'react-hot-toast';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
-import { ExternalLink, Copy } from 'lucide-react';
 
 type Lavoro = { id: string; title: string; cliente_id: string; clienti?: { name: string; email?: string } };
 
@@ -71,7 +70,6 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
           description: d.description,
           quantity: Number(d.quantity),
           unit_price: Number(d.unit_price),
-          material_markup: Number(d.tax_rate || profile?.material_markup || 0),
         })),
         vat_percent: Number(profile?.vat_percent || 22),
         companyName: profile?.company_name,
