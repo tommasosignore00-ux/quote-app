@@ -125,16 +125,32 @@ export default function ListiniPage() {
         const detail = summary
           ? ` (${summary.parsedRows}/${summary.totalRows} righe valide)`
           : '';
-        throw new Error(`${payload?.error || 'Import non riuscito'}${detail}`);
+        const skippedSources = Array.isArray(payload?.sourceDiagnostics)
+          ? payload.sourceDiagnostics
+              .filter((source: any) => !source?.selected && source?.sourceName)
+              .slice(0, 3)
+              .map((source: any) => `${source.sourceName}${source.reason ? `: ${source.reason}` : ''}`)
+          : [];
+        const skippedDetail = skippedSources.length ? ` · fogli ignorati: ${skippedSources.join(' | ')}` : '';
+        throw new Error(`${payload?.error || 'Import non riuscito'}${detail}${skippedDetail}`);
       }
 
       const summary = payload.summary;
+      const selectedSources = Array.isArray(payload?.sourceDiagnostics)
+        ? payload.sourceDiagnostics.filter((source: any) => source?.selected).map((source: any) => source?.sourceName).filter(Boolean)
+        : [];
+      const sourceLabel = selectedSources.length ? ` · sorgenti: ${selectedSources.join(', ')}` : '';
       toast.success(
-        `${summary.parsedRows}/${summary.totalRows} ${t('listini.itemsAdded')} · normalize: ${summary.normalizedPriceRows} · unita rilevate: ${summary.unitDetectedRows}`
+        `${summary.parsedRows}/${summary.totalRows} ${t('listini.itemsAdded')} · normalize: ${summary.normalizedPriceRows} · unita rilevate: ${summary.unitDetectedRows}${sourceLabel}`
       );
       await fetchItems(selectedListino.id);
       toast.success('Organizzazione AI avviata automaticamente');
-      await runAiOrganize(selectedListino.id, profileId);
+      try {
+        await runAiOrganize(selectedListino.id, profileId, { suppressErrorToast: true });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Organizzazione AI non riuscita';
+        toast.error(`Import completato, ma AI non riuscita: ${message}`);
+      }
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
@@ -190,7 +206,11 @@ export default function ListiniPage() {
     }
   };
 
-  const runAiOrganize = async (listinoId: string, profileId: string) => {
+  const runAiOrganize = async (
+    listinoId: string,
+    profileId: string,
+    options?: { suppressErrorToast?: boolean }
+  ) => {
     try {
       setOrganizingAi(true);
       const res = await fetch('/api/listini/ai-organize', {
@@ -207,7 +227,10 @@ export default function ListiniPage() {
       toast.success(`AI completata: ${payload.updatedCount} voci aggiornate`);
       await fetchItems(listinoId);
     } catch (err) {
-      toast.error((err as Error).message);
+      if (!options?.suppressErrorToast) {
+        toast.error((err as Error).message);
+      }
+      throw err;
     } finally {
       setOrganizingAi(false);
     }
@@ -230,8 +253,8 @@ export default function ListiniPage() {
         {selectedListino && (
           <>
             <label className="btn-primary cursor-pointer">
-              {uploading ? 'Import in corso...' : t('listini.uploadCsv')}
-              <input type="file" accept=".csv,.txt,.xlsx,.xls" onChange={handleUploadCsv} className="hidden" disabled={uploading} />
+              {uploading ? 'Import in corso...' : 'Carica CSV/Excel/PDF'}
+              <input type="file" accept=".csv,.txt,.xlsx,.xls,.pdf" onChange={handleUploadCsv} className="hidden" disabled={uploading} />
             </label>
             <button onClick={handleOrganizeWithAi} className="btn-secondary" disabled={organizingAi || uploading}>
               {organizingAi ? 'AI in corso...' : 'Riorganizza con AI'}

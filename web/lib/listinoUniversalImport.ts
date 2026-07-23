@@ -870,3 +870,41 @@ export function parseUniversalCsvText(text: string): UniversalImportResult {
 
   return parseRows(rows);
 }
+
+function tokenizePdfLine(line: string): string[] {
+  const cleanLine = line.replace(/\u00a0/g, ' ').trim();
+  if (!cleanLine) return [];
+
+  const tabCells = cleanLine.split(/\t+/).map((cell) => cell.trim()).filter(Boolean);
+  if (tabCells.length > 1) return tabCells;
+
+  const spacedCells = cleanLine.split(/\s{2,}/).map((cell) => cell.trim()).filter(Boolean);
+  if (spacedCells.length > 1) return spacedCells;
+
+  const trailingPriceMatch = cleanLine.match(
+    /^(.*?)(-?[0-9]+(?:[.\s][0-9]{3})*(?:[.,][0-9]+)?)\s*(€|eur)?$/i
+  );
+  if (trailingPriceMatch) {
+    const description = trailingPriceMatch[1]?.trim();
+    const price = trailingPriceMatch[2]?.trim();
+    if (description && price) {
+      return [description, price];
+    }
+  }
+
+  return [cleanLine];
+}
+
+export function parseUniversalPdfText(text: string): UniversalImportResult {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\u00a0/g, ' ').trim())
+    .filter(Boolean)
+    .filter((line) => !/^(pagina|page|pag\.?)\s+\d+(\s+di\s+\d+)?$/i.test(line));
+
+  const rows = lines
+    .map(tokenizePdfLine)
+    .filter((row) => row.length > 0 && row.some((cell) => String(cell ?? '').trim() !== ''));
+
+  return parseRows(rows);
+}
