@@ -1,4 +1,9 @@
 import { NextResponse } from 'next/server';
+import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import * as XLSX from 'xlsx';
 import {
@@ -10,6 +15,42 @@ import {
 import { resolveImportPricing } from '../../../../lib/listinoPricing';
 
 const supabase = supabaseAdmin;
+const execFileAsync = promisify(execFile);
+
+async function extractPdfText(buffer: Buffer) {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'listino-pdf-'));
+  const tempFilePath = path.join(tempDir, 'upload.pdf');
+  const scriptPath = path.resolve(process.cwd(), 'scripts/extract-pdf-text.cjs');
+
+  try {
+    await fs.writeFile(tempFilePath, buffer);
+    let stdout = '';
+    try {
+      const result = await execFileAsync(process.execPath, [scriptPath, tempFilePath], {
+        cwd: process.cwd(),
+        maxBuffer: 20 * 1024 * 1024,
+      });
+      stdout = result.stdout;
+    } catch (error) {
+      const stderr = String((error as { stderr?: string })?.stderr || '');
+      try {
+        const payload = JSON.parse(stderr) as { error?: string };
+        throw new Error(payload.error || stderr || 'PDF extraction failed');
+      } catch {
+        throw new Error(stderr || (error as Error).message || 'PDF extraction failed');
+      }
+    }
+
+    const payload = JSON.parse(stdout || '{}') as { text?: string; error?: string };
+    if (payload.error) {
+      throw new Error(payload.error);
+    }
+
+    return payload.text || '';
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
 
 type SourceAnalysis = {
   sourceName: string;
@@ -184,12 +225,8 @@ export async function POST(req: Request) {
       parsed = mergeUniversalImportResults(selectedSources.map((source) => source.parsed));
     } else if (ext === 'pdf') {
       try {
-        const pdfParseModule = await import('pdf-parse');
-        const { PDFParse } = pdfParseModule as typeof import('pdf-parse');
-        const parser = new PDFParse({ data: Buffer.from(arrayBuffer) });
-        const pdfData = await parser.getText();
-        await parser.destroy();
-        parsed = parseUniversalPdfText(pdfData.text || '');
+        const pdfText = await extractPdfText(Buffer.from(arrayBuffer));
+        parsed = parseUniversalPdfText(pdfText || '');
       } catch (pdfError) {
         return NextResponse.json(
           {
