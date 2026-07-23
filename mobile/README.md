@@ -14,9 +14,13 @@ App React Native con Expo per la gestione preventivi.
    ```env
    EXPO_PUBLIC_SUPABASE_URL=https://coqfepebhigdeevppdbr.supabase.co
    EXPO_PUBLIC_SUPABASE_ANON_KEY=<tua-chiave>
+   EXPO_PUBLIC_WEB_URL=https://tuo-sito-web.vercel.app
    ```
 
-   Nota: `EXPO_PUBLIC_API_URL` non e piu necessario per il flusso standard. Le funzioni voice/email/checkout usano Supabase Edge Functions.
+   Nota:
+   - `EXPO_PUBLIC_WEB_URL` serve per usare sul mobile gli stessi endpoint web per import listini avanzato, PDF e organizzazione AI.
+   - `EXPO_PUBLIC_API_URL` resta supportato come fallback legacy, ma il nome consigliato ora e `EXPO_PUBLIC_WEB_URL`.
+   - Le funzioni voice/email/checkout continuano a usare Supabase Edge Functions.
 
 ## Workflow Test & Pubblicazione
 

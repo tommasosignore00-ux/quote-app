@@ -5,6 +5,12 @@ export type UniversalParsedItem = {
   unit_price: number;
   markup_percent: number;
   category?: string | null;
+  pricing_source?: 'file' | 'derived_reference' | 'reference_rule' | 'needs_reference';
+  pricing_status?: 'resolved' | 'needs_reference';
+  pricing_basis_unit?: string | null;
+  pricing_basis_quantity?: number | null;
+  inferred_rule_key?: string | null;
+  extracted_measurements?: Record<string, number>;
 };
 
 export type UniversalImportSummary = {
@@ -13,6 +19,7 @@ export type UniversalImportSummary = {
   skippedRows: number;
   normalizedPriceRows: number;
   unitDetectedRows: number;
+  pendingReferenceRows: number;
 };
 
 export type UniversalImportResult = {
@@ -296,6 +303,21 @@ const HEADER_ALIASES: Record<string, string[]> = {
     '수량',
   ],
 
+  weight: [
+    'peso', 'peso unitario', 'peso kg', 'peso netto',
+    'weight', 'unit weight', 'net weight',
+    'gewicht', 'poids', 'peso neto', 'peso liquido',
+    'massa', 'mass', 'kg', 'peso articulo',
+  ],
+
+  area: [
+    'area', 'superficie', 'surface', 'sqm', 'mq', 'm2',
+  ],
+
+  volume: [
+    'volume', 'vol', 'capacita', 'capacity', 'm3', 'mc', 'litri', 'liters', 'litres',
+  ],
+
   code: [
     // IT
     'codice', 'cod', 'item_code',
@@ -550,11 +572,19 @@ function mergeSummaries(results: UniversalImportResult[]): UniversalImportResult
         skippedRows: acc.summary.skippedRows + current.summary.skippedRows,
         normalizedPriceRows: acc.summary.normalizedPriceRows + current.summary.normalizedPriceRows,
         unitDetectedRows: acc.summary.unitDetectedRows + current.summary.unitDetectedRows,
+        pendingReferenceRows: acc.summary.pendingReferenceRows + current.summary.pendingReferenceRows,
       },
     }),
     {
       items: [],
-      summary: { totalRows: 0, parsedRows: 0, skippedRows: 0, normalizedPriceRows: 0, unitDetectedRows: 0 },
+      summary: {
+        totalRows: 0,
+        parsedRows: 0,
+        skippedRows: 0,
+        normalizedPriceRows: 0,
+        unitDetectedRows: 0,
+        pendingReferenceRows: 0,
+      },
     }
   );
 }
@@ -685,11 +715,98 @@ function toBaseQuantity(qty: number, unit: string | null): { qty: number; baseUn
   return { qty: qty * conv.factor, baseUnit: conv.base };
 }
 
+function extractMeasurementFromColumn(value: unknown, fallbackUnit: string | null): { qty: number; unit: string | null } | null {
+  const parsed = parseQuantityWithUnit(value);
+  if (parsed) return parsed;
+
+  const qty = parseLocalizedNumber(value);
+  if (qty === null) return null;
+  return { qty, unit: fallbackUnit };
+}
+
+function extractWeightFromDescription(description: string): { qty: number; unit: string | null } | null {
+  const text = normalizeText(description);
+  const match = text.match(/\b([0-9]+(?:[.,][0-9]+)?)\s*(kg|g|ton|t)\b/);
+  if (!match) return null;
+  const qty = parseLocalizedNumber(match[1]);
+  if (qty === null) return null;
+  return { qty, unit: normalizeUnit(match[2]) };
+}
+
+function extractAreaFromDescription(description: string): { qty: number; unit: string | null } | null {
+  const text = normalizeText(description);
+  const match = text.match(/\b([0-9]+(?:[.,][0-9]+)?)\s*(mq|m2|sqm)\b/);
+  if (!match) return null;
+  const qty = parseLocalizedNumber(match[1]);
+  if (qty === null) return null;
+  return { qty, unit: normalizeUnit(match[2]) };
+}
+
+function extractVolumeFromDescription(description: string): { qty: number; unit: string | null } | null {
+  const text = normalizeText(description);
+  const match = text.match(/\b([0-9]+(?:[.,][0-9]+)?)\s*(m3|mc|lt|l)\b/);
+  if (!match) return null;
+  const qty = parseLocalizedNumber(match[1]);
+  if (qty === null) return null;
+  return { qty, unit: normalizeUnit(match[2]) };
+}
+
+function inferRuleKey(params: { description: string; category?: string | null; documentTitle?: string | null }): string | null {
+  const haystack = normalizeText([params.description, params.category, params.documentTitle].filter(Boolean).join(' '));
+  if (!haystack) return null;
+
+  if (/(acciaio|ferro|lamiera|trave|putrella|tondino|profilat)/.test(haystack)) return 'metal_ferrous';
+  if (/(rame|copper|ottone|brass|bronzo|bronze|alluminio|aluminum)/.test(haystack)) return 'metal_nonferrous';
+  if (/(cavo|cavi|cable|corrugato|guaina|filo elettric)/.test(haystack)) return 'electric_cable';
+  if (/(tubo|tubi|pipe|piping|raccord)/.test(haystack)) return 'piping';
+  if (/(vernice|paint|smalto|primer|resina)/.test(haystack)) return 'paint_chemical';
+  if (/(legno|wood|trave legno|multistrato|pannello)/.test(haystack)) return 'wood_panel';
+  return null;
+}
+
+function pickPricingBasis(params: {
+  description: string;
+  weightValue: unknown;
+  lengthValue: unknown;
+  areaValue: unknown;
+  volumeValue: unknown;
+  quantityValue: unknown;
+  normalizedUnit: string | null;
+}): { qty: number; unit: string | null; measurements: Record<string, number> } | null {
+  const measurementCandidates = [
+    extractMeasurementFromColumn(params.weightValue, 'kg') || extractWeightFromDescription(params.description),
+    extractMeasurementFromColumn(params.lengthValue, 'm'),
+    extractMeasurementFromColumn(params.areaValue, 'm2') || extractAreaFromDescription(params.description),
+    extractMeasurementFromColumn(params.volumeValue, 'm3') || extractVolumeFromDescription(params.description),
+    extractMeasurementFromColumn(params.quantityValue, params.normalizedUnit || 'pcs'),
+  ].filter(Boolean) as Array<{ qty: number; unit: string | null }>;
+
+  for (const candidate of measurementCandidates) {
+    const base = toBaseQuantity(candidate.qty, candidate.unit);
+    if (base.qty > 0 && base.baseUnit) {
+      return {
+        qty: Number(base.qty.toFixed(6)),
+        unit: base.baseUnit,
+        measurements: { [base.baseUnit]: Number(base.qty.toFixed(6)) },
+      };
+    }
+  }
+
+  return null;
+}
+
 function parseRows(rows: unknown[][]): UniversalImportResult {
   if (!rows.length) {
     return {
       items: [],
-      summary: { totalRows: 0, parsedRows: 0, skippedRows: 0, normalizedPriceRows: 0, unitDetectedRows: 0 },
+      summary: {
+        totalRows: 0,
+        parsedRows: 0,
+        skippedRows: 0,
+        normalizedPriceRows: 0,
+        unitDetectedRows: 0,
+        pendingReferenceRows: 0,
+      },
     };
   }
 
@@ -709,6 +826,7 @@ function parseRows(rows: unknown[][]): UniversalImportResult {
   let skippedRows = 0;
   let normalizedPriceRows = 0;
   let unitDetectedRows = 0;
+  let pendingReferenceRows = 0;
 
   for (const row of rows.slice(headerRowIdx + 1)) {
     if (!row || !row.length) {
@@ -754,15 +872,28 @@ function parseRows(rows: unknown[][]): UniversalImportResult {
     const priceUnitRaw = headerMap.priceUnit !== undefined ? row[headerMap.priceUnit] : null;
     const packRaw = headerMap.packQty !== undefined ? row[headerMap.packQty] : null;
     const quantityRaw = headerMap.quantity !== undefined ? row[headerMap.quantity] : null;
-
-    if (directPrice === null || directPrice < 0) {
-      skippedRows++;
-      continue;
-    }
+    const weightRaw = headerMap.weight !== undefined ? row[headerMap.weight] : null;
+    const lengthRaw = headerMap.packQty !== undefined ? row[headerMap.packQty] : null;
+    const areaRaw = headerMap.area !== undefined ? row[headerMap.area] : null;
+    const volumeRaw = headerMap.volume !== undefined ? row[headerMap.volume] : null;
 
     const markup = parseLocalizedNumber(markupRaw) ?? 0;
     const normalizedUnit = normalizeUnit(unitRaw) || normalizeUnit(priceUnitRaw) || unitFromDescription(description);
     if (normalizedUnit) unitDetectedRows++;
+    const pricingBasis = pickPricingBasis({
+      description,
+      weightValue: weightRaw,
+      lengthValue: lengthRaw,
+      areaValue: areaRaw,
+      volumeValue: volumeRaw,
+      quantityValue: quantityRaw,
+      normalizedUnit,
+    });
+    const inferredRuleKey = inferRuleKey({
+      description,
+      category: currentContextLabel || null,
+      documentTitle,
+    });
 
     const packFromColumn = parseQuantityWithUnit(packRaw) || parseQuantityWithUnit(quantityRaw);
     const packFromDesc = inferPackFromDescription(description, normalizedUnit);
@@ -771,7 +902,7 @@ function parseRows(rows: unknown[][]): UniversalImportResult {
     let unitPrice = directPrice;
 
     const isPricePerUnit = /\/(mm|cm|mt|m|m2|mq|m3|mc|kg|g|t|l|pz|pcs|pc|nr)\b/i.test(String(priceUnitRaw ?? ''));
-    if (!isPricePerUnit && pack && pack.qty > 0) {
+    if (unitPrice !== null && unitPrice >= 0 && directPrice !== null && !isPricePerUnit && pack && pack.qty > 0) {
       const packUnit = pack.unit || normalizedUnit;
       const basePack = toBaseQuantity(pack.qty, packUnit);
       if (basePack.qty > 0) {
@@ -780,11 +911,26 @@ function parseRows(rows: unknown[][]): UniversalImportResult {
       }
     }
 
+    if ((unitPrice === null || unitPrice < 0) && !pricingBasis) {
+      skippedRows++;
+      continue;
+    }
+
+    if (unitPrice === null || unitPrice < 0) {
+      pendingReferenceRows++;
+    }
+
     items.push({
       description,
-      unit_price: Number(unitPrice.toFixed(6)),
+      unit_price: Number((unitPrice ?? 0).toFixed(6)),
       markup_percent: Number(markup.toFixed(2)),
       category: currentContextLabel || null,
+      pricing_source: unitPrice !== null && unitPrice >= 0 ? 'file' : 'needs_reference',
+      pricing_status: unitPrice !== null && unitPrice >= 0 ? 'resolved' : 'needs_reference',
+      pricing_basis_unit: pricingBasis?.unit || null,
+      pricing_basis_quantity: pricingBasis?.qty ?? null,
+      inferred_rule_key: inferredRuleKey,
+      extracted_measurements: pricingBasis?.measurements || undefined,
     });
   }
 
@@ -796,6 +942,7 @@ function parseRows(rows: unknown[][]): UniversalImportResult {
       skippedRows,
       normalizedPriceRows,
       unitDetectedRows,
+      pendingReferenceRows,
     },
   };
 }

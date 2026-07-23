@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { createClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -24,7 +23,29 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: error.message || 'Search failed' }, { status: 500 });
     }
 
-    return NextResponse.json({ results: data });
+    const itemIds = (data || []).map((item: { id: string }) => item.id).filter(Boolean);
+    const { data: metadataRows } = await supabase
+      .from('listini_vettoriali')
+      .select('id, listino_id, category, listini(name)')
+      .in('id', itemIds);
+
+    const metadataMap = new Map(
+      (metadataRows || []).map((row) => {
+        const relatedListino = row.listini as { name?: string } | { name?: string }[] | null;
+        const listinoName = Array.isArray(relatedListino)
+          ? relatedListino[0]?.name ?? null
+          : relatedListino?.name ?? null;
+
+        return [row.id, { listino_id: row.listino_id, category: row.category, listino_name: listinoName }];
+      })
+    );
+
+    return NextResponse.json({
+      results: (data || []).map((item: { id: string; [key: string]: unknown }) => ({
+        ...item,
+        ...(metadataMap.get(item.id) || {}),
+      })),
+    });
   } catch (err: any) {
     console.error('Semantic search error:', err);
     return NextResponse.json({ error: err.message || 'Semantic search failed' }, { status: 500 });

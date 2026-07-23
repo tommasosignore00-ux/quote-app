@@ -7,6 +7,7 @@ import {
   parseUniversalPdfText,
   parseUniversalSpreadsheetRows,
 } from '../../../../lib/listinoUniversalImport';
+import { resolveImportPricing } from '../../../../lib/listinoPricing';
 
 const supabase = supabaseAdmin;
 
@@ -120,6 +121,28 @@ function selectSpreadsheetSources(sources: SourceAnalysis[]): SourceAnalysis[] {
   return [];
 }
 
+function getReadablePdfError(error: unknown): string {
+  const message = String((error as Error)?.message || error || '').trim();
+
+  if (!message) {
+    return 'Non sono riuscito a leggere il PDF.';
+  }
+
+  if (
+    /expected pattern/i.test(message) ||
+    /invalid pdf/i.test(message) ||
+    /parser/i.test(message)
+  ) {
+    return 'Non sono riuscito a leggere il PDF. Se e un PDF scansito o fotografico, serve OCR oppure un PDF con testo selezionabile.';
+  }
+
+  if (/password/i.test(message)) {
+    return 'Il PDF e protetto da password e non puo essere importato automaticamente.';
+  }
+
+  return `Non sono riuscito a leggere il PDF: ${message}`;
+}
+
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
@@ -160,10 +183,32 @@ export async function POST(req: Request) {
 
       parsed = mergeUniversalImportResults(selectedSources.map((source) => source.parsed));
     } else if (ext === 'pdf') {
-      const pdfParseModule = await import('pdf-parse');
-      const pdfParse = (pdfParseModule as any).default || pdfParseModule;
-      const pdfData = await pdfParse(Buffer.from(arrayBuffer));
-      parsed = parseUniversalPdfText(pdfData.text || '');
+      try {
+        const pdfParseModule = await import('pdf-parse');
+        const { PDFParse } = pdfParseModule as typeof import('pdf-parse');
+        const parser = new PDFParse({ data: Buffer.from(arrayBuffer) });
+        const pdfData = await parser.getText();
+        await parser.destroy();
+        parsed = parseUniversalPdfText(pdfData.text || '');
+      } catch (pdfError) {
+        return NextResponse.json(
+          {
+            error: getReadablePdfError(pdfError),
+            summary: { totalRows: 0, parsedRows: 0, skippedRows: 0, normalizedPriceRows: 0, unitDetectedRows: 0, pendingReferenceRows: 0 },
+            sourceDiagnostics: [
+              {
+                sourceName: file.name,
+                selected: false,
+                parsedRows: 0,
+                totalRows: 0,
+                score: 0,
+                reason: getReadablePdfError(pdfError),
+              },
+            ],
+          },
+          { status: 400 }
+        );
+      }
       sourceDiagnostics = [
         {
           sourceName: file.name,
@@ -193,7 +238,7 @@ export async function POST(req: Request) {
         {
           error: ext === 'pdf'
             ? 'Nessuna voce valida trovata nel PDF. Se e un PDF scansito o fotografico, serve OCR oppure un PDF con testo selezionabile.'
-            : 'Nessuna riga valida trovata nel file. Verifica che esistano almeno una colonna descrizione e una colonna prezzo.',
+            : 'Nessuna riga valida trovata nel file. Verifica che esistano almeno una colonna descrizione e una colonna prezzo o una misura utile come peso/metri.',
           summary: parsed.summary,
           sourceDiagnostics,
         },
@@ -221,8 +266,22 @@ export async function POST(req: Request) {
       targetListinoId = listino.id;
     }
 
+    const pricingResolution = await resolveImportPricing({ profileId, parsed });
+
+    if (!pricingResolution.items.length) {
+      return NextResponse.json(
+        {
+          error: 'Ho letto il file, ma nessuna voce ha un prezzo utilizzabile. Se il file non contiene prezzi, servono regole di riferimento per categoria oppure almeno alcune righe con prezzo da cui derivarli.',
+          summary: pricingResolution.summary,
+          sourceDiagnostics,
+          pricingDiagnostics: pricingResolution.diagnostics,
+        },
+        { status: 400 }
+      );
+    }
+
     const itemsToInsert = [] as any[];
-    for (const row of parsed.items) {
+    for (const row of pricingResolution.items) {
       itemsToInsert.push({
         listino_id: targetListinoId,
         profile_id: profileId,
@@ -266,8 +325,9 @@ export async function POST(req: Request) {
       ok: true,
       inserted: itemsToInsert.length,
       listinoId: targetListinoId,
-      summary: parsed.summary,
+      summary: pricingResolution.summary,
       sourceDiagnostics,
+      pricingDiagnostics: pricingResolution.diagnostics,
     });
   } catch (err: any) {
     console.error('Upload listini error:', err);
