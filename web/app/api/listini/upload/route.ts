@@ -4,6 +4,7 @@ import os from 'os';
 import path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import OpenAI from 'openai';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import * as XLSX from 'xlsx';
 import {
@@ -16,6 +17,13 @@ import { resolveImportPricing } from '../../../../lib/listinoPricing';
 
 const supabase = supabaseAdmin;
 const execFileAsync = promisify(execFile);
+const openai = process.env.OPENAI_API_KEY
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
+
+const PDF_OCR_MAX_PAGES = 12;
+const PDF_OCR_BATCH_SIZE = 2;
+const PDF_OCR_SCREENSHOT_WIDTH = 1600;
 
 async function extractPdfText(buffer: Buffer) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'listino-pdf-'));
@@ -50,6 +58,141 @@ async function extractPdfText(buffer: Buffer) {
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
+}
+
+async function renderPdfPages(params: { buffer: Buffer; maxPages?: number }) {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'listino-pdf-pages-'));
+  const tempFilePath = path.join(tempDir, 'upload.pdf');
+  const outputDir = path.join(tempDir, 'pages');
+  const scriptPath = path.resolve(process.cwd(), 'scripts/render-pdf-pages.cjs');
+
+  try {
+    await fs.mkdir(outputDir, { recursive: true });
+    await fs.writeFile(tempFilePath, params.buffer);
+
+    let stdout = '';
+    try {
+      const result = await execFileAsync(
+        process.execPath,
+        [scriptPath, tempFilePath, outputDir, String(params.maxPages || PDF_OCR_MAX_PAGES), String(PDF_OCR_SCREENSHOT_WIDTH)],
+        {
+          cwd: process.cwd(),
+          maxBuffer: 20 * 1024 * 1024,
+        }
+      );
+      stdout = result.stdout;
+    } catch (error) {
+      const stderr = String((error as { stderr?: string })?.stderr || '');
+      try {
+        const payload = JSON.parse(stderr) as { error?: string };
+        throw new Error(payload.error || stderr || 'PDF page rendering failed');
+      } catch {
+        throw new Error(stderr || (error as Error).message || 'PDF page rendering failed');
+      }
+    }
+
+    const payload = JSON.parse(stdout || '{}') as {
+      totalPages?: number;
+      renderedPages?: number;
+      pages?: Array<{ pageNumber?: number; path?: string }>;
+      error?: string;
+    };
+
+    if (payload.error) {
+      throw new Error(payload.error);
+    }
+
+    const images = [] as Array<{ pageNumber: number; dataUrl: string }>;
+    for (const page of payload.pages || []) {
+      if (!page?.path) continue;
+      const imageBuffer = await fs.readFile(page.path);
+      images.push({
+        pageNumber: Number(page.pageNumber || images.length + 1),
+        dataUrl: `data:image/png;base64,${imageBuffer.toString('base64')}`,
+      });
+    }
+
+    return {
+      totalPages: payload.totalPages || images.length,
+      renderedPages: payload.renderedPages || images.length,
+      images,
+    };
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+function chunkArray<T>(items: T[], size: number): Array<T[]> {
+  const chunks: Array<T[]> = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+async function ocrPdfImages(params: {
+  fileName: string;
+  images: Array<{ pageNumber: number; dataUrl: string }>;
+}) {
+  if (!openai) {
+    throw new Error('OCR automatico non disponibile: manca OPENAI_API_KEY.');
+  }
+
+  const chunks = chunkArray(params.images, PDF_OCR_BATCH_SIZE);
+  const texts: string[] = [];
+
+  for (const chunk of chunks) {
+    const userContent: Array<
+      | { type: 'text'; text: string }
+      | { type: 'image_url'; image_url: { url: string; detail: 'high' } }
+    > = [
+      {
+        type: 'text',
+        text:
+          `Queste immagini arrivano dal PDF "${params.fileName}" e rappresentano un listino, prezzario o prontuario tecnico.\n` +
+          'Fai OCR e restituisci solo testo utile all import dei materiali:\n' +
+          '- una voce per riga quando possibile\n' +
+          '- mantieni codici, descrizioni, unita, misure, peso e prezzi\n' +
+          '- ignora loghi, foto decorative, note legali, numeri pagina e testo puramente grafico\n' +
+          '- non usare markdown\n' +
+          '- non spiegare nulla\n' +
+          '- restituisci solo testo puro',
+      },
+    ];
+
+    for (const image of chunk) {
+      userContent.push({ type: 'text', text: `Pagina ${image.pageNumber}` });
+      userContent.push({
+        type: 'image_url',
+        image_url: {
+          url: image.dataUrl,
+          detail: 'high',
+        },
+      });
+    }
+
+    const completion = await openai.chat.completions.create({
+      model: process.env.OPENAI_AGENT_MODEL || 'gpt-4o-mini',
+      temperature: 0,
+      max_tokens: 4000,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Sei un OCR specializzato in listini tecnici. Devi trascrivere il contenuto delle immagini in testo leggibile e importabile, mantenendo i dati numerici accurati.',
+        },
+        {
+          role: 'user',
+          content: userContent,
+        },
+      ],
+    });
+
+    const text = completion.choices[0]?.message?.content?.trim() || '';
+    if (text) texts.push(text);
+  }
+
+  return texts.join('\n');
 }
 
 type SourceAnalysis = {
@@ -224,13 +367,48 @@ export async function POST(req: Request) {
 
       parsed = mergeUniversalImportResults(selectedSources.map((source) => source.parsed));
     } else if (ext === 'pdf') {
+      const pdfBuffer = Buffer.from(arrayBuffer);
+      let pdfText = '';
+      let pdfReadError: unknown = null;
+      let ocrApplied = false;
+      let ocrFailedReason: string | null = null;
+      let ocrRenderedPages = 0;
+      let ocrTotalPages = 0;
+
       try {
-        const pdfText = await extractPdfText(Buffer.from(arrayBuffer));
-        parsed = parseUniversalPdfText(pdfText || '');
+        pdfText = await extractPdfText(pdfBuffer);
       } catch (pdfError) {
+        pdfReadError = pdfError;
+      }
+
+      parsed = parseUniversalPdfText(pdfText || '');
+
+      if (!parsed.items.length) {
+        try {
+          const rendered = await renderPdfPages({ buffer: pdfBuffer, maxPages: PDF_OCR_MAX_PAGES });
+          ocrRenderedPages = rendered.renderedPages;
+          ocrTotalPages = rendered.totalPages;
+
+          if (rendered.images.length > 0) {
+            const ocrText = await ocrPdfImages({
+              fileName: file.name,
+              images: rendered.images,
+            });
+
+            ocrApplied = true;
+            if (ocrText.trim()) {
+              parsed = parseUniversalPdfText([pdfText, ocrText].filter(Boolean).join('\n'));
+            }
+          }
+        } catch (ocrError) {
+          ocrFailedReason = (ocrError as Error)?.message || 'OCR automatico non riuscito';
+        }
+      }
+
+      if (!parsed.items.length && pdfReadError && !ocrApplied && !ocrFailedReason) {
         return NextResponse.json(
           {
-            error: getReadablePdfError(pdfError),
+            error: getReadablePdfError(pdfReadError),
             summary: { totalRows: 0, parsedRows: 0, skippedRows: 0, normalizedPriceRows: 0, unitDetectedRows: 0, pendingReferenceRows: 0 },
             sourceDiagnostics: [
               {
@@ -239,13 +417,21 @@ export async function POST(req: Request) {
                 parsedRows: 0,
                 totalRows: 0,
                 score: 0,
-                reason: getReadablePdfError(pdfError),
+                reason: getReadablePdfError(pdfReadError),
               },
             ],
           },
           { status: 400 }
         );
       }
+
+      const ocrHint =
+        ocrApplied && ocrRenderedPages > 0
+          ? ocrTotalPages > ocrRenderedPages
+            ? `OCR automatico usato sulle prime ${ocrRenderedPages} di ${ocrTotalPages} pagine`
+            : `OCR automatico usato su ${ocrRenderedPages} pagine`
+          : null;
+
       sourceDiagnostics = [
         {
           sourceName: file.name,
@@ -253,7 +439,17 @@ export async function POST(req: Request) {
           parsedRows: parsed.summary.parsedRows,
           totalRows: parsed.summary.totalRows,
           score: parsed.summary.parsedRows > 0 ? 100 : 0,
-          reason: parsed.summary.parsedRows > 0 ? null : 'PDF senza testo utile o senza prezzi riconoscibili',
+          reason:
+            parsed.summary.parsedRows > 0
+              ? ocrHint
+              : ocrFailedReason
+                ? `Ho provato anche l OCR automatico, ma non e riuscito: ${ocrFailedReason}`
+                : ocrHint
+                  ? `${ocrHint}, ma non ho trovato voci con prezzi riconoscibili`
+                  : 'PDF senza testo utile o senza prezzi riconoscibili',
+          ocrApplied,
+          ocrRenderedPages,
+          ocrTotalPages,
         },
       ];
     } else {
@@ -274,7 +470,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error: ext === 'pdf'
-            ? 'Nessuna voce valida trovata nel PDF. Se e un PDF scansito o fotografico, serve OCR oppure un PDF con testo selezionabile.'
+            ? 'Nessuna voce valida trovata nel PDF. Ho provato anche il fallback OCR automatico quando disponibile, ma non ho trovato righe con prezzi o misure riconoscibili.'
             : 'Nessuna riga valida trovata nel file. Verifica che esistano almeno una colonna descrizione e una colonna prezzo o una misura utile come peso/metri.',
           summary: parsed.summary,
           sourceDiagnostics,
