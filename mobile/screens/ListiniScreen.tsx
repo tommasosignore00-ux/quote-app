@@ -14,6 +14,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useFocusEffect } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../lib/darkMode';
 import { buildWebApiUrl, isWebApiConfigured } from '../lib/webApi';
@@ -81,6 +82,21 @@ function inferMimeType(name: string, mimeType?: string | null): string {
   return 'application/octet-stream';
 }
 
+function sanitizeUploadFileName(name?: string | null, fallbackExt?: string): string {
+  const trimmed = String(name || '').trim();
+  const cleaned = trimmed
+    .replace(/[^\w.\-() ]+/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (cleaned) {
+    return cleaned;
+  }
+
+  const ext = fallbackExt?.trim().replace(/^\./, '');
+  return ext ? `import-${Date.now()}.${ext}` : `import-${Date.now()}`;
+}
+
 function summarizeRecommendedRules(payload?: UploadPayload): string {
   const rules = payload?.pricingDiagnostics?.recommendedRules || [];
   const summary = rules
@@ -141,6 +157,18 @@ function buildUploadSuccessMessage(payload?: UploadPayload): string {
   }
 
   return lines.join('\n');
+}
+
+function parseUploadPayload(body: string): UploadPayload {
+  if (!body?.trim()) return {};
+
+  try {
+    return JSON.parse(body) as UploadPayload;
+  } catch {
+    return {
+      error: body.trim(),
+    };
+  }
 }
 
 export default function ListiniScreen() {
@@ -523,23 +551,40 @@ export default function ListiniScreen() {
       if (result.canceled || !result.assets?.length) return;
 
       const asset = result.assets[0];
-      const formData = new FormData();
-      formData.append('file', {
-        uri: asset.uri,
-        name: asset.name || `import-${Date.now()}`,
-        type: inferMimeType(asset.name || '', asset.mimeType),
-      } as any);
-      formData.append('profileId', profileId);
-      formData.append('listinoId', selectedListino.id);
+      const mimeType = inferMimeType(asset.name || '', asset.mimeType);
+      const fileName = sanitizeUploadFileName(
+        asset.name,
+        mimeType === 'application/pdf'
+          ? 'pdf'
+          : mimeType === 'application/vnd.ms-excel'
+            ? 'xls'
+            : mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+              ? 'xlsx'
+              : mimeType === 'text/plain'
+                ? 'txt'
+                : 'csv'
+      );
+
+      const fileInfo = await FileSystem.getInfoAsync(asset.uri);
+      if (!fileInfo.exists) {
+        throw new Error('Il file selezionato non e piu disponibile sul dispositivo. Riprova scegliendolo di nuovo.');
+      }
 
       setUploading(true);
-      const res = await fetch(buildWebApiUrl('/api/listini/upload'), {
-        method: 'POST',
-        body: formData,
+      const response = await FileSystem.uploadAsync(buildWebApiUrl('/api/listini/upload'), asset.uri, {
+        fieldName: 'file',
+        httpMethod: 'POST',
+        mimeType,
+        parameters: {
+          profileId,
+          listinoId: selectedListino.id,
+          originalFileName: fileName,
+        },
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
       });
 
-      const payload = (await res.json()) as UploadPayload;
-      if (!res.ok) {
+      const payload = parseUploadPayload(response.body);
+      if (response.status < 200 || response.status >= 300) {
         throw new Error(buildUploadErrorMessage(payload));
       }
 

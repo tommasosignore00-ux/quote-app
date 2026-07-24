@@ -27,6 +27,30 @@ const RULE_PRESETS = [
   { rule_key: 'wood_panel', label: 'Legno / pannelli', reference_unit: 'm2' },
 ];
 
+const DEBUG_SERVER_URL = 'http://127.0.0.1:7777/event';
+const DEBUG_SESSION_ID = 'pdf-upload-pattern-error';
+
+function reportDebugEvent(event: {
+  runId: 'pre-fix' | 'post-fix';
+  hypothesisId: 'A' | 'B' | 'C' | 'D' | 'E';
+  location: string;
+  msg: string;
+  data?: Record<string, unknown>;
+}) {
+  fetch(DEBUG_SERVER_URL, {
+    method: 'POST',
+    body: JSON.stringify({
+      sessionId: DEBUG_SESSION_ID,
+      runId: event.runId,
+      hypothesisId: event.hypothesisId,
+      location: event.location,
+      msg: event.msg,
+      data: event.data || {},
+      ts: Date.now(),
+    }),
+  }).catch(() => {});
+}
+
 export default function ListiniPage() {
   const { t } = useTranslation();
   const [listini, setListini] = useState<Listino[]>([]);
@@ -237,6 +261,20 @@ export default function ListiniPage() {
     if (!file || !selectedListino) return;
 
     try {
+      // #region debug-point A:web-upload-start
+      reportDebugEvent({
+        runId: 'pre-fix',
+        hypothesisId: 'A',
+        location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:start',
+        msg: '[DEBUG] Web upload started',
+        data: {
+          fileName: file.name,
+          fileType: file.type,
+          fileSize: file.size,
+          selectedListinoId: selectedListino.id,
+        },
+      });
+      // #endregion
       setUploading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -248,11 +286,52 @@ export default function ListiniPage() {
       formData.append('profileId', profileId);
       formData.append('listinoId', selectedListino.id);
 
+      // #region debug-point B:web-upload-before-fetch
+      reportDebugEvent({
+        runId: 'pre-fix',
+        hypothesisId: 'B',
+        location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:before-fetch',
+        msg: '[DEBUG] Web upload about to call API',
+        data: {
+          fileName: file.name,
+          fileType: file.type,
+          profileId,
+          listinoId: selectedListino.id,
+        },
+      });
+      // #endregion
       const res = await fetch('/api/listini/upload', {
         method: 'POST',
         body: formData,
       });
 
+      // #region debug-point B:web-upload-response
+      res.clone().text().then((body) => {
+        reportDebugEvent({
+          runId: 'pre-fix',
+          hypothesisId: 'B',
+          location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:after-fetch',
+          msg: '[DEBUG] Web upload received response',
+          data: {
+            status: res.status,
+            ok: res.ok,
+            contentType: res.headers.get('content-type'),
+            bodyPreview: body.slice(0, 500),
+          },
+        });
+      }).catch((cloneError) => {
+        reportDebugEvent({
+          runId: 'pre-fix',
+          hypothesisId: 'B',
+          location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:after-fetch',
+          msg: '[DEBUG] Web upload response clone failed',
+          data: {
+            status: res.status,
+            error: cloneError instanceof Error ? cloneError.message : String(cloneError),
+          },
+        });
+      });
+      // #endregion
       const payload = await res.json();
       if (!res.ok) {
         const summary = payload?.summary;
@@ -307,6 +386,18 @@ export default function ListiniPage() {
         toast.error(`Import completato, ma AI non riuscita: ${message}`);
       }
     } catch (err) {
+      // #region debug-point A:web-upload-catch
+      reportDebugEvent({
+        runId: 'pre-fix',
+        hypothesisId: 'A',
+        location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:catch',
+        msg: '[DEBUG] Web upload threw before completion',
+        data: {
+          error: err instanceof Error ? err.message : String(err),
+          name: err instanceof Error ? err.name : typeof err,
+        },
+      });
+      // #endregion
       toast.error((err as Error).message);
     } finally {
       e.target.value = '';

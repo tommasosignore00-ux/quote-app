@@ -6,11 +6,27 @@ const rawWebApiUrl =
 export function getWebApiBaseUrl(): string | null {
   const trimmed = rawWebApiUrl.trim();
   if (!trimmed) return null;
-  return trimmed.replace(/\/+$/, '');
+
+  const withProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+
+  try {
+    const normalized = new URL(withProtocol);
+    return normalized.toString().replace(/\/+$/, '');
+  } catch {
+    throw new Error(
+      "EXPO_PUBLIC_WEB_URL non e valido. Usa un URL completo come 'https://tuo-sito.vercel.app'."
+    );
+  }
 }
 
 export function isWebApiConfigured(): boolean {
-  return Boolean(getWebApiBaseUrl());
+  try {
+    return Boolean(getWebApiBaseUrl());
+  } catch {
+    return false;
+  }
 }
 
 export function buildWebApiUrl(path: string): string {

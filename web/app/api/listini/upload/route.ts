@@ -24,6 +24,51 @@ const openai = process.env.OPENAI_API_KEY
 const PDF_OCR_MAX_PAGES = 12;
 const PDF_OCR_BATCH_SIZE = 2;
 const PDF_OCR_SCREENSHOT_WIDTH = 1600;
+const DEBUG_SERVER_FALLBACK_URL = 'http://127.0.0.1:7777/event';
+const DEBUG_SESSION_ID = 'pdf-upload-pattern-error';
+
+async function reportDebugEvent(event: {
+  runId: 'pre-fix' | 'post-fix';
+  hypothesisId: 'A' | 'B' | 'C' | 'D' | 'E';
+  location: string;
+  msg: string;
+  data?: Record<string, unknown>;
+}) {
+  let debugServerUrl = DEBUG_SERVER_FALLBACK_URL;
+
+  try {
+    const candidates = [
+      path.resolve(process.cwd(), '.dbg', `${DEBUG_SESSION_ID}.env`),
+      path.resolve(process.cwd(), '..', '.dbg', `${DEBUG_SESSION_ID}.env`),
+    ];
+
+    for (const candidate of candidates) {
+      try {
+        const envContents = await fs.readFile(candidate, 'utf-8');
+        const matchedUrl = envContents.match(/^DEBUG_SERVER_URL=(.+)$/m)?.[1]?.trim();
+        if (matchedUrl) {
+          debugServerUrl = matchedUrl;
+          break;
+        }
+      } catch {}
+    }
+  } catch {}
+
+  try {
+    await fetch(debugServerUrl, {
+      method: 'POST',
+      body: JSON.stringify({
+        sessionId: DEBUG_SESSION_ID,
+        runId: event.runId,
+        hypothesisId: event.hypothesisId,
+        location: event.location,
+        msg: event.msg,
+        data: event.data || {},
+        ts: Date.now(),
+      }),
+    });
+  } catch {}
+}
 
 async function extractPdfText(buffer: Buffer) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'listino-pdf-'));
@@ -327,6 +372,32 @@ function getReadablePdfError(error: unknown): string {
   return `Non sono riuscito a leggere il PDF: ${message}`;
 }
 
+function inferUploadExtension(params: {
+  fileName?: string | null;
+  originalFileName?: string | null;
+  mimeType?: string | null;
+}): string | null {
+  const candidates = [params.originalFileName, params.fileName]
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean);
+
+  for (const candidate of candidates) {
+    const cleanName = candidate.split(/[?#]/, 1)[0];
+    const maybeExt = cleanName.split('.').pop();
+    if (maybeExt && /^[a-z0-9]{2,8}$/i.test(maybeExt)) {
+      return maybeExt;
+    }
+  }
+
+  const mimeType = String(params.mimeType || '').toLowerCase();
+  if (mimeType === 'application/pdf') return 'pdf';
+  if (mimeType === 'text/csv') return 'csv';
+  if (mimeType === 'text/plain') return 'txt';
+  if (mimeType === 'application/vnd.ms-excel') return 'xls';
+  if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') return 'xlsx';
+  return null;
+}
+
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
@@ -334,11 +405,45 @@ export async function POST(req: Request) {
     const listinoName = formData.get('listinoName') as string | null;
     const profileId = formData.get('profileId') as string | null;
     const listinoId = formData.get('listinoId') as string | null;
+    const originalFileName = formData.get('originalFileName') as string | null;
 
     if (!file || !profileId) return NextResponse.json({ error: 'Missing file or profileId' }, { status: 400 });
 
+    // #region debug-point C:route-start
+    await reportDebugEvent({
+      runId: 'pre-fix',
+      hypothesisId: 'C',
+      location: 'web/app/api/listini/upload/route.ts:POST:start',
+      msg: '[DEBUG] Upload route received request',
+      data: {
+        fileName: file.name,
+        fileType: file.type,
+        profileId,
+        listinoId,
+        originalFileName,
+      },
+    });
+    // #endregion
     const arrayBuffer = await file.arrayBuffer();
-    const ext = file.name.split('.').pop()?.toLowerCase();
+    const ext = inferUploadExtension({
+      fileName: file.name,
+      originalFileName,
+      mimeType: file.type,
+    });
+
+    // #region debug-point C:route-array-buffer
+    await reportDebugEvent({
+      runId: 'pre-fix',
+      hypothesisId: 'C',
+      location: 'web/app/api/listini/upload/route.ts:POST:array-buffer',
+      msg: '[DEBUG] Upload route decoded file bytes',
+      data: {
+        ext,
+        byteLength: arrayBuffer.byteLength,
+        fileName: file.name,
+      },
+    });
+    // #endregion
     let parsed: ReturnType<typeof parseUniversalSpreadsheetRows>;
     let sourceDiagnostics: Array<Record<string, unknown>> = [];
 
@@ -367,6 +472,19 @@ export async function POST(req: Request) {
 
       parsed = mergeUniversalImportResults(selectedSources.map((source) => source.parsed));
     } else if (ext === 'pdf') {
+      // #region debug-point D:pdf-branch
+      await reportDebugEvent({
+        runId: 'pre-fix',
+        hypothesisId: 'D',
+        location: 'web/app/api/listini/upload/route.ts:POST:pdf-branch',
+        msg: '[DEBUG] Upload route entered PDF branch',
+        data: {
+          fileName: file.name,
+          fileType: file.type,
+          byteLength: arrayBuffer.byteLength,
+        },
+      });
+      // #endregion
       const pdfBuffer = Buffer.from(arrayBuffer);
       let pdfText = '';
       let pdfReadError: unknown = null;
@@ -377,8 +495,31 @@ export async function POST(req: Request) {
 
       try {
         pdfText = await extractPdfText(pdfBuffer);
+        // #region debug-point D:pdf-text
+        await reportDebugEvent({
+          runId: 'pre-fix',
+          hypothesisId: 'D',
+          location: 'web/app/api/listini/upload/route.ts:POST:pdf-text',
+          msg: '[DEBUG] PDF text extraction completed',
+          data: {
+            textLength: pdfText.length,
+            preview: pdfText.slice(0, 200),
+          },
+        });
+        // #endregion
       } catch (pdfError) {
         pdfReadError = pdfError;
+        // #region debug-point D:pdf-text-error
+        await reportDebugEvent({
+          runId: 'pre-fix',
+          hypothesisId: 'D',
+          location: 'web/app/api/listini/upload/route.ts:POST:pdf-text-error',
+          msg: '[DEBUG] PDF text extraction failed',
+          data: {
+            error: (pdfError as Error)?.message || String(pdfError),
+          },
+        });
+        // #endregion
       }
 
       parsed = parseUniversalPdfText(pdfText || '');
@@ -563,6 +704,18 @@ export async function POST(req: Request) {
       pricingDiagnostics: pricingResolution.diagnostics,
     });
   } catch (err: any) {
+    // #region debug-point C:route-catch
+    await reportDebugEvent({
+      runId: 'pre-fix',
+      hypothesisId: 'C',
+      location: 'web/app/api/listini/upload/route.ts:POST:catch',
+      msg: '[DEBUG] Upload route threw',
+      data: {
+        error: err?.message || String(err),
+        stack: err?.stack?.slice?.(0, 1000) || null,
+      },
+    });
+    // #endregion
     console.error('Upload listini error:', err);
     return NextResponse.json({ error: err.message || 'Upload failed' }, { status: 500 });
   }
