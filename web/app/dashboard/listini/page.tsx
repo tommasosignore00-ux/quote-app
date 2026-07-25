@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
@@ -58,19 +58,20 @@ const DEBUG_SERVER_URL = 'http://127.0.0.1:7777/event';
 const DEBUG_SESSION_ID = 'pdf-upload-pattern-error';
 
 function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result || '');
-      const base64 = result.includes(',') ? result.split(',')[1] : result;
-      if (!base64) {
-        reject(new Error('Non sono riuscito a leggere il PDF selezionato.'));
-        return;
-      }
-      resolve(base64);
-    };
-    reader.onerror = () => reject(reader.error || new Error('Lettura file non riuscita'));
-    reader.readAsDataURL(file);
+  return file.arrayBuffer().then((buffer) => {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    const chunkSize = 0x8000;
+
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+
+    const base64 = btoa(binary);
+    if (!base64) {
+      throw new Error('Non sono riuscito a leggere il PDF selezionato.');
+    }
+    return base64;
   });
 }
 
@@ -81,6 +82,7 @@ function reportDebugEvent(event: {
   msg: string;
   data?: Record<string, unknown>;
 }) {
+  if (process.env.NODE_ENV === 'production') return;
   fetch(DEBUG_SERVER_URL, {
     method: 'POST',
     body: JSON.stringify({
@@ -125,6 +127,8 @@ export default function ListiniPage() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [organizingAi, setOrganizingAi] = useState(false);
+  const uploadTableInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadPdfInputRef = useRef<HTMLInputElement | null>(null);
 
   const fetchListini = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -616,10 +620,36 @@ export default function ListiniPage() {
         <button onClick={handleCreateListino} className="btn-primary">{t('listini.newListino')}</button>
         {selectedListino && (
           <>
-            <label className="btn-primary cursor-pointer">
-              {uploading ? 'Import in corso...' : 'Carica CSV/Excel/PDF'}
-              <input type="file" accept=".csv,.txt,.xlsx,.xls,.pdf" onChange={handleUploadCsv} className="hidden" disabled={uploading} />
-            </label>
+            <button
+              onClick={() => uploadTableInputRef.current?.click()}
+              className="btn-primary"
+              disabled={uploading}
+            >
+              {uploading ? 'Import in corso...' : 'Carica CSV/Excel'}
+            </button>
+            <button
+              onClick={() => uploadPdfInputRef.current?.click()}
+              className="btn-primary"
+              disabled={uploading}
+            >
+              {uploading ? 'Import in corso...' : 'Carica PDF'}
+            </button>
+            <input
+              ref={uploadTableInputRef}
+              type="file"
+              accept=".csv,.txt,.xlsx,.xls"
+              onChange={handleUploadCsv}
+              className="hidden"
+              disabled={uploading}
+            />
+            <input
+              ref={uploadPdfInputRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={handleUploadCsv}
+              className="hidden"
+              disabled={uploading}
+            />
             <button onClick={openPricingRulesModal} className="btn-secondary" disabled={uploading || organizingAi}>
               Regole prezzo
             </button>

@@ -37,6 +37,7 @@ async function reportDebugEvent(event: {
   msg: string;
   data?: Record<string, unknown>;
 }) {
+  if (process.env.NODE_ENV === 'production') return;
   let debugServerUrl = DEBUG_SERVER_FALLBACK_URL;
 
   try {
