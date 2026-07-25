@@ -20,6 +20,33 @@ import { useTheme } from '../lib/darkMode';
 import { buildWebApiUrl, isWebApiConfigured } from '../lib/webApi';
 
 type Listino = { id: string; name: string };
+type ListinoSourceInfo = {
+  fileName: string;
+  mimeType: string;
+  uploadedAt: string;
+  aiFeedback?: string | null;
+  parsedSummary?: {
+    totalRows?: number;
+    parsedRows?: number;
+    normalizedPriceRows?: number;
+    unitDetectedRows?: number;
+    pendingReferenceRows?: number;
+  } | null;
+  pricingDiagnostics?: {
+    resolvedFromFile?: number;
+    resolvedFromDerived?: number;
+    resolvedFromRule?: number;
+    unresolved?: number;
+    recommendedRules?: Array<{ label?: string; reference_unit?: string }>;
+  } | null;
+  sourceDiagnostics?: Array<{
+    sourceName?: string;
+    selected?: boolean;
+    reason?: string | null;
+  }>;
+  requiresPricingRules?: boolean;
+  downloadUrl?: string;
+};
 
 type ListinoItem = {
   id: string;
@@ -42,6 +69,10 @@ type PricingRule = {
 
 type UploadPayload = {
   error?: string;
+  inserted?: number;
+  sourceStored?: boolean;
+  aiFeedback?: string | null;
+  sourceInfo?: ListinoSourceInfo | null;
   summary?: {
     totalRows?: number;
     parsedRows?: number;
@@ -171,6 +202,14 @@ function parseUploadPayload(body: string): UploadPayload {
   }
 }
 
+async function readFileBase64(uri: string): Promise<string> {
+  const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+  if (!base64?.trim()) {
+    throw new Error('Non sono riuscito a leggere il PDF selezionato.');
+  }
+  return base64;
+}
+
 export default function ListiniScreen() {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -178,6 +217,7 @@ export default function ListiniScreen() {
   const [listini, setListini] = useState<Listino[]>([]);
   const [items, setItems] = useState<ListinoItem[]>([]);
   const [selectedListino, setSelectedListino] = useState<Listino | null>(null);
+  const [selectedSourceInfo, setSelectedSourceInfo] = useState<ListinoSourceInfo | null>(null);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [profileMarkupPercent, setProfileMarkupPercent] = useState<number>(0);
 
@@ -274,6 +314,24 @@ export default function ListiniScreen() {
     }
   }, [t]);
 
+  const fetchSourceInfo = useCallback(async (listinoId: string, nextProfileId: string) => {
+    if (!isWebApiConfigured()) {
+      setSelectedSourceInfo(null);
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        buildWebApiUrl(`/api/listini/source?listinoId=${encodeURIComponent(listinoId)}&profileId=${encodeURIComponent(nextProfileId)}`)
+      );
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.error || 'Lettura sorgente non riuscita');
+      setSelectedSourceInfo((payload?.sourceInfo as ListinoSourceInfo | null) || null);
+    } catch {
+      setSelectedSourceInfo(null);
+    }
+  }, []);
+
   const fetchPricingRules = useCallback(async () => {
     if (!profileId) return;
     setPricingRulesLoading(true);
@@ -304,10 +362,14 @@ export default function ListiniScreen() {
   useEffect(() => {
     if (!selectedListino?.id) {
       setItems([]);
+      setSelectedSourceInfo(null);
       return;
     }
     fetchItems(selectedListino.id);
-  }, [fetchItems, selectedListino?.id]);
+    if (profileId) {
+      fetchSourceInfo(selectedListino.id, profileId);
+    }
+  }, [fetchItems, fetchSourceInfo, profileId, selectedListino?.id]);
 
   useEffect(() => {
     if (!profileId) return;
@@ -316,6 +378,9 @@ export default function ListiniScreen() {
       .channel(`mobile-listini-${profileId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'listini', filter: `profile_id=eq.${profileId}` }, () => {
         fetchListini();
+        if (selectedListino?.id) {
+          fetchSourceInfo(selectedListino.id, profileId);
+        }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'listini_vettoriali' }, () => {
         if (selectedListino?.id) {
@@ -332,7 +397,7 @@ export default function ListiniScreen() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchItems, fetchListini, fetchPricingRules, profileId, selectedListino?.id, showPricingRulesModal]);
+  }, [fetchItems, fetchListini, fetchPricingRules, fetchSourceInfo, profileId, selectedListino?.id, showPricingRulesModal]);
 
   const resetListinoForm = () => {
     setEditingListino(null);
@@ -504,9 +569,18 @@ export default function ListiniScreen() {
       }
 
       await fetchItems(listinoId);
+      await fetchSourceInfo(listinoId, profileId);
 
       if (!options?.silentSuccess) {
-        Alert.alert('AI completata', `${payload.updatedCount || 0} voci aggiornate`);
+        if (payload?.usedStoredSource) {
+          const importedCount = payload?.importedCount || 0;
+          const summary = importedCount
+            ? `${importedCount} voci importate dalla sorgente PDF`
+            : (payload?.aiFeedback || 'Sorgente PDF analizzata');
+          Alert.alert('AI completata', summary);
+        } else {
+          Alert.alert('AI completata', `${payload.updatedCount || 0} voci aggiornate`);
+        }
       }
 
       return payload;
@@ -571,21 +645,58 @@ export default function ListiniScreen() {
       }
 
       setUploading(true);
-      const response = await FileSystem.uploadAsync(buildWebApiUrl('/api/listini/upload'), asset.uri, {
-        fieldName: 'file',
-        httpMethod: 'POST',
-        mimeType,
-        parameters: {
-          profileId,
-          listinoId: selectedListino.id,
-          originalFileName: fileName,
-        },
-        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-      });
+      let payload: UploadPayload;
+      let statusCode = 0;
 
-      const payload = parseUploadPayload(response.body);
-      if (response.status < 200 || response.status >= 300) {
+      if (mimeType === 'application/pdf') {
+        const fileBase64 = await readFileBase64(asset.uri);
+        const response = await fetch(buildWebApiUrl('/api/listini/upload'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileBase64,
+            fileName,
+            mimeType,
+            profileId,
+            listinoId: selectedListino.id,
+            originalFileName: fileName,
+          }),
+        });
+        statusCode = response.status;
+        payload = (await response.json()) as UploadPayload;
+      } else {
+        const response = await FileSystem.uploadAsync(buildWebApiUrl('/api/listini/upload'), asset.uri, {
+          fieldName: 'file',
+          httpMethod: 'POST',
+          mimeType,
+          parameters: {
+            profileId,
+            listinoId: selectedListino.id,
+            originalFileName: fileName,
+          },
+          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        });
+        statusCode = response.status;
+        payload = parseUploadPayload(response.body);
+      }
+
+      if (statusCode < 200 || statusCode >= 300) {
         throw new Error(buildUploadErrorMessage(payload));
+      }
+
+      if (payload?.sourceStored) {
+        await fetchSourceInfo(selectedListino.id, profileId);
+      } else if (payload?.sourceInfo) {
+        setSelectedSourceInfo(payload.sourceInfo);
+      }
+
+      if (payload?.sourceStored && (!payload?.inserted || payload.inserted === 0)) {
+        const aiLine = payload?.aiFeedback ? `\n\n${payload.aiFeedback}` : '';
+        const rules = summarizeRecommendedRules(payload);
+        const rulesLine = rules ? `\n\nRegole consigliate: ${rules}` : '';
+        await fetchItems(selectedListino.id);
+        Alert.alert('PDF salvato', `Il PDF e stato salvato come sorgente del listino.${aiLine}${rulesLine}`);
+        return;
       }
 
       let aiLine = 'Organizzazione AI avviata automaticamente.';
@@ -815,6 +926,30 @@ export default function ListiniScreen() {
                   <ActivityIndicator size="small" color={colors.primary} />
                 ) : null}
               </View>
+
+              {selectedSourceInfo ? (
+                <View style={[styles.noticeCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 12 }]}>
+                  <Text style={[styles.noticeTitle, { color: colors.text }]}>
+                    Sorgente caricata: {selectedSourceInfo.fileName}
+                  </Text>
+                  <Text style={[styles.noticeText, { color: colors.textSecondary }]}>
+                    {new Date(selectedSourceInfo.uploadedAt).toLocaleString('it-IT')}
+                  </Text>
+                  {selectedSourceInfo.aiFeedback ? (
+                    <Text style={[styles.noticeText, { color: colors.textSecondary, marginTop: 8 }]}>
+                      {selectedSourceInfo.aiFeedback}
+                    </Text>
+                  ) : null}
+                  {selectedSourceInfo.requiresPricingRules && selectedSourceInfo.pricingDiagnostics?.recommendedRules?.length ? (
+                    <Text style={[styles.noticeText, { color: colors.textSecondary, marginTop: 8 }]}>
+                      Regole consigliate: {selectedSourceInfo.pricingDiagnostics.recommendedRules
+                        .slice(0, 3)
+                        .map((rule) => `${rule.label} (${rule.reference_unit})`)
+                        .join(', ')}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
 
               <FlatList
                 data={items}

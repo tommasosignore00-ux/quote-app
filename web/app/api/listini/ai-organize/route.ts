@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
+import { resolveImportPricing } from '../../../../lib/listinoPricing';
+import { getListinoSourceMetadata } from '../../../../lib/listinoSourceStorage';
+import type { UniversalImportResult } from '../../../../lib/listinoUniversalImport';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const supabase = supabaseAdmin;
@@ -113,7 +116,84 @@ export async function POST(req: Request) {
 
     const sourceRows = (rows || []).filter((row) => row.description?.trim());
     if (!sourceRows.length) {
-      return NextResponse.json({ ok: true, updatedCount: 0, processedCount: 0 });
+      const sourceMetadata = await getListinoSourceMetadata({ profileId, listinoId });
+      const candidateItems = sourceMetadata?.candidateItems || [];
+      if (!candidateItems.length) {
+        return NextResponse.json({
+          ok: true,
+          updatedCount: 0,
+          processedCount: 0,
+          usedStoredSource: Boolean(sourceMetadata),
+          aiFeedback: sourceMetadata?.aiFeedback || null,
+          pricingDiagnostics: sourceMetadata?.pricingDiagnostics || null,
+        });
+      }
+
+      const parsed: UniversalImportResult = {
+        items: candidateItems,
+        summary: sourceMetadata?.parsedSummary || {
+          totalRows: candidateItems.length,
+          parsedRows: candidateItems.length,
+          skippedRows: 0,
+          normalizedPriceRows: candidateItems.filter((item) => item.unit_price > 0).length,
+          unitDetectedRows: candidateItems.filter((item) => item.pricing_basis_unit).length,
+          pendingReferenceRows: candidateItems.filter((item) => item.pricing_status === 'needs_reference').length,
+        },
+      };
+
+      const pricingResolution = await resolveImportPricing({ profileId, parsed });
+      if (!pricingResolution.items.length) {
+        return NextResponse.json({
+          ok: true,
+          updatedCount: 0,
+          processedCount: candidateItems.length,
+          importedCount: 0,
+          usedStoredSource: true,
+          aiFeedback: sourceMetadata?.aiFeedback || null,
+          pricingDiagnostics: pricingResolution.diagnostics,
+        });
+      }
+
+      const itemsToInsert = pricingResolution.items.map((row) => ({
+        listino_id: listinoId,
+        profile_id: profileId,
+        description: row.description.trim(),
+        unit_price: row.unit_price,
+        markup_percent: row.markup_percent,
+        category: row.category || null,
+        embedding: null,
+        created_at: new Date().toISOString(),
+      }));
+
+      const batchSize = 200;
+      for (let i = 0; i < itemsToInsert.length; i += batchSize) {
+        const batch = itemsToInsert.slice(i, i + batchSize);
+        const { error } = await supabase.from('listini_vettoriali').insert(batch);
+        if (error) {
+          return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+      }
+
+      try {
+        const origin = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
+        await fetch(`${origin}/api/embeddings/bulk-generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ listinoId }),
+        });
+      } catch (e) {
+        console.warn('Failed to trigger bulk embeddings', e);
+      }
+
+      return NextResponse.json({
+        ok: true,
+        updatedCount: itemsToInsert.length,
+        processedCount: candidateItems.length,
+        importedCount: itemsToInsert.length,
+        usedStoredSource: true,
+        aiFeedback: sourceMetadata?.aiFeedback || null,
+        pricingDiagnostics: pricingResolution.diagnostics,
+      });
     }
 
     const updates: Array<{ id: string; category: string }> = [];

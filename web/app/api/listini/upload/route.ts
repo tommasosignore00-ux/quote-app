@@ -8,12 +8,15 @@ import OpenAI from 'openai';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import * as XLSX from 'xlsx';
 import {
+  type UniversalImportResult,
+  type UniversalParsedItem,
   mergeUniversalImportResults,
   parseUniversalCsvText,
   parseUniversalPdfText,
   parseUniversalSpreadsheetRows,
 } from '../../../../lib/listinoUniversalImport';
 import { resolveImportPricing } from '../../../../lib/listinoPricing';
+import { uploadListinoSource } from '../../../../lib/listinoSourceStorage';
 
 const supabase = supabaseAdmin;
 const execFileAsync = promisify(execFile);
@@ -372,6 +375,139 @@ function getReadablePdfError(error: unknown): string {
   return `Non sono riuscito a leggere il PDF: ${message}`;
 }
 
+function buildEmptySummary(): UniversalImportResult['summary'] {
+  return {
+    totalRows: 0,
+    parsedRows: 0,
+    skippedRows: 0,
+    normalizedPriceRows: 0,
+    unitDetectedRows: 0,
+    pendingReferenceRows: 0,
+  };
+}
+
+async function summarizePdfSourceWithAi(params: {
+  fileName: string;
+  sourceText: string;
+  parsed: UniversalImportResult;
+}) {
+  const preview = params.sourceText.trim().slice(0, 12000);
+  if (!preview) {
+    return 'PDF salvato come sorgente del listino. Non sono riuscito a leggere abbastanza testo utile per ricavare voci affidabili.';
+  }
+
+  if (!openai) {
+    return params.parsed.items.length
+      ? `PDF salvato come sorgente del listino. Ho trovato ${params.parsed.items.length} voci potenziali da usare con le regole prezzo.`
+      : 'PDF salvato come sorgente del listino. Imposta le regole prezzo e rilancia l AI per provare a ricavare le voci.';
+  }
+
+  const completion = await openai.chat.completions.create({
+    model: process.env.OPENAI_AGENT_MODEL || 'gpt-4o-mini',
+    temperature: 0.1,
+    messages: [
+      {
+        role: 'system',
+        content:
+          'Sei un assistente che riassume listini tecnici importati da PDF. ' +
+          'Devi dare un riscontro breve e pratico in italiano, massimo 4 frasi. ' +
+          'Spiega cosa sei riuscito a leggere, se mancano prezzi espliciti e quali regole prezzo servono per completare l import.',
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          file_name: params.fileName,
+          parsed_summary: params.parsed.summary,
+          candidate_count: params.parsed.items.length,
+          text_preview: preview,
+        }),
+      },
+    ],
+  });
+
+  return completion.choices[0]?.message?.content?.trim()
+    || 'PDF salvato come sorgente del listino. Ho preparato il contenuto per un secondo passaggio AI con le regole prezzo.';
+}
+
+async function extractPdfCandidatesWithAi(params: {
+  fileName: string;
+  sourceText: string;
+}): Promise<UniversalParsedItem[]> {
+  const preview = params.sourceText.trim().slice(0, 18000);
+  if (!preview || !openai) return [];
+
+  const completion = await openai.chat.completions.create({
+    model: process.env.OPENAI_AGENT_MODEL || 'gpt-4o-mini',
+    temperature: 0,
+    response_format: { type: 'json_object' },
+    messages: [
+      {
+        role: 'system',
+        content:
+          'Estrai da un PDF di listino tecnico un elenco di voci importabili. ' +
+          'Restituisci solo JSON nel formato {"items":[...]} con campi: ' +
+          'description, category, unit_price, pricing_basis_unit, pricing_basis_quantity, inferred_rule_key. ' +
+          'Usa unit_price solo se il prezzo e chiaramente presente. ' +
+          'Se il prezzo non c e ma esistono misure utili, compila pricing_basis_unit e pricing_basis_quantity. ' +
+          'Usa inferred_rule_key solo tra: metal_ferrous, metal_nonferrous, electric_cable, piping, paint_chemical, wood_panel, generic. ' +
+          'Le unita ammesse sono: kg, m, l, m2, pcs. Non inventare dati.',
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          file_name: params.fileName,
+          text_preview: preview,
+        }),
+      },
+    ],
+  });
+
+  const raw = completion.choices[0]?.message?.content || '{}';
+  let parsed: {
+    items?: Array<{
+      description?: string;
+      category?: string | null;
+      unit_price?: number | string | null;
+      pricing_basis_unit?: string | null;
+      pricing_basis_quantity?: number | string | null;
+      inferred_rule_key?: string | null;
+    }>;
+  } = {};
+
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+
+  const mappedItems: UniversalParsedItem[] = [];
+
+  for (const item of parsed.items || []) {
+      const description = String(item.description || '').trim();
+      const unitPrice = Number(item.unit_price || 0);
+      const pricingBasisQuantity = Number(item.pricing_basis_quantity || 0);
+      const pricingBasisUnit = String(item.pricing_basis_unit || '').trim() || null;
+      const inferredRuleKey = String(item.inferred_rule_key || '').trim() || null;
+      const category = String(item.category || '').trim() || null;
+
+      if (!description) continue;
+
+      mappedItems.push({
+        description,
+        unit_price: Number.isFinite(unitPrice) && unitPrice > 0 ? unitPrice : 0,
+        markup_percent: 0,
+        category,
+        pricing_source: Number.isFinite(unitPrice) && unitPrice > 0 ? 'file' : 'needs_reference',
+        pricing_status: Number.isFinite(unitPrice) && unitPrice > 0 ? 'resolved' : 'needs_reference',
+        pricing_basis_unit: pricingBasisUnit,
+        pricing_basis_quantity: Number.isFinite(pricingBasisQuantity) && pricingBasisQuantity > 0 ? pricingBasisQuantity : null,
+        inferred_rule_key: inferredRuleKey,
+      });
+  }
+
+  return mappedItems;
+}
+
 function inferUploadExtension(params: {
   fileName?: string | null;
   originalFileName?: string | null;
@@ -400,14 +536,54 @@ function inferUploadExtension(params: {
 
 export async function POST(req: Request) {
   try {
-    const formData = await req.formData();
-    const file = formData.get('file') as File | null;
-    const listinoName = formData.get('listinoName') as string | null;
-    const profileId = formData.get('profileId') as string | null;
-    const listinoId = formData.get('listinoId') as string | null;
-    const originalFileName = formData.get('originalFileName') as string | null;
+    const requestContentType = req.headers.get('content-type') || '';
+    let listinoName: string | null = null;
+    let profileId: string | null = null;
+    let listinoId: string | null = null;
+    let originalFileName: string | null = null;
+    let uploadedFileName = '';
+    let uploadedFileType = '';
+    let arrayBuffer = new ArrayBuffer(0);
 
-    if (!file || !profileId) return NextResponse.json({ error: 'Missing file or profileId' }, { status: 400 });
+    if (requestContentType.includes('application/json')) {
+      const payload = await req.json() as {
+        fileBase64?: string;
+        fileName?: string;
+        mimeType?: string;
+        listinoName?: string | null;
+        profileId?: string | null;
+        listinoId?: string | null;
+        originalFileName?: string | null;
+      };
+
+      profileId = payload.profileId || null;
+      listinoId = payload.listinoId || null;
+      listinoName = payload.listinoName || null;
+      originalFileName = payload.originalFileName || payload.fileName || null;
+      uploadedFileName = String(payload.fileName || originalFileName || '').trim();
+      uploadedFileType = String(payload.mimeType || '').trim();
+
+      if (!payload.fileBase64 || !profileId || !uploadedFileName) {
+        return NextResponse.json({ error: 'Missing file or profileId' }, { status: 400 });
+      }
+
+      arrayBuffer = Uint8Array.from(Buffer.from(payload.fileBase64, 'base64')).buffer;
+    } else {
+      const formData = await req.formData();
+      const file = formData.get('file') as File | null;
+      listinoName = formData.get('listinoName') as string | null;
+      profileId = formData.get('profileId') as string | null;
+      listinoId = formData.get('listinoId') as string | null;
+      originalFileName = formData.get('originalFileName') as string | null;
+
+      if (!file || !profileId) {
+        return NextResponse.json({ error: 'Missing file or profileId' }, { status: 400 });
+      }
+
+      uploadedFileName = file.name;
+      uploadedFileType = file.type;
+      arrayBuffer = await file.arrayBuffer();
+    }
 
     // #region debug-point C:route-start
     await reportDebugEvent({
@@ -416,19 +592,20 @@ export async function POST(req: Request) {
       location: 'web/app/api/listini/upload/route.ts:POST:start',
       msg: '[DEBUG] Upload route received request',
       data: {
-        fileName: file.name,
-        fileType: file.type,
+        fileName: uploadedFileName,
+        fileType: uploadedFileType,
         profileId,
         listinoId,
         originalFileName,
+        requestContentType,
       },
     });
     // #endregion
-    const arrayBuffer = await file.arrayBuffer();
+
     const ext = inferUploadExtension({
-      fileName: file.name,
+      fileName: uploadedFileName,
       originalFileName,
-      mimeType: file.type,
+      mimeType: uploadedFileType,
     });
 
     // #region debug-point C:route-array-buffer
@@ -440,7 +617,7 @@ export async function POST(req: Request) {
       data: {
         ext,
         byteLength: arrayBuffer.byteLength,
-        fileName: file.name,
+        fileName: uploadedFileName,
       },
     });
     // #endregion
@@ -479,14 +656,15 @@ export async function POST(req: Request) {
         location: 'web/app/api/listini/upload/route.ts:POST:pdf-branch',
         msg: '[DEBUG] Upload route entered PDF branch',
         data: {
-          fileName: file.name,
-          fileType: file.type,
+          fileName: uploadedFileName,
+          fileType: uploadedFileType,
           byteLength: arrayBuffer.byteLength,
         },
       });
       // #endregion
       const pdfBuffer = Buffer.from(arrayBuffer);
       let pdfText = '';
+      let combinedPdfText = '';
       let pdfReadError: unknown = null;
       let ocrApplied = false;
       let ocrFailedReason: string | null = null;
@@ -532,13 +710,14 @@ export async function POST(req: Request) {
 
           if (rendered.images.length > 0) {
             const ocrText = await ocrPdfImages({
-              fileName: file.name,
+              fileName: uploadedFileName,
               images: rendered.images,
             });
 
             ocrApplied = true;
             if (ocrText.trim()) {
-              parsed = parseUniversalPdfText([pdfText, ocrText].filter(Boolean).join('\n'));
+              combinedPdfText = [pdfText, ocrText].filter(Boolean).join('\n');
+              parsed = parseUniversalPdfText(combinedPdfText);
             }
           }
         } catch (ocrError) {
@@ -546,58 +725,203 @@ export async function POST(req: Request) {
         }
       }
 
-      if (!parsed.items.length && pdfReadError && !ocrApplied && !ocrFailedReason) {
-        return NextResponse.json(
-          {
-            error: getReadablePdfError(pdfReadError),
-            summary: { totalRows: 0, parsedRows: 0, skippedRows: 0, normalizedPriceRows: 0, unitDetectedRows: 0, pendingReferenceRows: 0 },
-            sourceDiagnostics: [
-              {
-                sourceName: file.name,
-                selected: false,
-                parsedRows: 0,
-                totalRows: 0,
-                score: 0,
-                reason: getReadablePdfError(pdfReadError),
-              },
-            ],
-          },
-          { status: 400 }
-        );
+      if (!combinedPdfText) {
+        combinedPdfText = pdfText;
       }
 
-      const ocrHint =
-        ocrApplied && ocrRenderedPages > 0
-          ? ocrTotalPages > ocrRenderedPages
-            ? `OCR automatico usato sulle prime ${ocrRenderedPages} di ${ocrTotalPages} pagine`
-            : `OCR automatico usato su ${ocrRenderedPages} pagine`
-          : null;
+      if (!parsed.items.length && combinedPdfText.trim()) {
+        const aiCandidates = await extractPdfCandidatesWithAi({
+          fileName: uploadedFileName,
+          sourceText: combinedPdfText,
+        });
 
-      sourceDiagnostics = [
-        {
-          sourceName: file.name,
-          selected: true,
-          parsedRows: parsed.summary.parsedRows,
-          totalRows: parsed.summary.totalRows,
-          score: parsed.summary.parsedRows > 0 ? 100 : 0,
-          reason:
-            parsed.summary.parsedRows > 0
-              ? ocrHint
-              : ocrFailedReason
-                ? `Ho provato anche l OCR automatico, ma non e riuscito: ${ocrFailedReason}`
-                : ocrHint
-                  ? `${ocrHint}, ma non ho trovato voci con prezzi riconoscibili`
-                  : 'PDF senza testo utile o senza prezzi riconoscibili',
-          ocrApplied,
-          ocrRenderedPages,
-          ocrTotalPages,
+        if (aiCandidates.length) {
+          parsed = {
+            items: aiCandidates,
+            summary: {
+              totalRows: aiCandidates.length,
+              parsedRows: aiCandidates.length,
+              skippedRows: 0,
+              normalizedPriceRows: aiCandidates.filter((item) => item.unit_price > 0).length,
+              unitDetectedRows: aiCandidates.filter((item) => item.pricing_basis_unit).length,
+              pendingReferenceRows: aiCandidates.filter((item) => item.pricing_status === 'needs_reference').length,
+            },
+          };
+        }
+      }
+
+      if (!parsed.items.length && pdfReadError && !ocrApplied && !ocrFailedReason) {
+        parsed = {
+          items: [],
+          summary: buildEmptySummary(),
+        };
+        sourceDiagnostics = [
+          {
+            sourceName: uploadedFileName,
+            selected: false,
+            parsedRows: 0,
+            totalRows: 0,
+            score: 0,
+            reason: getReadablePdfError(pdfReadError),
+          },
+        ];
+      }
+
+      if (!sourceDiagnostics.length) {
+        const ocrHint =
+          ocrApplied && ocrRenderedPages > 0
+            ? ocrTotalPages > ocrRenderedPages
+              ? `OCR automatico usato sulle prime ${ocrRenderedPages} di ${ocrTotalPages} pagine`
+              : `OCR automatico usato su ${ocrRenderedPages} pagine`
+            : null;
+
+        sourceDiagnostics = [
+          {
+            sourceName: uploadedFileName,
+            selected: true,
+            parsedRows: parsed.summary.parsedRows,
+            totalRows: parsed.summary.totalRows,
+            score: parsed.summary.parsedRows > 0 ? 100 : 0,
+            reason:
+              parsed.summary.parsedRows > 0
+                ? ocrHint
+                : ocrFailedReason
+                  ? `Ho provato anche l OCR automatico, ma non e riuscito: ${ocrFailedReason}`
+                  : ocrHint
+                    ? `${ocrHint}, ma non ho trovato voci con prezzi riconoscibili`
+                    : 'PDF senza testo utile o senza prezzi riconoscibili',
+            ocrApplied,
+            ocrRenderedPages,
+            ocrTotalPages,
+            aiCandidateFallback: parsed.items.length > 0 && !pdfText.trim(),
+          },
+        ];
+      }
+
+      let targetListinoId = listinoId;
+      if (targetListinoId) {
+        const { data: existingListino, error: existingListinoErr } = await supabase
+          .from('listini')
+          .select('id')
+          .eq('id', targetListinoId)
+          .eq('profile_id', profileId)
+          .maybeSingle();
+        if (existingListinoErr) return NextResponse.json({ error: existingListinoErr.message }, { status: 500 });
+        if (!existingListino) return NextResponse.json({ error: 'Listino non trovato' }, { status: 404 });
+      } else {
+        const { data: listino, error: listinoErr } = await supabase
+          .from('listini')
+          .insert({ profile_id: profileId, name: listinoName || `Imported ${new Date().toISOString()}` })
+          .select('id')
+          .single();
+        if (listinoErr) return NextResponse.json({ error: listinoErr.message }, { status: 500 });
+        targetListinoId = listino.id;
+      }
+
+      const pricingResolution = await resolveImportPricing({ profileId, parsed });
+      const aiFeedback = await summarizePdfSourceWithAi({
+        fileName: uploadedFileName,
+        sourceText: combinedPdfText,
+        parsed,
+      });
+
+      const storedMetadata = await uploadListinoSource({
+        profileId,
+        listinoId: targetListinoId!,
+        fileName: originalFileName || uploadedFileName,
+        mimeType: uploadedFileType || 'application/pdf',
+        fileBuffer: pdfBuffer,
+        metadata: {
+          listinoId: targetListinoId!,
+          profileId,
+          fileName: originalFileName || uploadedFileName,
+          mimeType: uploadedFileType || 'application/pdf',
+          uploadedAt: new Date().toISOString(),
+          sourceText: combinedPdfText.slice(0, 200000),
+          sourceTextPreview: combinedPdfText.slice(0, 4000),
+          parsedSummary: parsed.summary,
+          candidateItems: parsed.items,
+          sourceDiagnostics,
+          pricingDiagnostics: pricingResolution.diagnostics,
+          aiFeedback,
+          requiresPricingRules: !pricingResolution.items.length,
         },
-      ];
+      });
+
+      if (!pricingResolution.items.length) {
+        return NextResponse.json({
+          ok: true,
+          inserted: 0,
+          listinoId: targetListinoId,
+          summary: pricingResolution.summary,
+          sourceDiagnostics,
+          pricingDiagnostics: pricingResolution.diagnostics,
+          sourceStored: true,
+          aiFeedback,
+          sourceInfo: {
+            fileName: storedMetadata.fileName,
+            mimeType: storedMetadata.mimeType,
+            uploadedAt: storedMetadata.uploadedAt,
+          },
+        });
+      }
+
+      const itemsToInsert = pricingResolution.items.map((row) => ({
+        listino_id: targetListinoId,
+        profile_id: profileId,
+        description: row.description.trim(),
+        unit_price: row.unit_price,
+        markup_percent: row.markup_percent,
+        category: row.category || null,
+      }));
+
+      const batchSize = 200;
+      for (let i = 0; i < itemsToInsert.length; i += batchSize) {
+        const batch = itemsToInsert.slice(i, i + batchSize);
+        const { error } = await supabase.from('listini_vettoriali').insert(batch.map((item) => ({
+          profile_id: item.profile_id,
+          description: item.description,
+          unit_price: item.unit_price,
+          markup_percent: item.markup_percent,
+          category: item.category,
+          listino_id: item.listino_id,
+          embedding: null,
+          created_at: new Date().toISOString(),
+        })));
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      try {
+        const origin = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
+        await fetch(`${origin}/api/embeddings/bulk-generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ listinoId: targetListinoId }),
+        });
+      } catch (e) {
+        console.warn('Failed to trigger bulk embeddings', e);
+      }
+
+      return NextResponse.json({
+        ok: true,
+        inserted: itemsToInsert.length,
+        listinoId: targetListinoId,
+        summary: pricingResolution.summary,
+        sourceDiagnostics,
+        pricingDiagnostics: pricingResolution.diagnostics,
+        sourceStored: true,
+        aiFeedback,
+        sourceInfo: {
+          fileName: storedMetadata.fileName,
+          mimeType: storedMetadata.mimeType,
+          uploadedAt: storedMetadata.uploadedAt,
+        },
+      });
     } else {
       parsed = parseUniversalCsvText(Buffer.from(arrayBuffer).toString('utf-8'));
       sourceDiagnostics = [
         {
-          sourceName: file.name,
+            sourceName: uploadedFileName,
           selected: true,
           parsedRows: parsed.summary.parsedRows,
           totalRows: parsed.summary.totalRows,

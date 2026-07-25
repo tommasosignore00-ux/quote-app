@@ -7,6 +7,33 @@ import toast from 'react-hot-toast';
 
 type Listino = { id: string; name: string };
 type ListinoItem = { id: string; description: string; unit_price: number; markup_percent: number; category?: string | null };
+type ListinoSourceInfo = {
+  fileName: string;
+  mimeType: string;
+  uploadedAt: string;
+  aiFeedback?: string | null;
+  parsedSummary?: {
+    totalRows?: number;
+    parsedRows?: number;
+    normalizedPriceRows?: number;
+    unitDetectedRows?: number;
+    pendingReferenceRows?: number;
+  } | null;
+  pricingDiagnostics?: {
+    resolvedFromFile?: number;
+    resolvedFromDerived?: number;
+    resolvedFromRule?: number;
+    unresolved?: number;
+    recommendedRules?: Array<{ label?: string; reference_unit?: string }>;
+  } | null;
+  sourceDiagnostics?: Array<{
+    sourceName?: string;
+    selected?: boolean;
+    reason?: string | null;
+  }>;
+  requiresPricingRules?: boolean;
+  downloadUrl?: string;
+};
 type PricingRule = {
   id: string;
   rule_key: string;
@@ -29,6 +56,23 @@ const RULE_PRESETS = [
 
 const DEBUG_SERVER_URL = 'http://127.0.0.1:7777/event';
 const DEBUG_SESSION_ID = 'pdf-upload-pattern-error';
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      const base64 = result.includes(',') ? result.split(',')[1] : result;
+      if (!base64) {
+        reject(new Error('Non sono riuscito a leggere il PDF selezionato.'));
+        return;
+      }
+      resolve(base64);
+    };
+    reader.onerror = () => reject(reader.error || new Error('Lettura file non riuscita'));
+    reader.readAsDataURL(file);
+  });
+}
 
 function reportDebugEvent(event: {
   runId: 'pre-fix' | 'post-fix';
@@ -56,6 +100,8 @@ export default function ListiniPage() {
   const [listini, setListini] = useState<Listino[]>([]);
   const [items, setItems] = useState<ListinoItem[]>([]);
   const [selectedListino, setSelectedListino] = useState<Listino | null>(null);
+  const [selectedSourceInfo, setSelectedSourceInfo] = useState<ListinoSourceInfo | null>(null);
+  const [profileId, setProfileId] = useState<string | null>(null);
   const [profileMarkupPercent, setProfileMarkupPercent] = useState<number>(0);
   
   const [showManualModal, setShowManualModal] = useState(false);
@@ -85,6 +131,7 @@ export default function ListiniPage() {
     if (!user) return;
     const { data: profile } = await supabase.from('profiles').select('id, material_markup_vat_percent').eq('id', user.id).single();
     if (!profile) return;
+    setProfileId(profile.id);
     setProfileMarkupPercent(profile.material_markup_vat_percent ?? 0);
     const { data } = await supabase.from('listini').select('id, name').eq('profile_id', profile.id);
     setListini(data || []);
@@ -93,6 +140,17 @@ export default function ListiniPage() {
   const fetchItems = async (listinoId: string) => {
     const { data } = await supabase.from('listini_vettoriali').select('id, description, unit_price, markup_percent, category').eq('listino_id', listinoId);
     setItems(data || []);
+  };
+
+  const fetchSourceInfo = async (listinoId: string, nextProfileId: string) => {
+    try {
+      const res = await fetch(`/api/listini/source?listinoId=${encodeURIComponent(listinoId)}&profileId=${encodeURIComponent(nextProfileId)}`);
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.error || 'Lettura sorgente non riuscita');
+      setSelectedSourceInfo(payload?.sourceInfo || null);
+    } catch {
+      setSelectedSourceInfo(null);
+    }
   };
 
   const fetchPricingRules = async () => {
@@ -117,7 +175,16 @@ export default function ListiniPage() {
   };
 
   useEffect(() => { fetchListini(); }, []);
-  useEffect(() => { if (selectedListino) fetchItems(selectedListino.id); }, [selectedListino?.id]);
+  useEffect(() => {
+    if (!selectedListino) {
+      setSelectedSourceInfo(null);
+      return;
+    }
+    fetchItems(selectedListino.id);
+    if (profileId) {
+      fetchSourceInfo(selectedListino.id, profileId);
+    }
+  }, [selectedListino?.id, profileId]);
 
   const resetPricingRuleForm = () => {
     setEditingPricingRuleId(null);
@@ -278,13 +345,8 @@ export default function ListiniPage() {
       setUploading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const profileId = (await supabase.from('profiles').select('id').eq('id', user.id).single()).data?.id;
-      if (!profileId) return;
-
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('profileId', profileId);
-      formData.append('listinoId', selectedListino.id);
+      const resolvedProfileId = profileId || (await supabase.from('profiles').select('id').eq('id', user.id).single()).data?.id;
+      if (!resolvedProfileId) return;
 
       // #region debug-point B:web-upload-before-fetch
       reportDebugEvent({
@@ -295,15 +357,37 @@ export default function ListiniPage() {
         data: {
           fileName: file.name,
           fileType: file.type,
-          profileId,
+          profileId: resolvedProfileId,
           listinoId: selectedListino.id,
         },
       });
       // #endregion
-      const res = await fetch('/api/listini/upload', {
-        method: 'POST',
-        body: formData,
-      });
+
+      let res: Response;
+      if ((file.type || '').toLowerCase() === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+        const fileBase64 = await fileToBase64(file);
+        res = await fetch('/api/listini/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileBase64,
+            fileName: file.name,
+            mimeType: file.type || 'application/pdf',
+            profileId: resolvedProfileId,
+            listinoId: selectedListino.id,
+            originalFileName: file.name,
+          }),
+        });
+      } else {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('profileId', resolvedProfileId);
+        formData.append('listinoId', selectedListino.id);
+        res = await fetch('/api/listini/upload', {
+          method: 'POST',
+          body: formData,
+        });
+      }
 
       // #region debug-point B:web-upload-response
       res.clone().text().then((body) => {
@@ -358,6 +442,28 @@ export default function ListiniPage() {
         throw new Error(`${payload?.error || 'Import non riuscito'}${detail}${pricingDetail}${rulesDetail}${skippedDetail}`);
       }
 
+      if (payload?.sourceStored) {
+        await fetchSourceInfo(selectedListino.id, resolvedProfileId);
+      } else if (payload?.sourceInfo) {
+        setSelectedSourceInfo(payload.sourceInfo as ListinoSourceInfo);
+      }
+
+      if (payload?.sourceStored && (!payload?.inserted || payload.inserted === 0)) {
+        toast.success('PDF salvato come sorgente del listino');
+        if (payload?.aiFeedback) {
+          toast(payload.aiFeedback, { duration: 8000, icon: 'ℹ️' });
+        }
+        if (payload?.pricingDiagnostics?.recommendedRules?.length) {
+          const topRules = payload.pricingDiagnostics.recommendedRules
+            .slice(0, 3)
+            .map((rule: any) => `${rule.label} (${rule.reference_unit})`)
+            .join(', ');
+          toast(`Imposta le regole prezzo e poi rilancia "Riorganizza con AI": ${topRules}`, { icon: '🧠', duration: 8000 });
+        }
+        await fetchItems(selectedListino.id);
+        return;
+      }
+
       const summary = payload.summary;
       const pricingDiagnostics = payload?.pricingDiagnostics;
       const selectedSources = Array.isArray(payload?.sourceDiagnostics)
@@ -380,7 +486,7 @@ export default function ListiniPage() {
       await fetchItems(selectedListino.id);
       toast.success('Organizzazione AI avviata automaticamente');
       try {
-        await runAiOrganize(selectedListino.id, profileId, { suppressErrorToast: true });
+        await runAiOrganize(selectedListino.id, resolvedProfileId, { suppressErrorToast: true });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Organizzazione AI non riuscita';
         toast.error(`Import completato, ma AI non riuscita: ${message}`);
@@ -470,8 +576,20 @@ export default function ListiniPage() {
         throw new Error(payload?.error || 'Organizzazione AI non riuscita');
       }
 
-      toast.success(`AI completata: ${payload.updatedCount} voci aggiornate`);
+      if (payload?.usedStoredSource) {
+        if (payload?.importedCount) {
+          toast.success(`AI completata: ${payload.importedCount} voci importate dalla sorgente PDF`);
+        } else {
+          toast.success('Sorgente PDF analizzata');
+        }
+        if (payload?.aiFeedback) {
+          toast(payload.aiFeedback, { duration: 8000, icon: 'ℹ️' });
+        }
+      } else {
+        toast.success(`AI completata: ${payload.updatedCount} voci aggiornate`);
+      }
       await fetchItems(listinoId);
+      await fetchSourceInfo(listinoId, profileId);
     } catch (err) {
       if (!options?.suppressErrorToast) {
         toast.error((err as Error).message);
@@ -557,6 +675,41 @@ export default function ListiniPage() {
           {selectedListino && (
             <>
               <h3 className="font-semibold mb-3">{t('listini.items')} {selectedListino.name}</h3>
+              {selectedSourceInfo && (
+                <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-medium text-slate-800">
+                        Sorgente caricata: {selectedSourceInfo.fileName}
+                      </div>
+                      <div className="text-slate-500">
+                        {new Date(selectedSourceInfo.uploadedAt).toLocaleString('it-IT')}
+                      </div>
+                    </div>
+                    {selectedSourceInfo.downloadUrl ? (
+                      <a
+                        href={selectedSourceInfo.downloadUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary underline"
+                      >
+                        Apri PDF
+                      </a>
+                    ) : null}
+                  </div>
+                  {selectedSourceInfo.aiFeedback ? (
+                    <p className="mt-2 text-slate-700">{selectedSourceInfo.aiFeedback}</p>
+                  ) : null}
+                  {selectedSourceInfo.requiresPricingRules && selectedSourceInfo.pricingDiagnostics?.recommendedRules?.length ? (
+                    <p className="mt-2 text-slate-600">
+                      Regole consigliate: {selectedSourceInfo.pricingDiagnostics.recommendedRules
+                        .slice(0, 3)
+                        .map((rule) => `${rule.label} (${rule.reference_unit})`)
+                        .join(', ')}
+                    </p>
+                  ) : null}
+                </div>
+              )}
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b">
