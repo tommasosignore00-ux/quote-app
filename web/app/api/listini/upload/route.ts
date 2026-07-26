@@ -387,6 +387,64 @@ function buildEmptySummary(): UniversalImportResult['summary'] {
   };
 }
 
+function buildSummaryFromItems(items: UniversalParsedItem[]): UniversalImportResult['summary'] {
+  return {
+    totalRows: items.length,
+    parsedRows: items.length,
+    skippedRows: 0,
+    normalizedPriceRows: items.filter((item) => item.unit_price > 0).length,
+    unitDetectedRows: items.filter((item) => item.pricing_basis_unit).length,
+    pendingReferenceRows: items.filter((item) => item.pricing_status === 'needs_reference').length,
+  };
+}
+
+function normalizeCandidateFingerprint(value: string | null | undefined) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function scoreCandidateItem(item: UniversalParsedItem) {
+  let score = 0;
+  if (item.unit_price > 0) score += 10;
+  if (item.pricing_basis_unit) score += 4;
+  if ((item.pricing_basis_quantity || 0) > 0) score += 3;
+  if (item.inferred_rule_key) score += 2;
+  if (item.category) score += 1;
+  score += Math.min(item.description.trim().length / 40, 2);
+  return score;
+}
+
+function mergeCandidateItems(...candidateSets: UniversalParsedItem[][]): UniversalParsedItem[] {
+  const merged = new Map<string, UniversalParsedItem>();
+
+  for (const items of candidateSets) {
+    for (const item of items) {
+      const description = String(item.description || '').trim();
+      if (!description) continue;
+
+      const fingerprint = [
+        normalizeCandidateFingerprint(description),
+        normalizeCandidateFingerprint(item.pricing_basis_unit || ''),
+        Number(item.pricing_basis_quantity || 0).toFixed(6),
+      ].join('::');
+
+      const existing = merged.get(fingerprint);
+      if (!existing || scoreCandidateItem(item) > scoreCandidateItem(existing)) {
+        merged.set(fingerprint, {
+          ...item,
+          description,
+        });
+      }
+    }
+  }
+
+  return Array.from(merged.values());
+}
+
 async function summarizePdfSourceWithAi(params: {
   fileName: string;
   sourceText: string;
@@ -394,6 +452,12 @@ async function summarizePdfSourceWithAi(params: {
 }) {
   const preview = params.sourceText.trim().slice(0, 12000);
   if (!preview) {
+    if (params.parsed.items.length > 0) {
+      const pending = params.parsed.summary.pendingReferenceRows || 0;
+      return pending > 0
+        ? `PDF salvato come sorgente tecnica del listino. Ho trovato ${params.parsed.items.length} voci candidate, di cui ${pending} da completare con le regole prezzo.`
+        : `PDF salvato come sorgente del listino. Ho trovato ${params.parsed.items.length} voci candidate pronte per l import.`;
+    }
     return 'PDF salvato come sorgente del listino. Non sono riuscito a leggere abbastanza testo utile per ricavare voci affidabili.';
   }
 
@@ -481,32 +545,126 @@ async function extractPdfCandidatesWithAi(params: {
     return [];
   }
 
+  return mapAiCandidateItems(parsed.items || []);
+}
+
+function mapAiCandidateItems(
+  items: Array<{
+    description?: string;
+    category?: string | null;
+    unit_price?: number | string | null;
+    pricing_basis_unit?: string | null;
+    pricing_basis_quantity?: number | string | null;
+    inferred_rule_key?: string | null;
+  }>
+): UniversalParsedItem[] {
   const mappedItems: UniversalParsedItem[] = [];
 
-  for (const item of parsed.items || []) {
-      const description = String(item.description || '').trim();
-      const unitPrice = Number(item.unit_price || 0);
-      const pricingBasisQuantity = Number(item.pricing_basis_quantity || 0);
-      const pricingBasisUnit = String(item.pricing_basis_unit || '').trim() || null;
-      const inferredRuleKey = String(item.inferred_rule_key || '').trim() || null;
-      const category = String(item.category || '').trim() || null;
+  for (const item of items) {
+    const description = String(item.description || '').trim();
+    const unitPrice = Number(item.unit_price || 0);
+    const pricingBasisQuantity = Number(item.pricing_basis_quantity || 0);
+    const pricingBasisUnit = String(item.pricing_basis_unit || '').trim() || null;
+    const inferredRuleKey = String(item.inferred_rule_key || '').trim() || null;
+    const category = String(item.category || '').trim() || null;
 
-      if (!description) continue;
+    if (!description) continue;
 
-      mappedItems.push({
-        description,
-        unit_price: Number.isFinite(unitPrice) && unitPrice > 0 ? unitPrice : 0,
-        markup_percent: 0,
-        category,
-        pricing_source: Number.isFinite(unitPrice) && unitPrice > 0 ? 'file' : 'needs_reference',
-        pricing_status: Number.isFinite(unitPrice) && unitPrice > 0 ? 'resolved' : 'needs_reference',
-        pricing_basis_unit: pricingBasisUnit,
-        pricing_basis_quantity: Number.isFinite(pricingBasisQuantity) && pricingBasisQuantity > 0 ? pricingBasisQuantity : null,
-        inferred_rule_key: inferredRuleKey,
-      });
+    mappedItems.push({
+      description,
+      unit_price: Number.isFinite(unitPrice) && unitPrice > 0 ? unitPrice : 0,
+      markup_percent: 0,
+      category,
+      pricing_source: Number.isFinite(unitPrice) && unitPrice > 0 ? 'file' : 'needs_reference',
+      pricing_status: Number.isFinite(unitPrice) && unitPrice > 0 ? 'resolved' : 'needs_reference',
+      pricing_basis_unit: pricingBasisUnit,
+      pricing_basis_quantity: Number.isFinite(pricingBasisQuantity) && pricingBasisQuantity > 0 ? pricingBasisQuantity : null,
+      inferred_rule_key: inferredRuleKey,
+    });
   }
 
   return mappedItems;
+}
+
+async function extractPdfCandidatesFromImagesWithAi(params: {
+  fileName: string;
+  images: Array<{ pageNumber: number; dataUrl: string }>;
+}): Promise<UniversalParsedItem[]> {
+  if (!openai || !params.images.length) return [];
+
+  const chunks = chunkArray(params.images, PDF_OCR_BATCH_SIZE);
+  const extractedCandidates: UniversalParsedItem[] = [];
+
+  for (const chunk of chunks) {
+    const userContent: Array<
+      | { type: 'text'; text: string }
+      | { type: 'image_url'; image_url: { url: string; detail: 'high' } }
+    > = [
+      {
+        type: 'text',
+        text:
+          `Queste immagini arrivano dal PDF "${params.fileName}" e mostrano un catalogo o listino tecnico.\n` +
+          'Estrai solo voci utili all import materiali, anche se il prezzo non e presente.\n' +
+          'Per ogni voce cerca di restituire:\n' +
+          '- description\n' +
+          '- category breve in italiano se evidente\n' +
+          '- unit_price solo se davvero leggibile\n' +
+          '- pricing_basis_unit e pricing_basis_quantity quando trovi misure come kg, m, l, m2 o pezzi\n' +
+          '- inferred_rule_key tra metal_ferrous, metal_nonferrous, electric_cable, piping, paint_chemical, wood_panel, generic\n' +
+          'Ignora loghi, immagini decorative, titoli generici, numeri pagina e testo non collegato a una voce materiale.\n' +
+          'Restituisci solo JSON nel formato {"items":[...]}',
+      },
+    ];
+
+    for (const image of chunk) {
+      userContent.push({ type: 'text', text: `Pagina ${image.pageNumber}` });
+      userContent.push({
+        type: 'image_url',
+        image_url: {
+          url: image.dataUrl,
+          detail: 'high',
+        },
+      });
+    }
+
+    const completion = await openai.chat.completions.create({
+      model: process.env.OPENAI_AGENT_MODEL || 'gpt-4o-mini',
+      temperature: 0,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Sei un assistente che estrae voci tecniche da cataloghi PDF. ' +
+            'Quando i prezzi non sono visibili devi comunque restituire le voci con unita e misure utili alle regole prezzo. ' +
+            'Non inventare dati e non restituire testo fuori formato JSON.',
+        },
+        {
+          role: 'user',
+          content: userContent,
+        },
+      ],
+    });
+
+    const raw = completion.choices[0]?.message?.content || '{}';
+    try {
+      const parsed = JSON.parse(raw) as {
+        items?: Array<{
+          description?: string;
+          category?: string | null;
+          unit_price?: number | string | null;
+          pricing_basis_unit?: string | null;
+          pricing_basis_quantity?: number | string | null;
+          inferred_rule_key?: string | null;
+        }>;
+      };
+      extractedCandidates.push(...mapAiCandidateItems(parsed.items || []));
+    } catch {
+      continue;
+    }
+  }
+
+  return mergeCandidateItems(extractedCandidates);
 }
 
 function inferUploadExtension(params: {
@@ -693,6 +851,7 @@ export async function POST(req: Request) {
       let ocrFailedReason: string | null = null;
       let ocrRenderedPages = 0;
       let ocrTotalPages = 0;
+      let renderedPdfImages: Array<{ pageNumber: number; dataUrl: string }> = [];
 
       try {
         pdfText = await extractPdfText(pdfBuffer);
@@ -725,11 +884,16 @@ export async function POST(req: Request) {
 
       parsed = parseUniversalPdfText(pdfText || '');
 
-      if (!parsed.items.length) {
+      const shouldTryRenderedFallback =
+        parsed.items.length === 0 ||
+        (parsed.summary.parsedRows < 8 && parsed.summary.pendingReferenceRows < 3);
+
+      if (shouldTryRenderedFallback) {
         try {
           const rendered = await renderPdfPages({ buffer: pdfBuffer, maxPages: PDF_OCR_MAX_PAGES });
           ocrRenderedPages = rendered.renderedPages;
           ocrTotalPages = rendered.totalPages;
+          renderedPdfImages = rendered.images;
 
           if (rendered.images.length > 0) {
             const ocrText = await ocrPdfImages({
@@ -752,7 +916,7 @@ export async function POST(req: Request) {
         combinedPdfText = pdfText;
       }
 
-      if (!parsed.items.length && combinedPdfText.trim()) {
+      if ((parsed.items.length === 0 || parsed.summary.pendingReferenceRows < 3) && combinedPdfText.trim()) {
         const aiCandidates = await extractPdfCandidatesWithAi({
           fileName: uploadedFileName,
           sourceText: combinedPdfText,
@@ -760,15 +924,23 @@ export async function POST(req: Request) {
 
         if (aiCandidates.length) {
           parsed = {
-            items: aiCandidates,
-            summary: {
-              totalRows: aiCandidates.length,
-              parsedRows: aiCandidates.length,
-              skippedRows: 0,
-              normalizedPriceRows: aiCandidates.filter((item) => item.unit_price > 0).length,
-              unitDetectedRows: aiCandidates.filter((item) => item.pricing_basis_unit).length,
-              pendingReferenceRows: aiCandidates.filter((item) => item.pricing_status === 'needs_reference').length,
-            },
+            items: mergeCandidateItems(parsed.items, aiCandidates),
+            summary: buildSummaryFromItems(mergeCandidateItems(parsed.items, aiCandidates)),
+          };
+        }
+      }
+
+      if ((parsed.items.length === 0 || parsed.summary.pendingReferenceRows < 5) && renderedPdfImages.length > 0) {
+        const visionCandidates = await extractPdfCandidatesFromImagesWithAi({
+          fileName: uploadedFileName,
+          images: renderedPdfImages.slice(0, 6),
+        });
+
+        if (visionCandidates.length) {
+          const mergedItems = mergeCandidateItems(parsed.items, visionCandidates);
+          parsed = {
+            items: mergedItems,
+            summary: buildSummaryFromItems(mergedItems),
           };
         }
       }

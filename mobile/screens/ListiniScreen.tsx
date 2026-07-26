@@ -78,6 +78,7 @@ type UploadPayload = {
     parsedRows?: number;
     normalizedPriceRows?: number;
     unitDetectedRows?: number;
+    pendingReferenceRows?: number;
   };
   pricingDiagnostics?: {
     resolvedFromFile?: number;
@@ -691,11 +692,16 @@ export default function ListiniScreen() {
       }
 
       if (payload?.sourceStored && (!payload?.inserted || payload.inserted === 0)) {
+        const candidateCount = Number(payload?.summary?.parsedRows || payload?.sourceInfo?.parsedSummary?.parsedRows || 0);
+        const pendingCount = Number(payload?.summary?.pendingReferenceRows || payload?.sourceInfo?.parsedSummary?.pendingReferenceRows || 0);
         const aiLine = payload?.aiFeedback ? `\n\n${payload.aiFeedback}` : '';
         const rules = summarizeRecommendedRules(payload);
         const rulesLine = rules ? `\n\nRegole consigliate: ${rules}` : '';
+        const candidateLine = candidateCount > 0
+          ? `\n\nVoci tecniche trovate: ${candidateCount}${pendingCount > 0 ? ` · da completare con regole prezzo: ${pendingCount}` : ''}`
+          : '';
         await fetchItems(selectedListino.id);
-        Alert.alert('PDF salvato', `Il PDF e stato salvato come sorgente del listino.${aiLine}${rulesLine}`);
+        Alert.alert('PDF salvato', `Il PDF e stato salvato come sorgente del listino.${candidateLine}${aiLine}${rulesLine}`);
         return;
       }
 
@@ -938,6 +944,14 @@ export default function ListiniScreen() {
                   {selectedSourceInfo.aiFeedback ? (
                     <Text style={[styles.noticeText, { color: colors.textSecondary, marginTop: 8 }]}>
                       {selectedSourceInfo.aiFeedback}
+                    </Text>
+                  ) : null}
+                  {selectedSourceInfo.parsedSummary?.parsedRows ? (
+                    <Text style={[styles.noticeText, { color: colors.textSecondary, marginTop: 8 }]}>
+                      Voci tecniche trovate: {selectedSourceInfo.parsedSummary.parsedRows}
+                      {selectedSourceInfo.parsedSummary.pendingReferenceRows
+                        ? ` · da completare con regole prezzo: ${selectedSourceInfo.parsedSummary.pendingReferenceRows}`
+                        : ''}
                     </Text>
                   ) : null}
                   {selectedSourceInfo.requiresPricingRules && selectedSourceInfo.pricingDiagnostics?.recommendedRules?.length ? (

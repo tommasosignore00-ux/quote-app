@@ -679,7 +679,13 @@ export default function ListiniPage() {
       }
 
       if (payload?.sourceStored && (!payload?.inserted || payload.inserted === 0)) {
-        toast.success('PDF salvato come sorgente del listino');
+        const candidateCount = Number(payload?.summary?.parsedRows || payload?.sourceInfo?.parsedSummary?.parsedRows || 0);
+        const pendingCount = Number(payload?.summary?.pendingReferenceRows || payload?.sourceInfo?.parsedSummary?.pendingReferenceRows || 0);
+        toast.success(
+          candidateCount > 0
+            ? `PDF salvato come sorgente tecnica: ${candidateCount} voci candidate${pendingCount > 0 ? `, ${pendingCount} da completare con regole prezzo` : ''}`
+            : 'PDF salvato come sorgente del listino'
+        );
         if (payload?.aiFeedback) {
           toast(payload.aiFeedback, { duration: 8000, icon: 'ℹ️' });
         }
@@ -983,6 +989,14 @@ export default function ListiniPage() {
                   </div>
                   {selectedSourceInfo.aiFeedback ? (
                     <p className="mt-2 text-slate-700">{selectedSourceInfo.aiFeedback}</p>
+                  ) : null}
+                  {selectedSourceInfo.parsedSummary?.parsedRows ? (
+                    <p className="mt-2 text-slate-600">
+                      Voci tecniche trovate: {selectedSourceInfo.parsedSummary.parsedRows}
+                      {selectedSourceInfo.parsedSummary.pendingReferenceRows
+                        ? ` · da completare con regole prezzo: ${selectedSourceInfo.parsedSummary.pendingReferenceRows}`
+                        : ''}
+                    </p>
                   ) : null}
                   {selectedSourceInfo.requiresPricingRules && selectedSourceInfo.pricingDiagnostics?.recommendedRules?.length ? (
                     <p className="mt-2 text-slate-600">
