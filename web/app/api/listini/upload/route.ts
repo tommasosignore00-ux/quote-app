@@ -28,7 +28,7 @@ const PDF_OCR_MAX_PAGES = 12;
 const PDF_OCR_BATCH_SIZE = 2;
 const PDF_OCR_SCREENSHOT_WIDTH = 1600;
 const DEBUG_SERVER_FALLBACK_URL = 'http://127.0.0.1:7777/event';
-const DEBUG_SESSION_ID = 'pdf-upload-pattern-error';
+const DEBUG_SESSION_ID = 'browser-pdf-upload';
 
 async function reportDebugEvent(event: {
   runId: 'pre-fix' | 'post-fix';

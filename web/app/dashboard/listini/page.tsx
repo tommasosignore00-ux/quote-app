@@ -55,7 +55,7 @@ const RULE_PRESETS = [
 ];
 
 const DEBUG_SERVER_URL = 'http://127.0.0.1:7777/event';
-const DEBUG_SESSION_ID = 'pdf-upload-pattern-error';
+const DEBUG_SESSION_ID = 'browser-pdf-upload';
 
 function fileToBase64(file: File): Promise<string> {
   return file.arrayBuffer().then((buffer) => {
@@ -82,7 +82,6 @@ function reportDebugEvent(event: {
   msg: string;
   data?: Record<string, unknown>;
 }) {
-  if (process.env.NODE_ENV === 'production') return;
   fetch(DEBUG_SERVER_URL, {
     method: 'POST',
     body: JSON.stringify({
@@ -369,7 +368,34 @@ export default function ListiniPage() {
 
       let res: Response;
       if ((file.type || '').toLowerCase() === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+          // #region debug-point B:web-upload-before-base64
+          reportDebugEvent({
+            runId: 'pre-fix',
+            hypothesisId: 'B',
+            location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:before-base64',
+            msg: '[DEBUG] PDF selected for client encoding',
+            data: {
+              fileName: file.name,
+              fileType: file.type,
+              fileSize: file.size,
+              href: typeof window !== 'undefined' ? window.location.href : null,
+              userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+            },
+          });
+          // #endregion
         const fileBase64 = await fileToBase64(file);
+          // #region debug-point B:web-upload-after-base64
+          reportDebugEvent({
+            runId: 'pre-fix',
+            hypothesisId: 'B',
+            location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:after-base64',
+            msg: '[DEBUG] PDF client encoding completed',
+            data: {
+              fileName: file.name,
+              base64Length: fileBase64.length,
+            },
+          });
+          // #endregion
         res = await fetch('/api/listini/upload', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -628,7 +654,22 @@ export default function ListiniPage() {
               {uploading ? 'Import in corso...' : 'Carica CSV/Excel'}
             </button>
             <button
-              onClick={() => uploadPdfInputRef.current?.click()}
+                onClick={() => {
+                  // #region debug-point A:web-pdf-button-click
+                  reportDebugEvent({
+                    runId: 'pre-fix',
+                    hypothesisId: 'A',
+                    location: 'web/app/dashboard/listini/page.tsx:pdf-button:click',
+                    msg: '[DEBUG] PDF upload button clicked',
+                    data: {
+                      href: typeof window !== 'undefined' ? window.location.href : null,
+                      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+                      hasInputRef: Boolean(uploadPdfInputRef.current),
+                    },
+                  });
+                  // #endregion
+                  uploadPdfInputRef.current?.click();
+                }}
               className="btn-primary"
               disabled={uploading}
             >
@@ -647,6 +688,20 @@ export default function ListiniPage() {
               type="file"
               accept="application/pdf,.pdf"
               onChange={handleUploadCsv}
+                onClick={() => {
+                  // #region debug-point D:web-pdf-input-click
+                  reportDebugEvent({
+                    runId: 'pre-fix',
+                    hypothesisId: 'D',
+                    location: 'web/app/dashboard/listini/page.tsx:pdf-input:click',
+                    msg: '[DEBUG] Hidden PDF input clicked',
+                    data: {
+                      accept: uploadPdfInputRef.current?.accept || null,
+                      disabled: uploadPdfInputRef.current?.disabled || false,
+                    },
+                  });
+                  // #endregion
+                }}
               className="hidden"
               disabled={uploading}
             />
