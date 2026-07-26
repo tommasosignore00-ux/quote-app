@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
@@ -57,8 +57,25 @@ const RULE_PRESETS = [
 const DEBUG_SERVER_URL = 'http://127.0.0.1:7777/event';
 const DEBUG_SESSION_ID = 'browser-pdf-upload';
 
-function fileToBase64(file: File): Promise<string> {
-  return file.arrayBuffer().then((buffer) => {
+async function fileToBase64(file: File): Promise<string> {
+  try {
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result || '');
+        const base64 = result.includes(',') ? result.split(',')[1] : result;
+        if (!base64) {
+          reject(new Error('Non sono riuscito a leggere il PDF selezionato.'));
+          return;
+        }
+        resolve(base64);
+      };
+      reader.onerror = () => reject(reader.error || new Error('Lettura file non riuscita'));
+      reader.onabort = () => reject(new Error('Lettura file interrotta'));
+      reader.readAsDataURL(file);
+    });
+  } catch (readAsDataUrlError) {
+    const buffer = await file.arrayBuffer();
     const bytes = new Uint8Array(buffer);
     let binary = '';
     const chunkSize = 0x8000;
@@ -69,10 +86,11 @@ function fileToBase64(file: File): Promise<string> {
 
     const base64 = btoa(binary);
     if (!base64) {
-      throw new Error('Non sono riuscito a leggere il PDF selezionato.');
+      const reason = readAsDataUrlError instanceof Error ? readAsDataUrlError.message : String(readAsDataUrlError);
+      throw new Error(`Non sono riuscito a leggere il PDF selezionato: ${reason}`);
     }
     return base64;
-  });
+  }
 }
 
 function reportDebugEvent(event: {
@@ -126,8 +144,6 @@ export default function ListiniPage() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [organizingAi, setOrganizingAi] = useState(false);
-  const uploadTableInputRef = useRef<HTMLInputElement | null>(null);
-  const uploadPdfInputRef = useRef<HTMLInputElement | null>(null);
 
   const fetchListini = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -366,48 +382,73 @@ export default function ListiniPage() {
       });
       // #endregion
 
-      let res: Response;
+        let res: Response;
       if ((file.type || '').toLowerCase() === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-          // #region debug-point B:web-upload-before-base64
-          reportDebugEvent({
-            runId: 'pre-fix',
-            hypothesisId: 'B',
-            location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:before-base64',
-            msg: '[DEBUG] PDF selected for client encoding',
-            data: {
-              fileName: file.name,
-              fileType: file.type,
-              fileSize: file.size,
-              href: typeof window !== 'undefined' ? window.location.href : null,
-              userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
-            },
-          });
-          // #endregion
-        const fileBase64 = await fileToBase64(file);
-          // #region debug-point B:web-upload-after-base64
-          reportDebugEvent({
-            runId: 'pre-fix',
-            hypothesisId: 'B',
-            location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:after-base64',
-            msg: '[DEBUG] PDF client encoding completed',
-            data: {
-              fileName: file.name,
-              base64Length: fileBase64.length,
-            },
-          });
-          // #endregion
-        res = await fetch('/api/listini/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fileBase64,
-            fileName: file.name,
-            mimeType: file.type || 'application/pdf',
-            profileId: resolvedProfileId,
-            listinoId: selectedListino.id,
-            originalFileName: file.name,
-          }),
-        });
+          try {
+            // #region debug-point B:web-upload-before-base64
+            reportDebugEvent({
+              runId: 'pre-fix',
+              hypothesisId: 'B',
+              location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:before-base64',
+              msg: '[DEBUG] PDF selected for client encoding',
+              data: {
+                fileName: file.name,
+                fileType: file.type,
+                fileSize: file.size,
+                href: typeof window !== 'undefined' ? window.location.href : null,
+                userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+              },
+            });
+            // #endregion
+            const fileBase64 = await fileToBase64(file);
+            // #region debug-point B:web-upload-after-base64
+            reportDebugEvent({
+              runId: 'pre-fix',
+              hypothesisId: 'B',
+              location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:after-base64',
+              msg: '[DEBUG] PDF client encoding completed',
+              data: {
+                fileName: file.name,
+                base64Length: fileBase64.length,
+              },
+            });
+            // #endregion
+            res = await fetch('/api/listini/upload', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                fileBase64,
+                fileName: file.name,
+                mimeType: file.type || 'application/pdf',
+                profileId: resolvedProfileId,
+                listinoId: selectedListino.id,
+                originalFileName: file.name,
+              }),
+            });
+          } catch (pdfClientError) {
+            // #region debug-point B:web-upload-fallback-multipart
+            reportDebugEvent({
+              runId: 'pre-fix',
+              hypothesisId: 'B',
+              location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:multipart-fallback',
+              msg: '[DEBUG] PDF JSON path failed, retrying multipart upload',
+              data: {
+                fileName: file.name,
+                error: pdfClientError instanceof Error ? pdfClientError.message : String(pdfClientError),
+              },
+            });
+            // #endregion
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('profileId', resolvedProfileId);
+            formData.append('listinoId', selectedListino.id);
+            formData.append('originalFileName', file.name);
+            formData.append('mimeType', file.type || 'application/pdf');
+            res = await fetch('/api/listini/upload', {
+              method: 'POST',
+              body: formData,
+            });
+          }
       } else {
         const formData = new FormData();
         formData.append('file', file);
@@ -646,47 +687,46 @@ export default function ListiniPage() {
         <button onClick={handleCreateListino} className="btn-primary">{t('listini.newListino')}</button>
         {selectedListino && (
           <>
-            <button
-              onClick={() => uploadTableInputRef.current?.click()}
-              className="btn-primary"
-              disabled={uploading}
+            <label
+              htmlFor="listini-upload-table"
+              className={`btn-primary ${uploading ? 'pointer-events-none opacity-60' : 'cursor-pointer'}`}
+              aria-disabled={uploading}
             >
               {uploading ? 'Import in corso...' : 'Carica CSV/Excel'}
-            </button>
-            <button
-                onClick={() => {
-                  // #region debug-point A:web-pdf-button-click
-                  reportDebugEvent({
-                    runId: 'pre-fix',
-                    hypothesisId: 'A',
-                    location: 'web/app/dashboard/listini/page.tsx:pdf-button:click',
-                    msg: '[DEBUG] PDF upload button clicked',
-                    data: {
-                      href: typeof window !== 'undefined' ? window.location.href : null,
-                      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
-                      hasInputRef: Boolean(uploadPdfInputRef.current),
-                    },
-                  });
-                  // #endregion
-                  uploadPdfInputRef.current?.click();
-                }}
-              className="btn-primary"
-              disabled={uploading}
+            </label>
+            <label
+              htmlFor="listini-upload-pdf"
+              className={`btn-primary ${uploading ? 'pointer-events-none opacity-60' : 'cursor-pointer'}`}
+              aria-disabled={uploading}
+              onClick={() => {
+                // #region debug-point A:web-pdf-button-click
+                reportDebugEvent({
+                  runId: 'pre-fix',
+                  hypothesisId: 'A',
+                  location: 'web/app/dashboard/listini/page.tsx:pdf-button:click',
+                  msg: '[DEBUG] PDF upload button clicked',
+                  data: {
+                    href: typeof window !== 'undefined' ? window.location.href : null,
+                    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+                  },
+                });
+                // #endregion
+              }}
             >
               {uploading ? 'Import in corso...' : 'Carica PDF'}
-            </button>
+            </label>
             <input
-              ref={uploadTableInputRef}
+              id="listini-upload-table"
               type="file"
               accept=".csv,.txt,.xlsx,.xls"
               onChange={handleUploadCsv}
-              className="hidden"
+              className="sr-only"
               disabled={uploading}
             />
             <input
-              ref={uploadPdfInputRef}
+              id="listini-upload-pdf"
               type="file"
-              accept="application/pdf,.pdf"
+              accept=".pdf"
               onChange={handleUploadCsv}
                 onClick={() => {
                   // #region debug-point D:web-pdf-input-click
@@ -696,13 +736,13 @@ export default function ListiniPage() {
                     location: 'web/app/dashboard/listini/page.tsx:pdf-input:click',
                     msg: '[DEBUG] Hidden PDF input clicked',
                     data: {
-                      accept: uploadPdfInputRef.current?.accept || null,
-                      disabled: uploadPdfInputRef.current?.disabled || false,
+                      accept: '.pdf',
+                      disabled: uploading,
                     },
                   });
                   // #endregion
                 }}
-              className="hidden"
+              className="sr-only"
               disabled={uploading}
             />
             <button onClick={openPricingRulesModal} className="btn-secondary" disabled={uploading || organizingAi}>
