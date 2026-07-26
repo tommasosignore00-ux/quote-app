@@ -16,7 +16,7 @@ import {
   parseUniversalSpreadsheetRows,
 } from '../../../../lib/listinoUniversalImport';
 import { resolveImportPricing } from '../../../../lib/listinoPricing';
-import { uploadListinoSource } from '../../../../lib/listinoSourceStorage';
+import { LISTINO_SOURCE_BUCKET, uploadListinoSource } from '../../../../lib/listinoSourceStorage';
 
 const supabase = supabaseAdmin;
 const execFileAsync = promisify(execFile);
@@ -549,6 +549,7 @@ export async function POST(req: Request) {
     if (requestContentType.includes('application/json')) {
       const payload = await req.json() as {
         fileBase64?: string;
+          storagePath?: string;
         fileName?: string;
         mimeType?: string;
         listinoName?: string | null;
@@ -563,12 +564,33 @@ export async function POST(req: Request) {
       originalFileName = payload.originalFileName || payload.fileName || null;
       uploadedFileName = String(payload.fileName || originalFileName || '').trim();
       uploadedFileType = String(payload.mimeType || '').trim();
+        const storagePath = String(payload.storagePath || '').trim();
 
-      if (!payload.fileBase64 || !profileId || !uploadedFileName) {
+        if (!profileId || !uploadedFileName) {
         return NextResponse.json({ error: 'Missing file or profileId' }, { status: 400 });
       }
 
-      arrayBuffer = Uint8Array.from(Buffer.from(payload.fileBase64, 'base64')).buffer;
+        if (storagePath) {
+          const sourceDownload = await supabase.storage
+            .from(LISTINO_SOURCE_BUCKET)
+            .download(storagePath);
+
+          if (sourceDownload.error) {
+            return NextResponse.json({ error: sourceDownload.error.message }, { status: 500 });
+          }
+
+          arrayBuffer = await sourceDownload.data.arrayBuffer();
+          if (!uploadedFileName) {
+            uploadedFileName = path.basename(storagePath);
+          }
+          if (!uploadedFileType) {
+            uploadedFileType = 'application/pdf';
+          }
+        } else if (payload.fileBase64) {
+          arrayBuffer = Uint8Array.from(Buffer.from(payload.fileBase64, 'base64')).buffer;
+        } else {
+          return NextResponse.json({ error: 'Missing file or profileId' }, { status: 400 });
+        }
     } else {
       const formData = await req.formData();
       const file = formData.get('file') as File | null;

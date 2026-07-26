@@ -56,6 +56,7 @@ const RULE_PRESETS = [
 
 const DEBUG_SERVER_URL = 'http://127.0.0.1:7777/event';
 const DEBUG_SESSION_ID = 'browser-pdf-upload';
+const PDF_SOURCE_BUCKET = 'listini-sources';
 
 type UploadRequestResult = {
   ok: boolean;
@@ -155,6 +156,61 @@ function uploadWithXhr(url: string, formData: FormData): Promise<UploadRequestRe
     xhr.onerror = () => reject(new Error('Safari non e riuscito a completare l upload del PDF.'));
     xhr.onabort = () => reject(new Error('Upload PDF interrotto in Safari.'));
     xhr.send(formData);
+  });
+}
+
+async function uploadPdfViaStorageReference(params: {
+  file: File;
+  profileId: string;
+  listinoId: string;
+}) {
+  const signedUploadResult = await uploadWithFetch('/api/listini/source-upload-url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      profileId: params.profileId,
+      listinoId: params.listinoId,
+      fileName: params.file.name,
+    }),
+  });
+
+  if (!signedUploadResult.ok || !signedUploadResult.payload?.token || !signedUploadResult.payload?.storagePath) {
+    const errorMessage =
+      signedUploadResult.payload?.error ||
+      `Preparazione upload PDF non riuscita (HTTP ${signedUploadResult.status})`;
+    throw new Error(errorMessage);
+  }
+
+  const bucket = String(signedUploadResult.payload.bucket || PDF_SOURCE_BUCKET);
+  const storagePath = String(signedUploadResult.payload.storagePath || '').trim();
+  const token = String(signedUploadResult.payload.token || '').trim();
+
+  if (!storagePath || !token) {
+    throw new Error('Upload firmato PDF incompleto.');
+  }
+
+  const storageUpload = await supabase.storage
+    .from(bucket)
+    .uploadToSignedUrl(storagePath, token, params.file, {
+      upsert: true,
+      contentType: params.file.type || 'application/pdf',
+    });
+
+  if (storageUpload.error) {
+    throw storageUpload.error;
+  }
+
+  return uploadWithFetch('/api/listini/upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      storagePath,
+      fileName: params.file.name,
+      mimeType: params.file.type || 'application/pdf',
+      profileId: params.profileId,
+      listinoId: params.listinoId,
+      originalFileName: params.file.name,
+    }),
   });
 }
 
@@ -456,81 +512,114 @@ export default function ListiniPage() {
           formData.append('originalFileName', file.name);
           formData.append('mimeType', file.type || 'application/pdf');
 
-          if (isSafariBrowser()) {
-            // #region debug-point D:web-upload-safari-xhr
-            reportDebugEvent({
-              runId: 'pre-fix',
-              hypothesisId: 'D',
-              location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:safari-xhr',
-              msg: '[DEBUG] Safari PDF upload uses XHR multipart path',
-              data: {
-                fileName: file.name,
-                fileType: file.type,
-                fileSize: file.size,
-              },
-            });
-            // #endregion
-            uploadResult = await uploadWithXhr('/api/listini/upload', formData);
-          } else {
           try {
-            // #region debug-point B:web-upload-before-base64
+            // #region debug-point C:web-upload-storage-reference
             reportDebugEvent({
               runId: 'pre-fix',
-              hypothesisId: 'B',
-              location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:before-base64',
-              msg: '[DEBUG] PDF selected for client encoding',
+              hypothesisId: 'C',
+              location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:storage-reference',
+              msg: '[DEBUG] PDF upload tries signed storage path first',
               data: {
                 fileName: file.name,
                 fileType: file.type,
                 fileSize: file.size,
-                href: typeof window !== 'undefined' ? window.location.href : null,
-                userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
               },
             });
             // #endregion
-            const fileBase64 = await fileToBase64(file);
-            // #region debug-point B:web-upload-after-base64
+            uploadResult = await uploadPdfViaStorageReference({
+              file,
+              profileId: resolvedProfileId,
+              listinoId: selectedListino.id,
+            });
+          } catch (storageUploadError) {
+            // #region debug-point C:web-upload-storage-fallback
             reportDebugEvent({
               runId: 'pre-fix',
-              hypothesisId: 'B',
-              location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:after-base64',
-              msg: '[DEBUG] PDF client encoding completed',
+              hypothesisId: 'C',
+              location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:storage-fallback',
+              msg: '[DEBUG] Signed storage path failed, retrying legacy upload paths',
               data: {
                 fileName: file.name,
-                base64Length: fileBase64.length,
+                error: storageUploadError instanceof Error ? storageUploadError.message : String(storageUploadError),
               },
             });
             // #endregion
-            uploadResult = await uploadWithFetch('/api/listini/upload', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                fileBase64,
-                fileName: file.name,
-                mimeType: file.type || 'application/pdf',
-                profileId: resolvedProfileId,
-                listinoId: selectedListino.id,
-                originalFileName: file.name,
-              }),
-            });
-          } catch (pdfClientError) {
-            // #region debug-point B:web-upload-fallback-multipart
-            reportDebugEvent({
-              runId: 'pre-fix',
-              hypothesisId: 'B',
-              location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:multipart-fallback',
-              msg: '[DEBUG] PDF JSON path failed, retrying multipart upload',
-              data: {
-                fileName: file.name,
-                error: pdfClientError instanceof Error ? pdfClientError.message : String(pdfClientError),
-              },
-            });
-            // #endregion
-            uploadResult = await uploadWithFetch('/api/listini/upload', {
-              method: 'POST',
-              body: formData,
-            });
-          }
+            if (isSafariBrowser()) {
+              // #region debug-point D:web-upload-safari-xhr
+              reportDebugEvent({
+                runId: 'pre-fix',
+                hypothesisId: 'D',
+                location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:safari-xhr',
+                msg: '[DEBUG] Safari PDF upload uses XHR multipart path',
+                data: {
+                  fileName: file.name,
+                  fileType: file.type,
+                  fileSize: file.size,
+                },
+              });
+              // #endregion
+              uploadResult = await uploadWithXhr('/api/listini/upload', formData);
+            } else {
+              try {
+                // #region debug-point B:web-upload-before-base64
+                reportDebugEvent({
+                  runId: 'pre-fix',
+                  hypothesisId: 'B',
+                  location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:before-base64',
+                  msg: '[DEBUG] PDF selected for client encoding',
+                  data: {
+                    fileName: file.name,
+                    fileType: file.type,
+                    fileSize: file.size,
+                    href: typeof window !== 'undefined' ? window.location.href : null,
+                    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+                  },
+                });
+                // #endregion
+                const fileBase64 = await fileToBase64(file);
+                // #region debug-point B:web-upload-after-base64
+                reportDebugEvent({
+                  runId: 'pre-fix',
+                  hypothesisId: 'B',
+                  location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:after-base64',
+                  msg: '[DEBUG] PDF client encoding completed',
+                  data: {
+                    fileName: file.name,
+                    base64Length: fileBase64.length,
+                  },
+                });
+                // #endregion
+                uploadResult = await uploadWithFetch('/api/listini/upload', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    fileBase64,
+                    fileName: file.name,
+                    mimeType: file.type || 'application/pdf',
+                    profileId: resolvedProfileId,
+                    listinoId: selectedListino.id,
+                    originalFileName: file.name,
+                  }),
+                });
+              } catch (pdfClientError) {
+                // #region debug-point B:web-upload-fallback-multipart
+                reportDebugEvent({
+                  runId: 'pre-fix',
+                  hypothesisId: 'B',
+                  location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:multipart-fallback',
+                  msg: '[DEBUG] PDF JSON path failed, retrying multipart upload',
+                  data: {
+                    fileName: file.name,
+                    error: pdfClientError instanceof Error ? pdfClientError.message : String(pdfClientError),
+                  },
+                });
+                // #endregion
+                uploadResult = await uploadWithFetch('/api/listini/upload', {
+                  method: 'POST',
+                  body: formData,
+                });
+              }
+            }
           }
       } else {
         const formData = new FormData();

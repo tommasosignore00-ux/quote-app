@@ -25,6 +25,7 @@
 - La sessione browser `browser-pdf-upload` non ha ancora scritto eventi in `.dbg/` dal sito pubblico: questo e compatibile con blocco mixed-content da pagina `https` verso `http://127.0.0.1:7777/event`.
 - Prossimo passo: riproduzione su `http://localhost:3000` per ottenere i log client reali.
 - Fix applicata in attesa di verifica: upload PDF via label/input accessibile, lettura PDF con fallback `FileReader -> arrayBuffer`, retry automatico multipart se il percorso JSON/base64 fallisce.
+- Nuova fix strutturale: upload PDF diretto al bucket `listini-sources` con signed URL, poi richiesta leggera al backend con `storagePath` per elaborare il file gia caricato.
 
 
 - In corso: manca la prova post-fix dell'utente.
