@@ -248,7 +248,7 @@ function reportPdfRuleDebugEvent(event: {
     method: 'POST',
     body: JSON.stringify({
       sessionId: PDF_RULE_DEBUG_SESSION_ID,
-      runId: event.runId,
+      runId: 'post-fix',
       hypothesisId: event.hypothesisId,
       location: event.location,
       msg: event.msg,
