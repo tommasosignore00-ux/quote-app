@@ -46,8 +46,71 @@ function presetForRuleKey(ruleKey: string | null | undefined) {
   return PRICING_RULE_PRESETS.find((preset) => preset.rule_key === ruleKey);
 }
 
+function normalizePricingText(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
 function roundMoney(value: number): number {
   return Number(value.toFixed(6));
+}
+
+function splitReferenceKey(key: string): { ruleKey: string; referenceUnit: string } | null {
+  const separatorIndex = key.lastIndexOf('::');
+  if (separatorIndex <= 0) return null;
+
+  return {
+    ruleKey: key.slice(0, separatorIndex),
+    referenceUnit: key.slice(separatorIndex + 2),
+  };
+}
+
+function inferPresetRuleKey(item: UniversalParsedItem): string | null {
+  const haystack = normalizePricingText([item.description, item.category].filter(Boolean).join(' '));
+  if (!haystack) return null;
+
+  for (const preset of PRICING_RULE_PRESETS) {
+    if (preset.keywords.some((keyword) => haystack.includes(normalizePricingText(keyword)))) {
+      return preset.rule_key;
+    }
+  }
+
+  return null;
+}
+
+function findUniqueRuleForUnit(
+  references: Map<string, number>,
+  referenceUnit: string
+): { ruleKey: string; price: number } | null {
+  const matches = Array.from(references.entries())
+    .map(([key, price]) => {
+      const parsed = splitReferenceKey(key);
+      if (!parsed) return null;
+      return {
+        ruleKey: parsed.ruleKey,
+        referenceUnit: parsed.referenceUnit,
+        price,
+      };
+    })
+    .filter(
+      (
+        candidate
+      ): candidate is {
+        ruleKey: string;
+        referenceUnit: string;
+        price: number;
+      } => Boolean(candidate && candidate.referenceUnit === referenceUnit)
+    );
+
+  if (matches.length !== 1) return null;
+  return {
+    ruleKey: matches[0].ruleKey,
+    price: matches[0].price,
+  };
 }
 
 function buildReferenceCandidates(items: UniversalParsedItem[]): Map<string, number> {
@@ -135,22 +198,46 @@ function resolveWithReference(
     };
   }
 
-  const key = `${item.inferred_rule_key || item.category || 'generic'}::${item.pricing_basis_unit}`;
-  const fileReference = fileReferences.get(key);
-  if (fileReference && fileReference > 0) {
-    return {
-      ...item,
-      unit_price: roundMoney(fileReference * item.pricing_basis_quantity),
-      pricing_source: 'derived_reference',
-      pricing_status: 'resolved',
-    };
+  const inferredPresetRuleKey = inferPresetRuleKey(item);
+  const lookupKeys = Array.from(
+    new Set(
+      [item.inferred_rule_key, inferredPresetRuleKey, item.category, 'generic']
+        .map((value) => String(value || '').trim())
+        .filter(Boolean)
+    )
+  );
+
+  for (const lookupKey of lookupKeys) {
+    const referenceKey = `${lookupKey}::${item.pricing_basis_unit}`;
+    const fileReference = fileReferences.get(referenceKey);
+    if (fileReference && fileReference > 0) {
+      return {
+        ...item,
+        inferred_rule_key: item.inferred_rule_key || inferredPresetRuleKey || null,
+        unit_price: roundMoney(fileReference * item.pricing_basis_quantity),
+        pricing_source: 'derived_reference',
+        pricing_status: 'resolved',
+      };
+    }
+
+    const storedReference = storedRules.get(referenceKey);
+    if (storedReference && storedReference > 0) {
+      return {
+        ...item,
+        inferred_rule_key: item.inferred_rule_key || inferredPresetRuleKey || lookupKey || null,
+        unit_price: roundMoney(storedReference * item.pricing_basis_quantity),
+        pricing_source: 'reference_rule',
+        pricing_status: 'resolved',
+      };
+    }
   }
 
-  const storedReference = storedRules.get(key);
-  if (storedReference && storedReference > 0) {
+  const uniqueStoredRule = findUniqueRuleForUnit(storedRules, item.pricing_basis_unit);
+  if (uniqueStoredRule && uniqueStoredRule.price > 0) {
     return {
       ...item,
-      unit_price: roundMoney(storedReference * item.pricing_basis_quantity),
+      inferred_rule_key: item.inferred_rule_key || inferredPresetRuleKey || uniqueStoredRule.ruleKey,
+      unit_price: roundMoney(uniqueStoredRule.price * item.pricing_basis_quantity),
       pricing_source: 'reference_rule',
       pricing_status: 'resolved',
     };
