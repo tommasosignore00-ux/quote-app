@@ -3,6 +3,8 @@ import type { UniversalImportSummary, UniversalParsedItem } from './listinoUnive
 import type { PricingDiagnostics } from './listinoPricing';
 
 export const LISTINO_SOURCE_BUCKET = 'listini-sources';
+const LISTINO_SOURCE_ALLOWED_MIME_TYPES = ['application/pdf', 'application/json'];
+const LISTINO_SOURCE_FILE_SIZE_LIMIT = 50 * 1024 * 1024;
 
 export type ListinoSourceMetadata = {
   version: 1;
@@ -46,14 +48,36 @@ export function buildListinoSourcePaths(params: {
 
 export async function ensureListinoSourceBucket() {
   const { data: buckets, error: listError } = await supabaseAdmin.storage.listBuckets();
-  if (!listError && (buckets || []).some((bucket) => bucket.name === LISTINO_SOURCE_BUCKET)) {
-    return;
+  if (!listError) {
+    const existingBucket = (buckets || []).find((bucket) => bucket.name === LISTINO_SOURCE_BUCKET) as
+      | ({ allowed_mime_types?: string[] | null; allowedMimeTypes?: string[] | null } & Record<string, unknown>)
+      | undefined;
+
+    if (existingBucket) {
+      const currentAllowedMimeTypes = existingBucket.allowed_mime_types || existingBucket.allowedMimeTypes || [];
+      const needsMimeTypeUpdate = LISTINO_SOURCE_ALLOWED_MIME_TYPES.some(
+        (mimeType) => !currentAllowedMimeTypes.includes(mimeType)
+      );
+
+      if (!needsMimeTypeUpdate) {
+        return;
+      }
+
+      const { error: updateError } = await supabaseAdmin.storage.updateBucket(LISTINO_SOURCE_BUCKET, {
+        public: false,
+        fileSizeLimit: LISTINO_SOURCE_FILE_SIZE_LIMIT,
+        allowedMimeTypes: LISTINO_SOURCE_ALLOWED_MIME_TYPES,
+      });
+
+      if (updateError) throw updateError;
+      return;
+    }
   }
 
   const { error } = await supabaseAdmin.storage.createBucket(LISTINO_SOURCE_BUCKET, {
     public: false,
-    fileSizeLimit: 50 * 1024 * 1024,
-    allowedMimeTypes: ['application/pdf'],
+    fileSizeLimit: LISTINO_SOURCE_FILE_SIZE_LIMIT,
+    allowedMimeTypes: LISTINO_SOURCE_ALLOWED_MIME_TYPES,
   });
 
   if (error && !/already exists/i.test(error.message)) {

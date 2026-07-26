@@ -16,7 +16,7 @@
 |----|------------|------------|--------|----------|
 | A | Il browser sta caricando ancora un deploy vecchio che non contiene il nuovo pulsante `Carica PDF` e il nuovo handler | High | Low | Rejected: l'utente vede i due pulsanti nuovi |
 | B | L'errore avviene nel client prima della request, durante click sul file input o durante la lettura del file | High | Low | Likely: il messaggio resta client-side e non abbiamo evidenza di request fallita lato server |
-| C | Il backend riceve la request JSON del PDF ma fallisce nella fase iniziale di parsing/validazione | Medium | Low | Inconclusive |
+| C | Il backend riceve la request JSON del PDF ma fallisce nella fase iniziale di parsing/validazione | Medium | Low | Confirmed in nuova variante: il flusso storage-based fallisce quando il bucket rifiuta `metadata.json` |
 | D | Il problema dipende da uno specifico browser o da un comportamento del file input nascosto | Medium | Low | Likely: il fix passa da label + input accessibile invece di `click()` su input nascosto |
 | E | L'utente sta colpendo un ambiente diverso da quello aggiornato su GitHub | Medium | Low | Rejected: la UI aggiornata e visibile |
 
@@ -26,6 +26,7 @@
 - Prossimo passo: riproduzione su `http://localhost:3000` per ottenere i log client reali.
 - Fix applicata in attesa di verifica: upload PDF via label/input accessibile, lettura PDF con fallback `FileReader -> arrayBuffer`, retry automatico multipart se il percorso JSON/base64 fallisce.
 - Nuova fix strutturale: upload PDF diretto al bucket `listini-sources` con signed URL, poi richiesta leggera al backend con `storagePath` per elaborare il file gia caricato.
+- Root cause confermata nell'ultima iterazione: il bucket `listini-sources` permetteva solo `application/pdf`, ma il backend salva anche `metadata.json` con `application/json`.
 
 
 - In corso: manca la prova post-fix dell'utente.
