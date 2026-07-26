@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import fs from 'fs/promises';
+import path from 'path';
 import OpenAI from 'openai';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import { resolveImportPricing } from '../../../../lib/listinoPricing';
@@ -7,6 +9,51 @@ import type { UniversalImportResult } from '../../../../lib/listinoUniversalImpo
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const supabase = supabaseAdmin;
+const DEBUG_SERVER_FALLBACK_URL = 'http://127.0.0.1:7777/event';
+const DEBUG_SESSION_ID = 'pdf-no-material';
+
+async function reportDebugEvent(event: {
+  runId: 'pre-fix' | 'post-fix';
+  hypothesisId: 'A' | 'B' | 'C' | 'D' | 'E';
+  location: string;
+  msg: string;
+  data?: Record<string, unknown>;
+}) {
+  let debugServerUrl = DEBUG_SERVER_FALLBACK_URL;
+
+  try {
+    const candidates = [
+      path.resolve(process.cwd(), '.dbg', `${DEBUG_SESSION_ID}.env`),
+      path.resolve(process.cwd(), '..', '.dbg', `${DEBUG_SESSION_ID}.env`),
+    ];
+
+    for (const candidate of candidates) {
+      try {
+        const envContents = await fs.readFile(candidate, 'utf-8');
+        const matchedUrl = envContents.match(/^DEBUG_SERVER_URL=(.+)$/m)?.[1]?.trim();
+        if (matchedUrl) {
+          debugServerUrl = matchedUrl;
+          break;
+        }
+      } catch {}
+    }
+  } catch {}
+
+  try {
+    await fetch(debugServerUrl, {
+      method: 'POST',
+      body: JSON.stringify({
+        sessionId: DEBUG_SESSION_ID,
+        runId: event.runId,
+        hypothesisId: event.hypothesisId,
+        location: event.location,
+        msg: event.msg,
+        data: event.data || {},
+        ts: Date.now(),
+      }),
+    });
+  } catch {}
+}
 
 type AiCategoryResponse = {
   items?: Array<{
@@ -94,6 +141,15 @@ async function categorizeChunk(params: {
 export async function POST(req: Request) {
   try {
     const { listinoId, profileId } = await req.json();
+    // #region debug-point E:route-start
+    await reportDebugEvent({
+      runId: 'pre-fix',
+      hypothesisId: 'E',
+      location: 'web/app/api/listini/ai-organize/route.ts:POST:start',
+      msg: '[DEBUG] AI organize request received',
+      data: { listinoId, profileId },
+    });
+    // #endregion
     if (!listinoId || !profileId) {
       return NextResponse.json({ error: 'listinoId e profileId sono obbligatori' }, { status: 400 });
     }
@@ -130,7 +186,47 @@ export async function POST(req: Request) {
     let usedStoredSource = false;
     let pricingDiagnostics = sourceMetadata?.pricingDiagnostics || null;
 
+    // #region debug-point D:source-metadata
+    await reportDebugEvent({
+      runId: 'pre-fix',
+      hypothesisId: 'D',
+      location: 'web/app/api/listini/ai-organize/route.ts:POST:source-metadata',
+      msg: '[DEBUG] Loaded source metadata for AI organize',
+      data: {
+        sourceRowsCount: sourceRows.length,
+        candidateItemsCount: candidateItems.length,
+        parsedRows: sourceMetadata?.parsedSummary?.parsedRows ?? null,
+        pendingReferenceRows: sourceMetadata?.parsedSummary?.pendingReferenceRows ?? null,
+        requiresPricingRules: sourceMetadata?.requiresPricingRules ?? null,
+      },
+    });
+    // #endregion
+
     if (candidateItems.length) {
+      const candidatesWithBasis = candidateItems.filter((item) => item.pricing_basis_unit && (item.pricing_basis_quantity || 0) > 0);
+      const candidatesWithRuleKey = candidateItems.filter((item) => item.inferred_rule_key);
+      const candidatesWithPrice = candidateItems.filter((item) => item.unit_price > 0);
+      // #region debug-point A:candidate-quality
+      await reportDebugEvent({
+        runId: 'pre-fix',
+        hypothesisId: 'A',
+        location: 'web/app/api/listini/ai-organize/route.ts:POST:candidate-quality',
+        msg: '[DEBUG] Candidate item quality snapshot',
+        data: {
+          totalCandidates: candidateItems.length,
+          withPricingBasis: candidatesWithBasis.length,
+          withRuleKey: candidatesWithRuleKey.length,
+          withDirectPrice: candidatesWithPrice.length,
+          sample: candidateItems.slice(0, 5).map((item) => ({
+            description: item.description,
+            pricing_basis_unit: item.pricing_basis_unit || null,
+            pricing_basis_quantity: item.pricing_basis_quantity || null,
+            inferred_rule_key: item.inferred_rule_key || null,
+            unit_price: item.unit_price || 0,
+          })),
+        },
+      });
+      // #endregion
       const parsed: UniversalImportResult = {
         items: candidateItems,
         summary: sourceMetadata?.parsedSummary || {
@@ -147,6 +243,31 @@ export async function POST(req: Request) {
       pricingDiagnostics = pricingResolution.diagnostics;
       usedStoredSource = true;
 
+      // #region debug-point B:pricing-resolution
+      await reportDebugEvent({
+        runId: 'pre-fix',
+        hypothesisId: 'B',
+        location: 'web/app/api/listini/ai-organize/route.ts:POST:pricing-resolution',
+        msg: '[DEBUG] Pricing resolution completed on PDF candidates',
+        data: {
+          resolvedCount: pricingResolution.items.length,
+          unresolvedCount: pricingResolution.unresolvedItems.length,
+          resolvedFromFile: pricingResolution.diagnostics.resolvedFromFile,
+          resolvedFromDerived: pricingResolution.diagnostics.resolvedFromDerived,
+          resolvedFromRule: pricingResolution.diagnostics.resolvedFromRule,
+          recommendedRules: pricingResolution.diagnostics.recommendedRules,
+          unresolvedExamples: pricingResolution.diagnostics.unresolvedExamples,
+          resolvedSample: pricingResolution.items.slice(0, 5).map((item) => ({
+            description: item.description,
+            unit_price: item.unit_price,
+            pricing_source: item.pricing_source,
+            pricing_basis_unit: item.pricing_basis_unit || null,
+            inferred_rule_key: item.inferred_rule_key || null,
+          })),
+        },
+      });
+      // #endregion
+
       const existingDescriptions = new Set(sourceRows.map((row) => normalizeDescriptionKey(row.description)));
       const rowsToImport = pricingResolution.items.filter((row) => {
         const key = normalizeDescriptionKey(row.description);
@@ -154,6 +275,26 @@ export async function POST(req: Request) {
         existingDescriptions.add(key);
         return true;
       });
+
+      // #region debug-point C:dedupe-filter
+      await reportDebugEvent({
+        runId: 'pre-fix',
+        hypothesisId: 'C',
+        location: 'web/app/api/listini/ai-organize/route.ts:POST:dedupe-filter',
+        msg: '[DEBUG] Candidate rows filtered before insert',
+        data: {
+          existingRowsCount: sourceRows.length,
+          resolvedRowsCount: pricingResolution.items.length,
+          rowsToImportCount: rowsToImport.length,
+          droppedAsExistingCount: pricingResolution.items.length - rowsToImport.length,
+          rowsToImportSample: rowsToImport.slice(0, 5).map((row) => ({
+            description: row.description,
+            unit_price: row.unit_price,
+            pricing_source: row.pricing_source,
+          })),
+        },
+      });
+      // #endregion
 
       if (rowsToImport.length) {
         const itemsToInsert = rowsToImport.map((row) => ({
@@ -205,6 +346,20 @@ export async function POST(req: Request) {
     }
 
     if (!sourceRows.length) {
+      // #region debug-point E:empty-response
+      await reportDebugEvent({
+        runId: 'pre-fix',
+        hypothesisId: 'E',
+        location: 'web/app/api/listini/ai-organize/route.ts:POST:empty-response',
+        msg: '[DEBUG] AI organize returning without source rows',
+        data: {
+          importedCount,
+          candidateItemsCount: candidateItems.length,
+          usedStoredSource,
+          pricingDiagnostics,
+        },
+      });
+      // #endregion
       return NextResponse.json({
         ok: true,
         updatedCount: importedCount,
@@ -243,6 +398,21 @@ export async function POST(req: Request) {
       if (!error) updatedCount++;
     }
 
+    // #region debug-point E:final-response
+    await reportDebugEvent({
+      runId: 'pre-fix',
+      hypothesisId: 'E',
+      location: 'web/app/api/listini/ai-organize/route.ts:POST:final-response',
+      msg: '[DEBUG] AI organize returning final payload',
+      data: {
+        processedCount: sourceRows.length,
+        updatedCount,
+        importedCount,
+        usedStoredSource,
+        pricingDiagnostics,
+      },
+    });
+    // #endregion
     return NextResponse.json({
       ok: true,
       processedCount: sourceRows.length,
@@ -254,6 +424,17 @@ export async function POST(req: Request) {
       chunkCount: chunks.length,
     });
   } catch (err) {
+    // #region debug-point E:route-error
+    await reportDebugEvent({
+      runId: 'pre-fix',
+      hypothesisId: 'E',
+      location: 'web/app/api/listini/ai-organize/route.ts:POST:catch',
+      msg: '[DEBUG] AI organize route failed',
+      data: {
+        error: (err as Error).message || String(err),
+      },
+    });
+    // #endregion
     console.error('AI organize listino error:', err);
     return NextResponse.json({ error: (err as Error).message || 'AI organize failed' }, { status: 500 });
   }

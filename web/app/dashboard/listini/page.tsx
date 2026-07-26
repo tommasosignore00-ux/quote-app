@@ -56,6 +56,8 @@ const RULE_PRESETS = [
 
 const DEBUG_SERVER_URL = 'http://127.0.0.1:7777/event';
 const DEBUG_SESSION_ID = 'browser-pdf-upload';
+const PDF_RULE_DEBUG_SERVER_URL = 'http://127.0.0.1:7777/event';
+const PDF_RULE_DEBUG_SESSION_ID = 'pdf-no-material';
 const PDF_SOURCE_BUCKET = 'listini-sources';
 
 type UploadRequestResult = {
@@ -235,6 +237,27 @@ function reportDebugEvent(event: {
   }).catch(() => {});
 }
 
+function reportPdfRuleDebugEvent(event: {
+  runId: 'pre-fix' | 'post-fix';
+  hypothesisId: 'A' | 'B' | 'C' | 'D' | 'E';
+  location: string;
+  msg: string;
+  data?: Record<string, unknown>;
+}) {
+  fetch(PDF_RULE_DEBUG_SERVER_URL, {
+    method: 'POST',
+    body: JSON.stringify({
+      sessionId: PDF_RULE_DEBUG_SESSION_ID,
+      runId: event.runId,
+      hypothesisId: event.hypothesisId,
+      location: event.location,
+      msg: event.msg,
+      data: event.data || {},
+      ts: Date.now(),
+    }),
+  }).catch(() => {});
+}
+
 export default function ListiniPage() {
   const { t } = useTranslation();
   const [listini, setListini] = useState<Listino[]>([]);
@@ -287,6 +310,21 @@ export default function ListiniPage() {
       const res = await fetch(`/api/listini/source?listinoId=${encodeURIComponent(listinoId)}&profileId=${encodeURIComponent(nextProfileId)}`);
       const payload = await res.json();
       if (!res.ok) throw new Error(payload?.error || 'Lettura sorgente non riuscita');
+      // #region debug-point D:source-info-client
+      reportPdfRuleDebugEvent({
+        runId: 'pre-fix',
+        hypothesisId: 'D',
+        location: 'web/app/dashboard/listini/page.tsx:fetchSourceInfo',
+        msg: '[DEBUG] Client loaded source info',
+        data: {
+          listinoId,
+          fileName: payload?.sourceInfo?.fileName || null,
+          parsedRows: payload?.sourceInfo?.parsedSummary?.parsedRows || 0,
+          pendingReferenceRows: payload?.sourceInfo?.parsedSummary?.pendingReferenceRows || 0,
+          recommendedRules: payload?.sourceInfo?.pricingDiagnostics?.recommendedRules || [],
+        },
+      });
+      // #endregion
       setSelectedSourceInfo(payload?.sourceInfo || null);
     } catch {
       setSelectedSourceInfo(null);
@@ -801,6 +839,21 @@ export default function ListiniPage() {
   ) => {
     try {
       setOrganizingAi(true);
+      // #region debug-point E:client-start
+      reportPdfRuleDebugEvent({
+        runId: 'pre-fix',
+        hypothesisId: 'E',
+        location: 'web/app/dashboard/listini/page.tsx:runAiOrganize:start',
+        msg: '[DEBUG] Client triggered AI organize',
+        data: {
+          listinoId,
+          profileId,
+          existingItemsCount: items.length,
+          sourceParsedRows: selectedSourceInfo?.parsedSummary?.parsedRows || 0,
+          sourcePendingReferenceRows: selectedSourceInfo?.parsedSummary?.pendingReferenceRows || 0,
+        },
+      });
+      // #endregion
       const res = await fetch('/api/listini/ai-organize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -808,6 +861,23 @@ export default function ListiniPage() {
       });
 
       const payload = await res.json();
+      // #region debug-point E:client-response
+      reportPdfRuleDebugEvent({
+        runId: 'pre-fix',
+        hypothesisId: 'E',
+        location: 'web/app/dashboard/listini/page.tsx:runAiOrganize:response',
+        msg: '[DEBUG] Client received AI organize response',
+        data: {
+          ok: res.ok,
+          status: res.status,
+          importedCount: payload?.importedCount || 0,
+          updatedCount: payload?.updatedCount || 0,
+          usedStoredSource: payload?.usedStoredSource || false,
+          pricingDiagnostics: payload?.pricingDiagnostics || null,
+          aiFeedback: payload?.aiFeedback || null,
+        },
+      });
+      // #endregion
       if (!res.ok) {
         throw new Error(payload?.error || 'Organizzazione AI non riuscita');
       }
@@ -827,6 +897,17 @@ export default function ListiniPage() {
       await fetchItems(listinoId);
       await fetchSourceInfo(listinoId, profileId);
     } catch (err) {
+      // #region debug-point E:client-error
+      reportPdfRuleDebugEvent({
+        runId: 'pre-fix',
+        hypothesisId: 'E',
+        location: 'web/app/dashboard/listini/page.tsx:runAiOrganize:catch',
+        msg: '[DEBUG] Client AI organize failed',
+        data: {
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
+      // #endregion
       if (!options?.suppressErrorToast) {
         toast.error((err as Error).message);
       }

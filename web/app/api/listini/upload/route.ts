@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
-import os from 'os';
 import path from 'path';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import OpenAI from 'openai';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import * as XLSX from 'xlsx';
@@ -19,7 +16,6 @@ import { resolveImportPricing } from '../../../../lib/listinoPricing';
 import { LISTINO_SOURCE_BUCKET, uploadListinoSource } from '../../../../lib/listinoSourceStorage';
 
 const supabase = supabaseAdmin;
-const execFileAsync = promisify(execFile);
 const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   : null;
@@ -29,6 +25,7 @@ const PDF_OCR_BATCH_SIZE = 2;
 const PDF_OCR_SCREENSHOT_WIDTH = 1600;
 const DEBUG_SERVER_FALLBACK_URL = 'http://127.0.0.1:7777/event';
 const DEBUG_SESSION_ID = 'browser-pdf-upload';
+let pdfParseCtorPromise: Promise<any> | null = null;
 
 async function reportDebugEvent(event: {
   runId: 'pre-fix' | 'post-fix';
@@ -75,100 +72,60 @@ async function reportDebugEvent(event: {
 }
 
 async function extractPdfText(buffer: Buffer) {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'listino-pdf-'));
-  const tempFilePath = path.join(tempDir, 'upload.pdf');
-  const scriptPath = path.resolve(process.cwd(), 'scripts/extract-pdf-text.cjs');
+  const PDFParse = await getPdfParseCtor();
+  const parser = new PDFParse({ data: buffer });
 
   try {
-    await fs.writeFile(tempFilePath, buffer);
-    let stdout = '';
-    try {
-      const result = await execFileAsync(process.execPath, [scriptPath, tempFilePath], {
-        cwd: process.cwd(),
-        maxBuffer: 20 * 1024 * 1024,
-      });
-      stdout = result.stdout;
-    } catch (error) {
-      const stderr = String((error as { stderr?: string })?.stderr || '');
-      try {
-        const payload = JSON.parse(stderr) as { error?: string };
-        throw new Error(payload.error || stderr || 'PDF extraction failed');
-      } catch {
-        throw new Error(stderr || (error as Error).message || 'PDF extraction failed');
-      }
-    }
-
-    const payload = JSON.parse(stdout || '{}') as { text?: string; error?: string };
-    if (payload.error) {
-      throw new Error(payload.error);
-    }
-
-    return payload.text || '';
+    const result = await parser.getText();
+    return result.text || '';
   } finally {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await parser.destroy();
   }
 }
 
 async function renderPdfPages(params: { buffer: Buffer; maxPages?: number }) {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'listino-pdf-pages-'));
-  const tempFilePath = path.join(tempDir, 'upload.pdf');
-  const outputDir = path.join(tempDir, 'pages');
-  const scriptPath = path.resolve(process.cwd(), 'scripts/render-pdf-pages.cjs');
+  const PDFParse = await getPdfParseCtor();
+  const parser = new PDFParse({ data: params.buffer });
 
   try {
-    await fs.mkdir(outputDir, { recursive: true });
-    await fs.writeFile(tempFilePath, params.buffer);
-
-    let stdout = '';
-    try {
-      const result = await execFileAsync(
-        process.execPath,
-        [scriptPath, tempFilePath, outputDir, String(params.maxPages || PDF_OCR_MAX_PAGES), String(PDF_OCR_SCREENSHOT_WIDTH)],
-        {
-          cwd: process.cwd(),
-          maxBuffer: 20 * 1024 * 1024,
-        }
-      );
-      stdout = result.stdout;
-    } catch (error) {
-      const stderr = String((error as { stderr?: string })?.stderr || '');
-      try {
-        const payload = JSON.parse(stderr) as { error?: string };
-        throw new Error(payload.error || stderr || 'PDF page rendering failed');
-      } catch {
-        throw new Error(stderr || (error as Error).message || 'PDF page rendering failed');
-      }
-    }
-
-    const payload = JSON.parse(stdout || '{}') as {
-      totalPages?: number;
-      renderedPages?: number;
-      pages?: Array<{ pageNumber?: number; path?: string }>;
-      error?: string;
-    };
-
-    if (payload.error) {
-      throw new Error(payload.error);
-    }
+    const result = await parser.getScreenshot({
+      imageDataUrl: false,
+      imageBuffer: true,
+      first: Number.isFinite(params.maxPages) && (params.maxPages || 0) > 0 ? params.maxPages : PDF_OCR_MAX_PAGES,
+      desiredWidth: PDF_OCR_SCREENSHOT_WIDTH,
+    });
 
     const images = [] as Array<{ pageNumber: number; dataUrl: string }>;
-    for (const page of payload.pages || []) {
-      if (!page?.path) continue;
-      const imageBuffer = await fs.readFile(page.path);
+    for (const page of result.pages || []) {
+      const pageBuffer = Buffer.isBuffer(page.data) ? page.data : Buffer.from(page.data);
       images.push({
         pageNumber: Number(page.pageNumber || images.length + 1),
-        dataUrl: `data:image/png;base64,${imageBuffer.toString('base64')}`,
+        dataUrl: `data:image/png;base64,${pageBuffer.toString('base64')}`,
       });
     }
 
     return {
-      totalPages: payload.totalPages || images.length,
-      renderedPages: payload.renderedPages || images.length,
+      totalPages: result.total || images.length,
+      renderedPages: images.length,
       images,
     };
   } finally {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await parser.destroy();
   }
+}
+
+async function getPdfParseCtor() {
+  if (!pdfParseCtorPromise) {
+    pdfParseCtorPromise = import('pdf-parse').then((module) => {
+      const ctor = (module as any).PDFParse || (module as any).default?.PDFParse || (module as any).default;
+      if (!ctor) {
+        throw new Error('pdf-parse non esporta PDFParse');
+      }
+      return ctor;
+    });
+  }
+
+  return pdfParseCtorPromise;
 }
 
 function chunkArray<T>(items: T[], size: number): Array<T[]> {
