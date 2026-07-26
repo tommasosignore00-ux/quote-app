@@ -660,17 +660,19 @@ export async function POST(req: Request) {
     let uploadedFileName = '';
     let uploadedFileType = '';
     let arrayBuffer = new ArrayBuffer(0);
+    let sourceOnly = false;
 
     if (requestContentType.includes('application/json')) {
       const payload = await req.json() as {
         fileBase64?: string;
-          storagePath?: string;
+        storagePath?: string;
         fileName?: string;
         mimeType?: string;
         listinoName?: string | null;
         profileId?: string | null;
         listinoId?: string | null;
         originalFileName?: string | null;
+        sourceOnly?: boolean;
       };
 
       profileId = payload.profileId || null;
@@ -679,33 +681,34 @@ export async function POST(req: Request) {
       originalFileName = payload.originalFileName || payload.fileName || null;
       uploadedFileName = String(payload.fileName || originalFileName || '').trim();
       uploadedFileType = String(payload.mimeType || '').trim();
-        const storagePath = String(payload.storagePath || '').trim();
+      const storagePath = String(payload.storagePath || '').trim();
+      sourceOnly = Boolean(payload.sourceOnly);
 
-        if (!profileId || !uploadedFileName) {
+      if (!profileId || !uploadedFileName) {
         return NextResponse.json({ error: 'Missing file or profileId' }, { status: 400 });
       }
 
-        if (storagePath) {
-          const sourceDownload = await supabase.storage
-            .from(LISTINO_SOURCE_BUCKET)
-            .download(storagePath);
+      if (storagePath) {
+        const sourceDownload = await supabase.storage
+          .from(LISTINO_SOURCE_BUCKET)
+          .download(storagePath);
 
-          if (sourceDownload.error) {
-            return NextResponse.json({ error: sourceDownload.error.message }, { status: 500 });
-          }
-
-          arrayBuffer = await sourceDownload.data.arrayBuffer();
-          if (!uploadedFileName) {
-            uploadedFileName = path.basename(storagePath);
-          }
-          if (!uploadedFileType) {
-            uploadedFileType = 'application/pdf';
-          }
-        } else if (payload.fileBase64) {
-          arrayBuffer = Uint8Array.from(Buffer.from(payload.fileBase64, 'base64')).buffer;
-        } else {
-          return NextResponse.json({ error: 'Missing file or profileId' }, { status: 400 });
+        if (sourceDownload.error) {
+          return NextResponse.json({ error: sourceDownload.error.message }, { status: 500 });
         }
+
+        arrayBuffer = await sourceDownload.data.arrayBuffer();
+        if (!uploadedFileName) {
+          uploadedFileName = path.basename(storagePath);
+        }
+        if (!uploadedFileType) {
+          uploadedFileType = 'application/pdf';
+        }
+      } else if (payload.fileBase64) {
+        arrayBuffer = Uint8Array.from(Buffer.from(payload.fileBase64, 'base64')).buffer;
+      } else {
+        return NextResponse.json({ error: 'Missing file or profileId' }, { status: 400 });
+      }
     } else {
       const formData = await req.formData();
       const file = formData.get('file') as File | null;
@@ -735,6 +738,7 @@ export async function POST(req: Request) {
         profileId,
         listinoId,
         originalFileName,
+        sourceOnly,
         requestContentType,
       },
     });
@@ -1000,7 +1004,7 @@ export async function POST(req: Request) {
         },
       });
 
-      if (!pricingResolution.items.length) {
+      if (sourceOnly || !pricingResolution.items.length) {
         return NextResponse.json({
           ok: true,
           inserted: 0,

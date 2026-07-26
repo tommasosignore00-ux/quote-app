@@ -86,6 +86,21 @@ function normalizeDescriptionKey(value: unknown): string {
     .replace(/\s+/g, ' ');
 }
 
+async function fetchListinoRows(params: { listinoId: string; profileId: string }) {
+  const { data, error } = await supabase
+    .from('listini_vettoriali')
+    .select('id, description, category')
+    .eq('listino_id', params.listinoId)
+    .eq('profile_id', params.profileId)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data || []).filter((row) => row.description?.trim());
+}
+
 async function categorizeChunk(params: {
   listinoName: string;
   chunk: Array<{ id: string; description: string; category: string | null }>;
@@ -168,20 +183,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Listino non trovato' }, { status: 404 });
     }
 
-    const { data: rows, error: rowsError } = await supabase
-      .from('listini_vettoriali')
-      .select('id, description, category')
-      .eq('listino_id', listinoId)
-      .eq('profile_id', profileId)
-      .order('created_at', { ascending: true });
-
-    if (rowsError) {
-      return NextResponse.json({ error: rowsError.message }, { status: 500 });
-    }
-
-    let sourceRows = (rows || []).filter((row) => row.description?.trim());
-    const sourceMetadata = await getListinoSourceMetadata({ profileId, listinoId });
-    const candidateItems = sourceMetadata?.candidateItems || [];
+    let sourceRows = await fetchListinoRows({ listinoId, profileId });
+    let sourceMetadata = await getListinoSourceMetadata({ profileId, listinoId });
+    let candidateItems = sourceMetadata?.candidateItems || [];
     let importedCount = 0;
     let usedStoredSource = false;
     let pricingDiagnostics = sourceMetadata?.pricingDiagnostics || null;
@@ -201,6 +205,75 @@ export async function POST(req: Request) {
       },
     });
     // #endregion
+
+    if (
+      !candidateItems.length &&
+      sourceMetadata?.storagePath &&
+      /pdf/i.test(String(sourceMetadata.mimeType || ''))
+    ) {
+      // #region debug-point D:stale-source-reprocess
+      await reportDebugEvent({
+        runId: 'pre-fix',
+        hypothesisId: 'D',
+        location: 'web/app/api/listini/ai-organize/route.ts:POST:stale-source-reprocess',
+        msg: '[DEBUG] Reprocessing stored PDF source because metadata has no candidates',
+        data: {
+          storagePath: sourceMetadata.storagePath,
+          fileName: sourceMetadata.fileName,
+          sourceRowsCount: sourceRows.length,
+        },
+      });
+      // #endregion
+
+      const origin = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
+      const rebuildResponse = await fetch(`${origin}/api/listini/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profileId,
+          listinoId,
+          listinoName: listino.name,
+          storagePath: sourceMetadata.storagePath,
+          fileName: sourceMetadata.fileName,
+          originalFileName: sourceMetadata.fileName,
+          mimeType: sourceMetadata.mimeType,
+          sourceOnly: true,
+        }),
+      });
+
+      const rebuildPayload = await rebuildResponse.json().catch(() => ({}));
+
+      // #region debug-point D:stale-source-reprocess-response
+      await reportDebugEvent({
+        runId: 'pre-fix',
+        hypothesisId: 'D',
+        location: 'web/app/api/listini/ai-organize/route.ts:POST:stale-source-reprocess-response',
+        msg: '[DEBUG] Stored PDF source reprocess completed',
+        data: {
+          ok: rebuildResponse.ok,
+          status: rebuildResponse.status,
+          inserted: rebuildPayload?.inserted || 0,
+          parsedRows: rebuildPayload?.summary?.parsedRows || 0,
+          pendingReferenceRows: rebuildPayload?.summary?.pendingReferenceRows || 0,
+          error: rebuildPayload?.error || null,
+        },
+      });
+      // #endregion
+
+      if (!rebuildResponse.ok) {
+        return NextResponse.json(
+          { error: rebuildPayload?.error || 'Rigenerazione sorgente PDF non riuscita' },
+          { status: 500 }
+        );
+      }
+
+      importedCount += Number(rebuildPayload?.inserted || 0);
+      sourceMetadata = await getListinoSourceMetadata({ profileId, listinoId });
+      candidateItems = sourceMetadata?.candidateItems || [];
+      pricingDiagnostics = sourceMetadata?.pricingDiagnostics || rebuildPayload?.pricingDiagnostics || null;
+      usedStoredSource = Boolean(candidateItems.length || importedCount);
+      sourceRows = await fetchListinoRows({ listinoId, profileId });
+    }
 
     if (candidateItems.length) {
       const candidatesWithBasis = candidateItems.filter((item) => item.pricing_basis_unit && (item.pricing_basis_quantity || 0) > 0);
@@ -317,7 +390,7 @@ export async function POST(req: Request) {
           }
         }
 
-        importedCount = itemsToInsert.length;
+        importedCount += itemsToInsert.length;
 
         try {
           const origin = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
@@ -330,18 +403,7 @@ export async function POST(req: Request) {
           console.warn('Failed to trigger bulk embeddings', e);
         }
 
-        const { data: refreshedRows, error: refreshedRowsError } = await supabase
-          .from('listini_vettoriali')
-          .select('id, description, category')
-          .eq('listino_id', listinoId)
-          .eq('profile_id', profileId)
-          .order('created_at', { ascending: true });
-
-        if (refreshedRowsError) {
-          return NextResponse.json({ error: refreshedRowsError.message }, { status: 500 });
-        }
-
-        sourceRows = (refreshedRows || []).filter((row) => row.description?.trim());
+        sourceRows = await fetchListinoRows({ listinoId, profileId });
       }
     }
 
