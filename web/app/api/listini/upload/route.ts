@@ -26,6 +26,7 @@ const PDF_OCR_SCREENSHOT_WIDTH = 1600;
 const DEBUG_SERVER_FALLBACK_URL = 'http://127.0.0.1:7777/event';
 const DEBUG_SESSION_ID = 'browser-pdf-upload';
 let pdfParseCtorPromise: Promise<any> | null = null;
+let pdfScreenshotPolyfillsPromise: Promise<void> | null = null;
 
 async function reportDebugEvent(event: {
   runId: 'pre-fix' | 'post-fix';
@@ -83,7 +84,28 @@ async function extractPdfText(buffer: Buffer) {
   }
 }
 
+async function ensurePdfScreenshotPolyfills() {
+  if (!pdfScreenshotPolyfillsPromise) {
+    pdfScreenshotPolyfillsPromise = import('@napi-rs/canvas').then((canvasModule) => {
+      const globals = globalThis as Record<string, unknown>;
+
+      if (!globals.DOMMatrix && canvasModule.DOMMatrix) {
+        globals.DOMMatrix = canvasModule.DOMMatrix as unknown;
+      }
+      if (!globals.ImageData && canvasModule.ImageData) {
+        globals.ImageData = canvasModule.ImageData as unknown;
+      }
+      if (!globals.Path2D && canvasModule.Path2D) {
+        globals.Path2D = canvasModule.Path2D as unknown;
+      }
+    });
+  }
+
+  await pdfScreenshotPolyfillsPromise;
+}
+
 async function renderPdfPages(params: { buffer: Buffer; maxPages?: number }) {
+  await ensurePdfScreenshotPolyfills();
   const PDFParse = await getPdfParseCtor();
   const parser = new PDFParse({ data: params.buffer });
 
