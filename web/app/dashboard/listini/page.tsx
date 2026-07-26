@@ -57,6 +57,14 @@ const RULE_PRESETS = [
 const DEBUG_SERVER_URL = 'http://127.0.0.1:7777/event';
 const DEBUG_SESSION_ID = 'browser-pdf-upload';
 
+type UploadRequestResult = {
+  ok: boolean;
+  status: number;
+  contentType: string | null;
+  payload: any;
+  responseText: string;
+};
+
 async function fileToBase64(file: File): Promise<string> {
   try {
     return await new Promise<string>((resolve, reject) => {
@@ -91,6 +99,63 @@ async function fileToBase64(file: File): Promise<string> {
     }
     return base64;
   }
+}
+
+function isSafariBrowser() {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent;
+  return /Safari/i.test(ua) && !/Chrome|Chromium|CriOS|Edg|OPR|Firefox|FxiOS/i.test(ua);
+}
+
+async function uploadWithFetch(input: RequestInfo | URL, init?: RequestInit): Promise<UploadRequestResult> {
+  const response = await fetch(input, init);
+  const responseText = await response.text();
+  let payload: any = null;
+
+  try {
+    payload = responseText ? JSON.parse(responseText) : null;
+  } catch {
+    payload = null;
+  }
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    contentType: response.headers.get('content-type'),
+    payload,
+    responseText,
+  };
+}
+
+function uploadWithXhr(url: string, formData: FormData): Promise<UploadRequestResult> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url, true);
+    xhr.responseType = 'text';
+
+    xhr.onload = () => {
+      const responseText = xhr.responseText || '';
+      let payload: any = null;
+
+      try {
+        payload = responseText ? JSON.parse(responseText) : null;
+      } catch {
+        payload = null;
+      }
+
+      resolve({
+        ok: xhr.status >= 200 && xhr.status < 300,
+        status: xhr.status,
+        contentType: xhr.getResponseHeader('content-type'),
+        payload,
+        responseText,
+      });
+    };
+
+    xhr.onerror = () => reject(new Error('Safari non e riuscito a completare l upload del PDF.'));
+    xhr.onabort = () => reject(new Error('Upload PDF interrotto in Safari.'));
+    xhr.send(formData);
+  });
 }
 
 function reportDebugEvent(event: {
@@ -382,8 +447,31 @@ export default function ListiniPage() {
       });
       // #endregion
 
-        let res: Response;
+        let uploadResult: UploadRequestResult;
       if ((file.type || '').toLowerCase() === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('profileId', resolvedProfileId);
+          formData.append('listinoId', selectedListino.id);
+          formData.append('originalFileName', file.name);
+          formData.append('mimeType', file.type || 'application/pdf');
+
+          if (isSafariBrowser()) {
+            // #region debug-point D:web-upload-safari-xhr
+            reportDebugEvent({
+              runId: 'pre-fix',
+              hypothesisId: 'D',
+              location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:safari-xhr',
+              msg: '[DEBUG] Safari PDF upload uses XHR multipart path',
+              data: {
+                fileName: file.name,
+                fileType: file.type,
+                fileSize: file.size,
+              },
+            });
+            // #endregion
+            uploadResult = await uploadWithXhr('/api/listini/upload', formData);
+          } else {
           try {
             // #region debug-point B:web-upload-before-base64
             reportDebugEvent({
@@ -413,7 +501,7 @@ export default function ListiniPage() {
               },
             });
             // #endregion
-            res = await fetch('/api/listini/upload', {
+            uploadResult = await uploadWithFetch('/api/listini/upload', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -438,57 +526,39 @@ export default function ListiniPage() {
               },
             });
             // #endregion
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('profileId', resolvedProfileId);
-            formData.append('listinoId', selectedListino.id);
-            formData.append('originalFileName', file.name);
-            formData.append('mimeType', file.type || 'application/pdf');
-            res = await fetch('/api/listini/upload', {
+            uploadResult = await uploadWithFetch('/api/listini/upload', {
               method: 'POST',
               body: formData,
             });
+          }
           }
       } else {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('profileId', resolvedProfileId);
         formData.append('listinoId', selectedListino.id);
-        res = await fetch('/api/listini/upload', {
+          uploadResult = await uploadWithFetch('/api/listini/upload', {
           method: 'POST',
           body: formData,
         });
       }
 
       // #region debug-point B:web-upload-response
-      res.clone().text().then((body) => {
         reportDebugEvent({
           runId: 'pre-fix',
           hypothesisId: 'B',
           location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:after-fetch',
           msg: '[DEBUG] Web upload received response',
           data: {
-            status: res.status,
-            ok: res.ok,
-            contentType: res.headers.get('content-type'),
-            bodyPreview: body.slice(0, 500),
+            status: uploadResult.status,
+            ok: uploadResult.ok,
+            contentType: uploadResult.contentType,
+            bodyPreview: uploadResult.responseText.slice(0, 500),
           },
-        });
-      }).catch((cloneError) => {
-        reportDebugEvent({
-          runId: 'pre-fix',
-          hypothesisId: 'B',
-          location: 'web/app/dashboard/listini/page.tsx:handleUploadCsv:after-fetch',
-          msg: '[DEBUG] Web upload response clone failed',
-          data: {
-            status: res.status,
-            error: cloneError instanceof Error ? cloneError.message : String(cloneError),
-          },
-        });
       });
       // #endregion
-      const payload = await res.json();
-      if (!res.ok) {
+        const payload = uploadResult.payload;
+        if (!uploadResult.ok) {
         const summary = payload?.summary;
         const detail = summary
           ? ` (${summary.parsedRows}/${summary.totalRows} righe importabili)`
