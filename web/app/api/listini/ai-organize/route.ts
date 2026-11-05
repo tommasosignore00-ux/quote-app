@@ -23,6 +23,11 @@ import {
 } from '../../../../lib/listinoDebugShared';
 import { scheduleEmbeddingsForListino } from '../../../../lib/bulkGenerateEmbeddings';
 import {
+  LISTINO_PARSER_VERSION,
+  applyGroupPricesToListino,
+  loadPricingGroups,
+} from '../../../../lib/listinoPricingGroups';
+import {
   applyListinoCategories,
   fetchAllListinoRows,
   normalizeListinoDescriptionKey,
@@ -279,7 +284,9 @@ export async function POST(req: Request) {
     });
 
     if (
-      !candidateItems.length &&
+      // Re-read the PDF when it was never parsed or was parsed by an older parser.
+      (!candidateItems.length ||
+        Number(sourceMetadata?.parserVersion || 1) < LISTINO_PARSER_VERSION) &&
       sourceMetadata?.storagePath &&
       /pdf/i.test(String(sourceMetadata.mimeType || ''))
     ) {
@@ -368,7 +375,27 @@ export async function POST(req: Request) {
       sourceRows = await fetchListinoRows({ listinoId, profileId });
     }
 
-    if (candidateItems.length) {
+    // Catalogue without prices: items come only from the "Prezzi per forma" section.
+    let pricingGroupsCount = 0;
+    let pendingPricingGroups = 0;
+    const groupedCandidates = candidateItems.filter((item) => item.pricing_group);
+    if (groupedCandidates.length) {
+      const groups = await loadPricingGroups({ listinoId, profileId });
+      const applied = await applyGroupPricesToListino({
+        listinoId,
+        profileId,
+        candidates: groupedCandidates,
+        groups,
+      });
+      importedCount += applied.inserted;
+      pricingGroupsCount = groups.length;
+      pendingPricingGroups = applied.pendingGroups;
+      usedStoredSource = true;
+      pricingDiagnostics = null;
+      sourceRows = await fetchListinoRows({ listinoId, profileId });
+    }
+
+    if (candidateItems.length && !groupedCandidates.length) {
       const candidatesWithBasis = candidateItems.filter(
         (item) => item.pricing_basis_unit && (item.pricing_basis_quantity || 0) > 0
       );
@@ -506,6 +533,8 @@ export async function POST(req: Request) {
         usedStoredSource,
         aiFeedback: sourceMetadata?.aiFeedback || null,
         pricingDiagnostics,
+        pricingGroups: pricingGroupsCount,
+        pendingPricingGroups,
       });
     }
 
@@ -516,11 +545,15 @@ export async function POST(req: Request) {
     try {
       const categorized = await categorizeAllRows({
         listinoName: listino.name,
-        rows: sourceRows.map((item) => ({
-          id: item.id,
-          description: item.description,
-          category: item.category || null,
-        })),
+        // Items of a catalogue shape keep the shape name as category, always spelled the
+        // same: the AI must not rename them ("Piatti laminati" vs "Piatti laminati trafilati").
+        rows: sourceRows
+          .filter((item) => !item.pricing_group)
+          .map((item) => ({
+            id: item.id,
+            description: item.description,
+            category: item.category || null,
+          })),
         deadline: startedAt + CATEGORIZE_TIME_BUDGET_MS,
       });
       chunkCount = categorized.chunkCount;
@@ -568,6 +601,8 @@ export async function POST(req: Request) {
       pricingDiagnostics,
       chunkCount,
       warning,
+      pricingGroups: pricingGroupsCount,
+      pendingPricingGroups,
     });
   } catch (err) {
     await reportDebugEvent({

@@ -27,6 +27,14 @@ import {
 import { scheduleEmbeddingsForListino } from './bulkGenerateEmbeddings';
 import { saveListinoItems } from './listinoItemsStore';
 import {
+  LISTINO_PARSER_VERSION,
+  applyCanonicalGroups,
+  applyGroupPricesToListino,
+  canonicalizeGroupNames,
+  isPricelessCatalogue,
+  syncPricingGroups,
+} from './listinoPricingGroups';
+import {
   reportDebugEvent,
   getActiveDebugRunId,
   getActiveDebugSessionId,
@@ -48,6 +56,9 @@ export type ProcessListinoImportResult = {
   inserted?: number;
   updated?: number;
   duplicatesSkipped?: number;
+  /** Catalogue without prices: shapes in the "Prezzi per forma" section. */
+  pricingGroups?: number;
+  pendingPricingGroups?: number;
   warning?: string;
   listinoId?: string | null;
   summary?: UniversalImportResult['summary'];
@@ -1368,6 +1379,84 @@ export async function processListinoImport(
         targetListinoId = listino.id;
       }
 
+      // Catalogue without prices (sizes and weights only): no generic pricing rules.
+      // The shapes found become the listino's "Prezzi per forma" section and only the
+      // shapes with a price set there become items.
+      if (isPricelessCatalogue(parsed.items)) {
+        const grouped = parsed.items.filter(
+          (item) => item.pricing_group && (item.pricing_basis_quantity || 0) > 0
+        );
+        const mapping = await canonicalizeGroupNames(
+          grouped.map((item) => item.pricing_group!)
+        );
+        const candidates = applyCanonicalGroups(grouped, mapping);
+        const groups = await syncPricingGroups({
+          listinoId: targetListinoId!,
+          profileId,
+          items: candidates,
+        });
+        const summary = buildSummaryFromItems(candidates);
+        aiFeedback =
+          `Il PDF non contiene prezzi: ho trovato ${candidates.length} voci in ${groups.length} forme ` +
+          '(travi, tondi, lamiere...). Indica il prezzo di ogni forma nella sezione "Prezzi per forma" del listino.';
+
+        const stored = await uploadListinoSource({
+          profileId,
+          listinoId: targetListinoId!,
+          fileName: originalFileName || uploadedFileName,
+          mimeType: uploadedFileType || 'application/pdf',
+          fileBuffer: pdfBuffer,
+          metadata: {
+            listinoId: targetListinoId!,
+            profileId,
+            fileName: originalFileName || uploadedFileName,
+            mimeType: uploadedFileType || 'application/pdf',
+            uploadedAt: new Date().toISOString(),
+            sourceText: combinedPdfText.slice(0, 200000),
+            sourceTextPreview: combinedPdfText.slice(0, 4000),
+            parsedSummary: summary,
+            candidateItems: candidates,
+            sourceDiagnostics,
+            pricingDiagnostics: null,
+            aiFeedback,
+            requiresPricingRules: true,
+            parserVersion: LISTINO_PARSER_VERSION,
+            pricingGroupsCount: groups.length,
+          },
+        });
+
+        const applied = sourceOnly
+          ? null
+          : await applyGroupPricesToListino({
+              listinoId: targetListinoId!,
+              profileId,
+              candidates,
+              groups,
+            });
+
+        return {
+          ok: true,
+          status: 200,
+          inserted: applied?.inserted || 0,
+          updated: applied?.updated || 0,
+          duplicatesSkipped: applied?.duplicatesSkipped || 0,
+          listinoId: targetListinoId,
+          summary,
+          sourceDiagnostics,
+          sourceStored: true,
+          aiFeedback,
+          pricingGroups: groups.length,
+          pendingPricingGroups: groups.filter((group) => !((group.unit_price || 0) > 0))
+            .length,
+          sourceInfo: {
+            fileName: stored.fileName,
+            mimeType: stored.mimeType,
+            uploadedAt: stored.uploadedAt,
+          },
+          storedSource: stored,
+        };
+      }
+
       const pricingResolution = await resolveImportPricing({ profileId, parsed });
       aiFeedback = await bestEffortAi(
         'summary',
@@ -1406,6 +1495,7 @@ export async function processListinoImport(
           pricingDiagnostics: pricingResolution.diagnostics,
           aiFeedback,
           requiresPricingRules: !pricingResolution.items.length,
+          parserVersion: LISTINO_PARSER_VERSION,
         },
       });
       storedMetadata = {

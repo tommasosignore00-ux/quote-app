@@ -209,6 +209,18 @@ function parseUploadPayload(body: string): UploadPayload {
   }
 }
 
+type PricingGroupRow = {
+  id?: string;
+  name: string;
+  reference_unit: string;
+  unit_price: number | null;
+  item_count: number;
+};
+
+function formatGroupPrice(value: number | null): string {
+  return value === null || value === undefined ? '' : String(value).replace('.', ',');
+}
+
 // Base64 inflates the file by ~33%: above this size the JSON body would exceed
 // Vercel's 4.5 MB request limit.
 const PDF_BASE64_MAX_BYTES = 3 * 1024 * 1024;
@@ -270,6 +282,10 @@ export default function ListiniScreen() {
   const [itemsLoading, setItemsLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [organizingAi, setOrganizingAi] = useState(false);
+  // "Prezzi per forma": only for listini whose PDF has no prices.
+  const [pricingGroups, setPricingGroups] = useState<PricingGroupRow[]>([]);
+  const [groupPriceDrafts, setGroupPriceDrafts] = useState<Record<string, string>>({});
+  const [savingGroupPrices, setSavingGroupPrices] = useState(false);
 
   const [showListinoModal, setShowListinoModal] = useState(false);
   const [newListinoName, setNewListinoName] = useState('');
@@ -376,7 +392,51 @@ export default function ListiniScreen() {
     } catch {
       setSelectedSourceInfo(null);
     }
+
+    try {
+      const res = await fetch(
+        buildWebApiUrl(`/api/listini/pricing-groups?listinoId=${encodeURIComponent(listinoId)}&profileId=${encodeURIComponent(nextProfileId)}`),
+        { headers: await getWebApiAuthHeaders() }
+      );
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.error || 'Lettura forme non riuscita');
+      const groups = (payload?.groups || []) as PricingGroupRow[];
+      setPricingGroups(groups);
+      setGroupPriceDrafts(Object.fromEntries(groups.map((group) => [group.name, formatGroupPrice(group.unit_price)])));
+    } catch {
+      setPricingGroups([]);
+      setGroupPriceDrafts({});
+    }
   }, []);
+
+  const handleSaveGroupPrices = async () => {
+    if (!selectedListino || !profileId) return;
+    setSavingGroupPrices(true);
+    try {
+      const res = await fetch(buildWebApiUrl('/api/listini/pricing-groups'), {
+        method: 'POST',
+        headers: await getWebApiAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          listinoId: selectedListino.id,
+          profileId,
+          prices: pricingGroups.map((group) => ({ name: group.name, unit_price: groupPriceDrafts[group.name] ?? '' })),
+        }),
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.error || 'Salvataggio prezzi non riuscito');
+      await fetchItems(selectedListino.id);
+      await fetchSourceInfo(selectedListino.id, profileId);
+      Alert.alert(
+        'Prezzi applicati',
+        `${payload.inserted || 0} voci nuove, ${payload.updated || 0} aggiornate` +
+          (payload.pendingGroups ? `\n${payload.pendingGroups} forme ancora senza prezzo` : '')
+      );
+    } catch (err) {
+      Alert.alert(t('messages.error'), (err as Error).message);
+    } finally {
+      setSavingGroupPrices(false);
+    }
+  };
 
   const fetchPricingRules = useCallback(async () => {
     if (!profileId) return;
@@ -892,13 +952,6 @@ export default function ListiniScreen() {
               <Text style={styles.actionBtnText}>{uploading ? 'Import in corso...' : 'Carica CSV/Excel/PDF'}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.actionBtnSecondary, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              onPress={openPricingRulesModal}
-              disabled={uploading || organizingAi}
-            >
-              <Text style={[styles.actionBtnSecondaryText, { color: colors.text }]}>Regole prezzo</Text>
-            </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.actionBtnSecondary, { backgroundColor: colors.surface, borderColor: colors.border }]}
@@ -1009,22 +1062,40 @@ export default function ListiniScreen() {
                       {selectedSourceInfo.aiFeedback}
                     </Text>
                   ) : null}
-                  {selectedSourceInfo.parsedSummary?.parsedRows ? (
-                    <Text style={[styles.noticeText, { color: colors.textSecondary, marginTop: 8 }]}>
-                      Voci tecniche trovate: {selectedSourceInfo.parsedSummary.parsedRows}
-                      {selectedSourceInfo.parsedSummary.pendingReferenceRows
-                        ? ` · da completare con regole prezzo: ${selectedSourceInfo.parsedSummary.pendingReferenceRows}`
-                        : ''}
-                    </Text>
-                  ) : null}
-                  {selectedSourceInfo.requiresPricingRules && selectedSourceInfo.pricingDiagnostics?.recommendedRules?.length ? (
-                    <Text style={[styles.noticeText, { color: colors.textSecondary, marginTop: 8 }]}>
-                      Regole consigliate: {selectedSourceInfo.pricingDiagnostics.recommendedRules
-                        .slice(0, 3)
-                        .map((rule) => `${rule.label} (${rule.reference_unit})`)
-                        .join(', ')}
-                    </Text>
-                  ) : null}
+                </View>
+              ) : null}
+
+              {pricingGroups.length > 0 ? (
+                <View style={[styles.noticeCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 12 }]}>
+                  <Text style={[styles.noticeTitle, { color: colors.text }]}>Prezzi per forma</Text>
+                  <Text style={[styles.noticeText, { color: colors.textSecondary }]}>
+                    Il PDF non contiene prezzi. Indica il prezzo di ogni forma: le voci si calcolano come peso × prezzo.
+                    Le forme senza prezzo non entrano nel listino.
+                  </Text>
+                  {pricingGroups.map((group) => (
+                    <View key={group.name} style={styles.groupRow}>
+                      <Text style={[styles.groupName, { color: colors.text }]} numberOfLines={2}>
+                        {group.name} <Text style={{ color: colors.textTertiary }}>({group.item_count})</Text>
+                      </Text>
+                      <TextInput
+                        value={groupPriceDrafts[group.name] ?? ''}
+                        onChangeText={(value) => setGroupPriceDrafts((drafts) => ({ ...drafts, [group.name]: value }))}
+                        keyboardType="decimal-pad"
+                        placeholder="—"
+                        placeholderTextColor={colors.textTertiary}
+                        accessibilityLabel={`Prezzo ${group.name} in euro per ${group.reference_unit}`}
+                        style={[styles.groupInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
+                      />
+                      <Text style={[styles.noticeText, { color: colors.textSecondary }]}>€/{group.reference_unit}</Text>
+                    </View>
+                  ))}
+                  <TouchableOpacity
+                    style={[styles.actionBtn, { backgroundColor: colors.primary, marginTop: 10, opacity: savingGroupPrices ? 0.7 : 1 }]}
+                    onPress={handleSaveGroupPrices}
+                    disabled={savingGroupPrices}
+                  >
+                    <Text style={styles.actionBtnText}>{savingGroupPrices ? 'Applico...' : 'Applica prezzi'}</Text>
+                  </TouchableOpacity>
                 </View>
               ) : null}
 
@@ -1310,6 +1381,24 @@ export default function ListiniScreen() {
 }
 
 const styles = StyleSheet.create({
+  groupRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  groupName: {
+    flex: 1,
+    fontSize: 14,
+  },
+  groupInput: {
+    width: 72,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    textAlign: 'right',
+  },
   container: { flex: 1, padding: 16 },
   title: { fontSize: 22, fontWeight: '700', marginBottom: 16 },
   topActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },

@@ -13,12 +13,16 @@ export type ListinoItemInput = {
   unit_price: number;
   markup_percent?: number | null;
   category?: string | null;
+  pricing_group?: string | null;
+  /** Previous wording of the same item: the existing row is updated (and renamed). */
+  source_description?: string | null;
 };
 
 export type ExistingListinoRow = {
   id: string;
   description: string;
   category: string | null;
+  pricing_group?: string | null;
 };
 
 export type SaveListinoItemsResult = {
@@ -57,7 +61,7 @@ export async function fetchAllListinoRows(params: {
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await supabase
       .from('listini_vettoriali')
-      .select('id, description, category')
+      .select('id, description, category, pricing_group')
       .eq('listino_id', params.listinoId)
       .eq('profile_id', params.profileId)
       .order('created_at', { ascending: true })
@@ -113,16 +117,27 @@ export async function saveListinoItems(params: {
       markup_percent: Number((Number(item.markup_percent) || 0).toFixed(2)),
     };
 
-    const existing = existingByKey.get(key);
+    const previousKey = normalizeListinoDescriptionKey(item.source_description);
+    const existing =
+      existingByKey.get(key) ||
+      (previousKey ? existingByKey.get(previousKey) : undefined);
+    const group = item.pricing_group
+      ? { pricing_group: cleanCategory(item.pricing_group) }
+      : {};
     if (existing) {
+      const renamed = normalizeListinoDescriptionKey(existing.description) !== key;
       toUpdate.push({
         ...base,
+        ...group,
         id: existing.id,
         category: cleanCategory(item.category) ?? existing.category ?? null,
+        // A renamed row needs a new embedding for search.
+        ...(renamed ? { embedding: null } : {}),
       });
     } else {
       toInsert.push({
         ...base,
+        ...group,
         category: cleanCategory(item.category),
         embedding: null,
         created_at: now,
@@ -139,11 +154,22 @@ export async function saveListinoItems(params: {
 
   // Upsert on the primary key only touches the columns sent, so embedding and
   // created_at of existing rows are preserved.
-  for (let i = 0; i < toUpdate.length; i += WRITE_BATCH_SIZE) {
-    const { error } = await supabase
-      .from('listini_vettoriali')
-      .upsert(toUpdate.slice(i, i + WRITE_BATCH_SIZE), { onConflict: 'id' });
-    if (error) throw new Error(error.message);
+  // supabase-js sends the union of the keys of a batch and fills the missing ones with
+  // NULL: rows that don't touch embedding/pricing_group go in batches of their own.
+  const updatesByShape = new Map<string, Array<Record<string, unknown>>>();
+  for (const row of toUpdate) {
+    const shape = Object.keys(row).sort().join(',');
+    const rows = updatesByShape.get(shape) || [];
+    rows.push(row);
+    updatesByShape.set(shape, rows);
+  }
+  for (const rows of updatesByShape.values()) {
+    for (let i = 0; i < rows.length; i += WRITE_BATCH_SIZE) {
+      const { error } = await supabase
+        .from('listini_vettoriali')
+        .upsert(rows.slice(i, i + WRITE_BATCH_SIZE), { onConflict: 'id' });
+      if (error) throw new Error(error.message);
+    }
   }
 
   return { inserted: toInsert.length, updated: toUpdate.length, duplicatesSkipped };

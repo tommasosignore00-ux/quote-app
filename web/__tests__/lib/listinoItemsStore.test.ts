@@ -90,3 +90,37 @@ describe('saveListinoItems', () => {
     expect(row.category).toHaveLength(100);
   });
 });
+
+describe('saveListinoItems renames', () => {
+  it('updates the row saved under the old description instead of duplicating it', async () => {
+    insertMock.mockClear();
+    upsertMock.mockClear();
+    const result = await saveListinoItems({
+      listinoId: 'L1',
+      profileId: 'P1',
+      existingRows: [
+        { id: 'row-9', description: 'Tondi laminati trafilati 40 mm', category: 'Tondi' },
+      ],
+      items: [
+        {
+          description: 'Tondi laminati 40 mm',
+          source_description: 'Tondi laminati trafilati 40 mm',
+          unit_price: 13.23,
+          category: 'Tondi laminati',
+          pricing_group: 'Tondi laminati',
+        },
+      ],
+    });
+
+    expect(result).toEqual({ inserted: 0, updated: 1, duplicatesSkipped: 0 });
+    expect(upsertMock.mock.calls[0][0]).toEqual([
+      expect.objectContaining({
+        id: 'row-9',
+        description: 'Tondi laminati 40 mm',
+        pricing_group: 'Tondi laminati',
+        category: 'Tondi laminati',
+        embedding: null,
+      }),
+    ]);
+  });
+});

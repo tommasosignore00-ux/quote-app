@@ -25,6 +25,10 @@ export type ListinoSourceMetadata = {
   pricingDiagnostics?: PricingDiagnostics | null;
   aiFeedback?: string | null;
   requiresPricingRules?: boolean;
+  /** Version of the parser that produced candidateItems: older sources are re-read. */
+  parserVersion?: number;
+  /** Number of shapes in the "Prezzi per forma" section (catalogue without prices). */
+  pricingGroupsCount?: number;
 };
 
 function sanitizePathSegment(value: string): string {

@@ -11,6 +11,10 @@ export type UniversalParsedItem = {
   pricing_basis_quantity?: number | null;
   inferred_rule_key?: string | null;
   extracted_measurements?: Record<string, number>;
+  /** Shape/family from a catalogue without prices ("Travi HEA"): priced per group. */
+  pricing_group?: string | null;
+  /** Description as first written, to find rows saved before a rename. */
+  source_description?: string | null;
 };
 
 export type UniversalImportSummary = {
@@ -1563,8 +1567,9 @@ function toSentenceCase(value: string): string {
         word.length <= 3 &&
         /^\p{Lu}+$/u.test(word) &&
         !HEADING_LOWERCASE_WORDS.has(lower)
-      )
-        {return word;}
+      ) {
+        return word;
+      }
       return lower;
     })
     .join(' ');
@@ -1660,8 +1665,9 @@ function parseTechnicalTablesPdfText(
 
     const sheetThickness = SHEET_THICKNESS_RE.exec(cells[0] || '');
     if (sheetThickness) {
-      if (index - sheetFormatsLine > 30 || !sheetFormats.length || !headingParts.length)
-        {return;}
+      if (index - sheetFormatsLine > 30 || !sheetFormats.length || !headingParts.length) {
+        return;
+      }
       const thicknessMm = (parseLocalizedNumber(sheetThickness[1]) || 0) / 10;
       const heading = toSentenceCase(currentHeading());
       cells.slice(1, sheetFormats.length + 1).forEach((cell, formatIndex) => {
@@ -1680,14 +1686,16 @@ function parseTechnicalTablesPdfText(
             ? 'metal_ferrous'
             : inferRuleKey({ description: heading }),
           extracted_measurements: { kg: sheetWeight },
+          pricing_group: heading,
         });
       });
       return;
     }
 
     if (cells.length < 2 || cells.length > MAX_TECHNICAL_CELLS) return;
-    if (!cells.every((cell) => DIMENSION_CELL_RE.test(cell) || INCH_CELL_RE.test(cell)))
-      {return;}
+    if (!cells.every((cell) => DIMENSION_CELL_RE.test(cell) || INCH_CELL_RE.test(cell))) {
+      return;
+    }
     if (INCH_CELL_RE.test(cells[cells.length - 1])) return;
     // Only rows inside a "peso (kg/m)" table: elsewhere numbers could mean anything.
     if (index - weightContextLine > 40 || !headingParts.length) return;
@@ -1722,6 +1730,7 @@ function parseTechnicalTablesPdfText(
       pricing_basis_quantity: weight,
       inferred_rule_key: inferredRuleKey,
       extracted_measurements: { kg: weight },
+      pricing_group: heading,
     });
   });
 

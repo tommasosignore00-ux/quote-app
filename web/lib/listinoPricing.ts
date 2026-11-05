@@ -183,7 +183,9 @@ function buildReferenceCandidates(items: UniversalParsedItem[]): Map<string, num
   return references;
 }
 
-async function loadStoredReferenceRules(profileId: string): Promise<Map<string, number>> {
+export async function loadStoredReferenceRules(
+  profileId: string
+): Promise<Map<string, number>> {
   try {
     const { data: profileRules, error: profileError } = await supabaseAdmin
       .from('pricing_reference_rules')

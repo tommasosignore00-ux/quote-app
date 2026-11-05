@@ -13,6 +13,18 @@ type ListinoItem = {
   markup_percent: number;
   category?: string | null;
 };
+type PricingGroupRow = {
+  id?: string;
+  name: string;
+  reference_unit: string;
+  unit_price: number | null;
+  item_count: number;
+};
+
+function formatGroupPrice(value: number | null): string {
+  return value === null || value === undefined ? '' : String(value).replace('.', ',');
+}
+
 type ListinoSourceInfo = {
   fileName: string;
   mimeType: string;
@@ -312,6 +324,10 @@ export default function ListiniPage() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [organizingAi, setOrganizingAi] = useState(false);
+  // "Prezzi per forma": only for listini whose PDF has no prices.
+  const [pricingGroups, setPricingGroups] = useState<PricingGroupRow[]>([]);
+  const [groupPriceDrafts, setGroupPriceDrafts] = useState<Record<string, string>>({});
+  const [savingGroupPrices, setSavingGroupPrices] = useState(false);
 
   const fetchListini = async () => {
     const {
@@ -368,6 +384,64 @@ export default function ListiniPage() {
       setSelectedSourceInfo(payload?.sourceInfo || null);
     } catch {
       setSelectedSourceInfo(null);
+    }
+    await fetchPricingGroups(listinoId, nextProfileId);
+  };
+
+  const fetchPricingGroups = async (listinoId: string, nextProfileId: string) => {
+    try {
+      const res = await fetch(
+        `/api/listini/pricing-groups?listinoId=${encodeURIComponent(listinoId)}&profileId=${encodeURIComponent(nextProfileId)}`
+      );
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.error || 'Lettura forme non riuscita');
+      const groups = (payload?.groups || []) as PricingGroupRow[];
+      setPricingGroups(groups);
+      setGroupPriceDrafts(
+        Object.fromEntries(
+          groups.map((group) => [group.name, formatGroupPrice(group.unit_price)])
+        )
+      );
+    } catch {
+      setPricingGroups([]);
+      setGroupPriceDrafts({});
+    }
+  };
+
+  const handleSaveGroupPrices = async () => {
+    if (!selectedListino) return;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    setSavingGroupPrices(true);
+    try {
+      const res = await fetch('/api/listini/pricing-groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          listinoId: selectedListino.id,
+          profileId: user.id,
+          prices: pricingGroups.map((group) => ({
+            name: group.name,
+            unit_price: groupPriceDrafts[group.name] ?? '',
+          })),
+        }),
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.error || 'Salvataggio prezzi non riuscito');
+      toast.success(
+        `Prezzi applicati: ${payload.inserted || 0} voci nuove, ${payload.updated || 0} aggiornate` +
+          (payload.pendingGroups
+            ? ` · ${payload.pendingGroups} forme ancora senza prezzo`
+            : '')
+      );
+      await fetchItems(selectedListino.id);
+      await fetchPricingGroups(selectedListino.id, user.id);
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setSavingGroupPrices(false);
     }
   };
 
@@ -1039,21 +1113,10 @@ export default function ListiniPage() {
         if (payload?.aiFeedback) {
           toast(payload.aiFeedback, { duration: 8000, icon: 'ℹ️' });
         }
-        const missingRules = Array.isArray(payload?.pricingDiagnostics?.recommendedRules)
-          ? payload.pricingDiagnostics.recommendedRules
-              .slice(0, 3)
-              .map(
-                (rule: any) =>
-                  `${rule.label} (€/${rule.reference_unit}) per ${rule.missingCount} voci`
-              )
-          : [];
-        if (missingRules.length) {
+        if (payload?.pendingPricingGroups) {
           toast(
-            `Imposta in "Regole prezzo": ${missingRules.join(', ')}. Poi rilancia "Riorganizza con AI".`,
-            {
-              duration: 12000,
-              icon: '🧠',
-            }
+            `Il PDF non contiene prezzi: indica il prezzo di ${payload.pendingPricingGroups} forme nella sezione "Prezzi per forma".`,
+            { duration: 12000, icon: '🧠' }
           );
         }
       } else {
@@ -1167,13 +1230,6 @@ export default function ListiniPage() {
               disabled={uploading}
             />
             <button
-              onClick={openPricingRulesModal}
-              className="btn-secondary"
-              disabled={uploading || organizingAi}
-            >
-              Regole prezzo
-            </button>
-            <button
               onClick={handleOrganizeWithAi}
               className="btn-secondary"
               disabled={organizingAi || uploading}
@@ -1264,24 +1320,67 @@ export default function ListiniPage() {
                   {selectedSourceInfo.aiFeedback ? (
                     <p className="mt-2 text-slate-700">{selectedSourceInfo.aiFeedback}</p>
                   ) : null}
-                  {selectedSourceInfo.parsedSummary?.parsedRows ? (
-                    <p className="mt-2 text-slate-600">
-                      Voci tecniche trovate: {selectedSourceInfo.parsedSummary.parsedRows}
-                      {selectedSourceInfo.parsedSummary.pendingReferenceRows
-                        ? ` · da completare con regole prezzo: ${selectedSourceInfo.parsedSummary.pendingReferenceRows}`
-                        : ''}
-                    </p>
-                  ) : null}
-                  {selectedSourceInfo.requiresPricingRules &&
-                  selectedSourceInfo.pricingDiagnostics?.recommendedRules?.length ? (
-                    <p className="mt-2 text-slate-600">
-                      Regole consigliate:{' '}
-                      {selectedSourceInfo.pricingDiagnostics.recommendedRules
-                        .slice(0, 3)
-                        .map((rule) => `${rule.label} (${rule.reference_unit})`)
-                        .join(', ')}
-                    </p>
-                  ) : null}
+                </div>
+              )}
+              {pricingGroups.length > 0 && (
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-medium text-slate-800">Prezzi per forma</div>
+                      <p className="text-slate-600">
+                        Il PDF non contiene prezzi. Indica il prezzo di ogni forma: le
+                        voci si calcolano come peso × prezzo. Le forme senza prezzo non
+                        entrano nel listino.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleSaveGroupPrices}
+                      className="btn-primary shrink-0"
+                      disabled={savingGroupPrices}
+                    >
+                      {savingGroupPrices ? 'Applico...' : 'Applica prezzi'}
+                    </button>
+                  </div>
+                  <table className="mt-3 w-full">
+                    <thead>
+                      <tr className="border-b border-amber-200 text-slate-600">
+                        <th className="text-left py-1">Forma</th>
+                        <th className="text-right py-1">Voci</th>
+                        <th className="text-right py-1">Prezzo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pricingGroups.map((group) => (
+                        <tr key={group.name} className="border-b border-amber-100">
+                          <td className="py-1 pr-2">{group.name}</td>
+                          <td className="py-1 text-right text-slate-500">
+                            {group.item_count}
+                          </td>
+                          <td className="py-1 text-right">
+                            <span className="inline-flex items-center gap-1">
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={groupPriceDrafts[group.name] ?? ''}
+                                onChange={(e) =>
+                                  setGroupPriceDrafts((drafts) => ({
+                                    ...drafts,
+                                    [group.name]: e.target.value,
+                                  }))
+                                }
+                                placeholder="—"
+                                aria-label={`Prezzo ${group.name} in euro per ${group.reference_unit}`}
+                                className="w-20 rounded border border-slate-300 px-2 py-1 text-right"
+                              />
+                              <span className="text-slate-500">
+                                €/{group.reference_unit}
+                              </span>
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
               <table className="w-full text-sm">
