@@ -24,7 +24,7 @@ import {
   uploadListinoSource,
   type ListinoSourceMetadata,
 } from './listinoSourceStorage';
-import { bulkGenerateEmbeddingsForListino } from './bulkGenerateEmbeddings';
+import { scheduleEmbeddingsForListino } from './bulkGenerateEmbeddings';
 import { saveListinoItems } from './listinoItemsStore';
 import {
   reportDebugEvent,
@@ -1445,11 +1445,7 @@ export async function processListinoImport(
         items: pricingResolution.items,
       });
 
-      try {
-        await bulkGenerateEmbeddingsForListino({ listinoId: targetListinoId! });
-      } catch (e) {
-        console.warn('Failed to trigger bulk embeddings', e);
-      }
+      scheduleEmbeddingsForListino(targetListinoId!);
 
       return {
         ok: true,
@@ -1542,11 +1538,7 @@ export async function processListinoImport(
       items: pricingResolution.items,
     });
 
-    try {
-      await bulkGenerateEmbeddingsForListino({ listinoId: targetListinoId! });
-    } catch (e) {
-      console.warn('Failed to trigger bulk embeddings', e);
-    }
+    scheduleEmbeddingsForListino(targetListinoId!);
 
     return {
       ok: true,

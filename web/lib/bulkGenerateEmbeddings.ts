@@ -1,5 +1,6 @@
 import { supabaseAdmin } from './supabase-server';
 import OpenAI from 'openai';
+import { waitUntil } from '@vercel/functions';
 
 const supabase = supabaseAdmin;
 const openai = process.env.OPENAI_API_KEY
@@ -9,7 +10,7 @@ const openai = process.env.OPENAI_API_KEY
 const FETCH_BATCH_SIZE = 200;
 // One embeddings request carries many descriptions instead of one call per row.
 const EMBED_BATCH_SIZE = 100;
-const UPDATE_CONCURRENCY = 10;
+const UPDATE_CONCURRENCY = 25;
 
 async function runWithConcurrency<T>(
   items: T[],
@@ -24,6 +25,17 @@ async function runWithConcurrency<T>(
     }
   });
   await Promise.all(runners);
+}
+
+/**
+ * Generates embeddings after the HTTP response is sent: an import of hundreds of rows
+ * no longer waits for them (on Vercel the function stays alive via waitUntil).
+ */
+export function scheduleEmbeddingsForListino(listinoId: string) {
+  const job = bulkGenerateEmbeddingsForListino({ listinoId }).catch((error) => {
+    console.warn('Background embeddings failed for listino', listinoId, error);
+  });
+  waitUntil(job);
 }
 
 export async function bulkGenerateEmbeddingsForListino(params: { listinoId: string }) {

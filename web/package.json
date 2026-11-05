@@ -24,6 +24,7 @@
     "@stripe/stripe-js": "^4.0.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.45.0",
+    "@vercel/functions": "^3.10.6",
     "bcryptjs": "^2.4.3",
     "goober": "^2.1.18",
     "html2canvas": "^1.4.1",

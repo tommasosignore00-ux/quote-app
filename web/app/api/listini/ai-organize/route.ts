@@ -21,7 +21,7 @@ import {
   reportDebugEvent,
   getActiveDebugRunId,
 } from '../../../../lib/listinoDebugShared';
-import { bulkGenerateEmbeddingsForListino } from '../../../../lib/bulkGenerateEmbeddings';
+import { scheduleEmbeddingsForListino } from '../../../../lib/bulkGenerateEmbeddings';
 import {
   applyListinoCategories,
   fetchAllListinoRows,
@@ -58,8 +58,11 @@ function normalizeCategory(value: unknown): string | null {
   return text.slice(0, 80);
 }
 
-const CATEGORIZE_CHUNK_SIZE = 80;
-const CATEGORIZE_CONCURRENCY = 4;
+const CATEGORIZE_CHUNK_SIZE = 100;
+const CATEGORIZE_CONCURRENCY = 8;
+// Stop starting new AI chunks after this, so the request ends well before the
+// 300 s function limit; the remaining rows keep their category until the next run.
+const CATEGORIZE_TIME_BUDGET_MS = 150_000;
 const MAX_KNOWN_CATEGORIES = 60;
 
 async function fetchListinoRows(params: { listinoId: string; profileId: string }) {
@@ -148,10 +151,13 @@ function mostUsedCategories(
 async function categorizeAllRows(params: {
   listinoName: string;
   rows: Array<{ id: string; description: string; category: string | null }>;
+  deadline: number;
 }) {
   const chunks = chunkArray(params.rows, CATEGORIZE_CHUNK_SIZE);
   const updates: Array<{ id: string; category: string }> = [];
-  if (!chunks.length) return { updates, chunkCount: 0 };
+  let skippedRows = 0;
+  let failedChunks = 0;
+  if (!chunks.length) return { updates, chunkCount: 0, skippedRows, failedChunks };
 
   const seedUpdates = await categorizeChunk({
     listinoName: params.listinoName,
@@ -177,13 +183,24 @@ async function categorizeAllRows(params: {
     Array.from({ length: Math.min(CATEGORIZE_CONCURRENCY, rest.length) }, async () => {
       while (cursor < rest.length) {
         const chunk = rest[cursor++];
-        updates.push(
-          ...(await categorizeChunk({
-            listinoName: params.listinoName,
-            chunk,
-            knownCategories,
-          }))
-        );
+        if (Date.now() > params.deadline) {
+          skippedRows += chunk.length;
+          continue;
+        }
+        try {
+          updates.push(
+            ...(await categorizeChunk({
+              listinoName: params.listinoName,
+              chunk,
+              knownCategories,
+            }))
+          );
+        } catch (chunkError) {
+          // One failed chunk must not throw away the categories of all the others.
+          console.warn('AI categorization chunk failed:', chunkError);
+          failedChunks++;
+          skippedRows += chunk.length;
+        }
       }
     })
   );
@@ -196,7 +213,7 @@ async function categorizeAllRows(params: {
     update.category = canonicalLabel.get(key)!;
   }
 
-  return { updates, chunkCount: chunks.length };
+  return { updates, chunkCount: chunks.length, skippedRows, failedChunks };
 }
 
 // Reprocessing a large PDF, saving hundreds of rows and categorizing them can take
@@ -205,6 +222,7 @@ export const maxDuration = 300;
 
 export async function POST(req: Request) {
   const runId = getActiveDebugRunId('ai-organize');
+  const startedAt = Date.now();
   try {
     const user = await getRequestUser(req);
     if (!user) return unauthorizedResponse();
@@ -460,11 +478,8 @@ export async function POST(req: Request) {
 
         importedCount += saved.inserted;
 
-        try {
-          await bulkGenerateEmbeddingsForListino({ listinoId });
-        } catch (e) {
-          console.warn('Failed to trigger bulk embeddings', e);
-        }
+        // Embeddings are generated after the response, so the user doesn't wait for them.
+        scheduleEmbeddingsForListino(listinoId);
 
         sourceRows = await fetchListinoRows({ listinoId, profileId });
       }
@@ -506,6 +521,7 @@ export async function POST(req: Request) {
           description: item.description,
           category: item.category || null,
         })),
+        deadline: startedAt + CATEGORIZE_TIME_BUDGET_MS,
       });
       chunkCount = categorized.chunkCount;
       updatedCount = await applyListinoCategories({
@@ -513,6 +529,13 @@ export async function POST(req: Request) {
         profileId,
         updates: categorized.updates,
       });
+      if (categorized.skippedRows) {
+        warning = `Categorie aggiornate per ${updatedCount} voci; ${categorized.skippedRows} restano con la categoria attuale${
+          categorized.failedChunks
+            ? ' (alcune richieste AI non sono riuscite)'
+            : ' (tempo esaurito)'
+        }. Rilancia "Riorganizza con AI" per completarle.`;
+      }
     } catch (categorizeError) {
       console.warn('AI categorization failed:', categorizeError);
       warning =
