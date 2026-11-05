@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getRequestUser, unauthorizedResponse, forbiddenResponse, isOwnProfile } from '../../../../lib/apiAuth';
-import OpenAI from 'openai';
+import {
+  getRequestUser,
+  unauthorizedResponse,
+  forbiddenResponse,
+  isOwnProfile,
+} from '../../../../lib/apiAuth';
+import { openai } from '../../../../lib/openaiServer';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const supabase = supabaseAdmin;
 
 export async function POST(req: Request) {
@@ -40,12 +44,20 @@ export async function POST(req: Request) {
 
     const metadataMap = new Map(
       (metadataRows || []).map((row) => {
-        const relatedListino = row.listini as { name?: string } | { name?: string }[] | null;
+        const relatedListino = row.listini as
+          { name?: string } | { name?: string }[] | null;
         const listinoName = Array.isArray(relatedListino)
-          ? relatedListino[0]?.name ?? null
-          : relatedListino?.name ?? null;
+          ? (relatedListino[0]?.name ?? null)
+          : (relatedListino?.name ?? null);
 
-        return [row.id, { listino_id: row.listino_id, category: row.category, listino_name: listinoName }];
+        return [
+          row.id,
+          {
+            listino_id: row.listino_id,
+            category: row.category,
+            listino_name: listinoName,
+          },
+        ];
       })
     );
 
@@ -56,7 +68,7 @@ export async function POST(req: Request) {
 
     const best = normalizedItems[0];
     const similarity = best.similarity || 0;
-    
+
     // Accept any match above 0.6 threshold
     if (similarity >= 0.6) {
       return NextResponse.json({ item: best, alternatives: normalizedItems.slice(1, 4) });

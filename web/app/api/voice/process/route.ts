@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getRequestUser, unauthorizedResponse } from '../../../../lib/apiAuth';
-import OpenAI from 'openai';
+import { openai } from '../../../../lib/openaiServer';
 import { rateLimitVoice } from '../../../../lib/rate-limit';
 import { runVoiceAgent } from '../../../../lib/voice-agent/orchestrator';
 import type {
@@ -10,8 +10,6 @@ import type {
   VoiceAgentQuoteRef,
   VoiceAgentRuntimeContext,
 } from '../../../../lib/voice-agent/types';
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function POST(req: Request) {
   try {
@@ -83,10 +81,15 @@ function buildVoiceAgentContext(formData: FormData): VoiceAgentRuntimeContext {
     };
   }
 
-  const legacyCustomers = parseJsonField<Array<{ id: string; name: string }>>(formData, 'clienti') || [];
+  const legacyCustomers =
+    parseJsonField<Array<{ id: string; name: string }>>(formData, 'clienti') || [];
   const existingJobs = parseJsonField<VoiceAgentJobRef[]>(formData, 'lavori') || [];
-  const catalogItems = parseJsonField<VoiceAgentCatalogItem[]>(formData, 'catalogItems') || [];
-  const currentCustomer = parseJsonField<VoiceAgentCustomerRef>(formData, 'currentCustomer');
+  const catalogItems =
+    parseJsonField<VoiceAgentCatalogItem[]>(formData, 'catalogItems') || [];
+  const currentCustomer = parseJsonField<VoiceAgentCustomerRef>(
+    formData,
+    'currentCustomer'
+  );
   const currentJob = parseJsonField<VoiceAgentJobRef>(formData, 'currentJob');
   const currentQuote = parseJsonField<VoiceAgentQuoteRef>(formData, 'currentQuote');
 

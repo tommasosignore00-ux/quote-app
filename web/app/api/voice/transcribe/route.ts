@@ -1,3 +1,4 @@
+import { openai } from '../../../../lib/openaiServer';
 import { NextResponse } from 'next/server';
 import { getRequestUser, unauthorizedResponse } from '../../../../lib/apiAuth';
 import OpenAI from 'openai';
@@ -5,7 +6,6 @@ import { createClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import { Readable } from 'stream';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const supabase = supabaseAdmin;
 
 export async function POST(req: Request) {
@@ -49,6 +49,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ text });
   } catch (err: any) {
     console.error('Transcription error:', err);
-    return NextResponse.json({ error: err.message || 'Transcription failed' }, { status: 500 });
+    return NextResponse.json(
+      { error: err.message || 'Transcription failed' },
+      { status: 500 }
+    );
   }
 }

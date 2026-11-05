@@ -1,5 +1,7 @@
 name: Mobile Build
 
+# EAS cloud builds use Expo credits and need the EXPO_TOKEN secret: start them on
+# demand (Actions > Mobile Build > Run workflow). Every push gets a type check.
 on:
   push:
     branches: [main]
@@ -11,9 +13,23 @@ env:
   NODE_VERSION: '20'
 
 jobs:
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: cd mobile && npm ci
+      - run: cd mobile && npx tsc --noEmit
+
   build-android:
     name: Build Android
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,6 +50,7 @@ jobs:
   build-ios:
     name: Build iOS
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getRequestUser, unauthorizedResponse } from '../../../../lib/apiAuth';
-import OpenAI from 'openai';
+import { openai } from '../../../../lib/openaiServer';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const supabase = supabaseAdmin;
 
 export async function POST(req: Request) {
@@ -17,7 +16,8 @@ export async function POST(req: Request) {
     const model = process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
     const resp = await openai.embeddings.create({ model, input: query });
     const qEmbedding = resp.data?.[0]?.embedding;
-    if (!qEmbedding) return NextResponse.json({ error: 'no embedding returned' }, { status: 500 });
+    if (!qEmbedding)
+      {return NextResponse.json({ error: 'no embedding returned' }, { status: 500 });}
 
     // Call Postgres function to perform k-NN search (function must be added via migration)
     // Solo i listini dell'utente: search_listini non filtra per profilo
@@ -30,7 +30,10 @@ export async function POST(req: Request) {
     });
     if (error) {
       console.error('Search RPC error:', error);
-      return NextResponse.json({ error: error.message || 'Search failed' }, { status: 500 });
+      return NextResponse.json(
+        { error: error.message || 'Search failed' },
+        { status: 500 }
+      );
     }
 
     const itemIds = (data || []).map((item: { id: string }) => item.id).filter(Boolean);
@@ -41,12 +44,20 @@ export async function POST(req: Request) {
 
     const metadataMap = new Map(
       (metadataRows || []).map((row) => {
-        const relatedListino = row.listini as { name?: string } | { name?: string }[] | null;
+        const relatedListino = row.listini as
+          { name?: string } | { name?: string }[] | null;
         const listinoName = Array.isArray(relatedListino)
-          ? relatedListino[0]?.name ?? null
-          : relatedListino?.name ?? null;
+          ? (relatedListino[0]?.name ?? null)
+          : (relatedListino?.name ?? null);
 
-        return [row.id, { listino_id: row.listino_id, category: row.category, listino_name: listinoName }];
+        return [
+          row.id,
+          {
+            listino_id: row.listino_id,
+            category: row.category,
+            listino_name: listinoName,
+          },
+        ];
       })
     );
 
@@ -58,6 +69,9 @@ export async function POST(req: Request) {
     });
   } catch (err: any) {
     console.error('Semantic search error:', err);
-    return NextResponse.json({ error: err.message || 'Semantic search failed' }, { status: 500 });
+    return NextResponse.json(
+      { error: err.message || 'Semantic search failed' },
+      { status: 500 }
+    );
   }
 }

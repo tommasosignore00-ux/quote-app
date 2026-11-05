@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getRequestUser, unauthorizedResponse } from '../../../../lib/apiAuth';
-import OpenAI from 'openai';
+import { openai } from '../../../../lib/openaiServer';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const supabase = supabaseAdmin;
 
 export async function POST(req: Request) {
@@ -17,8 +16,9 @@ export async function POST(req: Request) {
     const model = process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
     const resp = await openai.embeddings.create({ model, input: text });
     const embedding = resp.data?.[0]?.embedding;
-    if (!embedding)
-      {return NextResponse.json({ error: 'no embedding returned' }, { status: 500 });}
+    if (!embedding) {
+      return NextResponse.json({ error: 'no embedding returned' }, { status: 500 });
+    }
 
     // Salva solo se il listino appartiene all'utente
     const listinoId = metadata?.listino_id || null;

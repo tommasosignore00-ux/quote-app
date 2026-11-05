@@ -1,15 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getRequestUser, unauthorizedResponse } from '../../../../lib/apiAuth';
-import OpenAI from 'openai';
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { openai } from '../../../../lib/openaiServer';
 
 export async function POST(req: Request) {
   try {
     const user = await getRequestUser(req);
     if (!user) return unauthorizedResponse();
     const { description } = await req.json();
-    if (!description) return NextResponse.json({ error: 'Missing description' }, { status: 400 });
+    if (!description)
+      {return NextResponse.json({ error: 'Missing description' }, { status: 400 });}
 
     const res = await openai.embeddings.create({
       model: 'text-embedding-3-small',
