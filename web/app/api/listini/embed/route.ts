@@ -1,3 +1,4 @@
+import { enforceAiQuota } from '../../../../lib/aiQuota';
 import { NextResponse } from 'next/server';
 import { getRequestUser, unauthorizedResponse } from '../../../../lib/apiAuth';
 import { openai } from '../../../../lib/openaiServer';
@@ -6,9 +7,12 @@ export async function POST(req: Request) {
   try {
     const user = await getRequestUser(req);
     if (!user) return unauthorizedResponse();
+    const quotaExceeded = await enforceAiQuota(user.id, 'semantic');
+    if (quotaExceeded) return quotaExceeded;
     const { description } = await req.json();
-    if (!description)
-      {return NextResponse.json({ error: 'Missing description' }, { status: 400 });}
+    if (!description) {
+      return NextResponse.json({ error: 'Missing description' }, { status: 400 });
+    }
 
     const res = await openai.embeddings.create({
       model: 'text-embedding-3-small',

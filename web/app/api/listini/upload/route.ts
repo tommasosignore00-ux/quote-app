@@ -1,3 +1,4 @@
+import { enforceAiQuota } from '../../../../lib/aiQuota';
 import { NextResponse } from 'next/server';
 import {
   getRequestUser,
@@ -19,6 +20,8 @@ export async function POST(req: Request) {
   try {
     const user = await getRequestUser(req);
     if (!user) return unauthorizedResponse();
+    const quotaExceeded = await enforceAiQuota(user.id, 'listino_import');
+    if (quotaExceeded) return quotaExceeded;
     const requestContentType = req.headers.get('content-type') || '';
     let listinoName: string | null = null;
     let profileId: string | null = null;

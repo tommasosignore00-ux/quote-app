@@ -1,3 +1,4 @@
+import { enforceAiQuota } from '../../../../lib/aiQuota';
 import { openai } from '../../../../lib/openaiServer';
 import { NextResponse } from 'next/server';
 import { getRequestUser, unauthorizedResponse } from '../../../../lib/apiAuth';
@@ -12,6 +13,8 @@ export async function POST(req: Request) {
   try {
     const user = await getRequestUser(req);
     if (!user) return unauthorizedResponse();
+    const quotaExceeded = await enforceAiQuota(user.id, 'voice');
+    if (quotaExceeded) return quotaExceeded;
     const body = await req.json();
     const { audioBase64, filename = 'audio.wav', mimeType = 'audio/wav' } = body;
     const userId = user.id;

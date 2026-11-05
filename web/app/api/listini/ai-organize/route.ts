@@ -1,3 +1,4 @@
+import { enforceAiQuota } from '../../../../lib/aiQuota';
 import { NextResponse } from 'next/server';
 import {
   getRequestUser,
@@ -226,6 +227,8 @@ export async function POST(req: Request) {
   try {
     const user = await getRequestUser(req);
     if (!user) return unauthorizedResponse();
+    const quotaExceeded = await enforceAiQuota(user.id, 'listino_ai_organize');
+    if (quotaExceeded) return quotaExceeded;
     const { listinoId, profileId: claimedProfileId } = await req.json();
     if (!isOwnProfile(user, claimedProfileId)) return forbiddenResponse();
     const profileId = user.id;

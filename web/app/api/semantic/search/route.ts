@@ -1,3 +1,4 @@
+import { enforceAiQuota } from '../../../../lib/aiQuota';
 import { NextResponse } from 'next/server';
 import { getRequestUser, unauthorizedResponse } from '../../../../lib/apiAuth';
 import { openai } from '../../../../lib/openaiServer';
@@ -9,6 +10,8 @@ export async function POST(req: Request) {
   try {
     const user = await getRequestUser(req);
     if (!user) return unauthorizedResponse();
+    const quotaExceeded = await enforceAiQuota(user.id, 'semantic');
+    if (quotaExceeded) return quotaExceeded;
     const { query, k = 8 } = await req.json();
     if (!query) return NextResponse.json({ error: 'query required' }, { status: 400 });
 
@@ -16,8 +19,9 @@ export async function POST(req: Request) {
     const model = process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
     const resp = await openai.embeddings.create({ model, input: query });
     const qEmbedding = resp.data?.[0]?.embedding;
-    if (!qEmbedding)
-      {return NextResponse.json({ error: 'no embedding returned' }, { status: 500 });}
+    if (!qEmbedding) {
+      return NextResponse.json({ error: 'no embedding returned' }, { status: 500 });
+    }
 
     // Call Postgres function to perform k-NN search (function must be added via migration)
     // Solo i listini dell'utente: search_listini non filtra per profilo
