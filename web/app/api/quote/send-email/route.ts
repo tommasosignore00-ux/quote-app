@@ -9,7 +9,10 @@ export async function POST(req: Request) {
     if (!user) return unauthorizedResponse();
     const rl = rateLimitEmail(user.id);
     if (!rl.success) {
-      return NextResponse.json({ error: 'Troppe email inviate. Riprova tra poco.' }, { status: 429, headers: rl.headers });
+      return NextResponse.json(
+        { error: 'Troppe email inviate. Riprova tra poco.' },
+        { status: 429, headers: rl.headers }
+      );
     }
     const body = await req.json();
     const validation = validateRequest(sendEmailSchema, body);
@@ -24,7 +27,7 @@ export async function POST(req: Request) {
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
+          Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -36,9 +39,11 @@ export async function POST(req: Request) {
         }),
       });
       if (!res.ok) throw new Error(await res.text());
+    } else if (process.env.NODE_ENV === 'production') {
+      // Never report as sent an email that did not leave.
+      return NextResponse.json({ error: 'Invio email non configurato' }, { status: 503 });
     } else {
-      console.log('Email would be sent:', { to, subject });
-      // Simulate success for development
+      console.log('Email would be sent (dev):', { to, subject });
     }
 
     return NextResponse.json({ success: true });

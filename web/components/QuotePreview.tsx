@@ -9,12 +9,30 @@ import toast from 'react-hot-toast';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 
-type Lavoro = { id: string; title: string; cliente_id: string; clienti?: { name: string; email?: string } };
+type Lavoro = {
+  id: string;
+  title: string;
+  cliente_id: string;
+  clienti?: { name: string; email?: string };
+};
 
 type QuotePreviewProps = {
   lavoroId: string;
   lavoro: Lavoro;
 };
+
+// Button added to the email only: the document itself stays the plain quote.
+function withAcceptanceLink(html: string, token?: string | null): string {
+  if (!token || typeof window === 'undefined') return html;
+  const url = `${window.location.origin}/q/${token}`;
+  const block = `<div style="margin:24px 0;text-align:center;font-family:Arial,sans-serif">
+    <a href="${url}" style="display:inline-block;background:#15803d;color:#ffffff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">Visualizza e accetta il preventivo</a>
+    <p style="color:#64748b;font-size:12px;margin-top:8px">Puoi accettarlo o rifiutarlo online, senza registrarti.</p>
+  </div>`;
+  return html.includes('</body>')
+    ? html.replace('</body>', `${block}</body>`)
+    : `${html}${block}`;
+}
 
 export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
   const { t } = useTranslation();
@@ -25,12 +43,18 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
   const [loading, setLoading] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [recipientEmail, setRecipientEmail] = useState('');
-  const [selectedTemplate, setSelectedTemplate] = useState<'classic' | 'minimal' | 'professional' | 'custom'>('classic');
+  const [selectedTemplate, setSelectedTemplate] = useState<
+    'classic' | 'minimal' | 'professional' | 'custom'
+  >('classic');
   const [hasCustomTemplate, setHasCustomTemplate] = useState(false);
 
   useEffect(() => {
     const loadRevision = async () => {
-      const { data } = await supabase.from('lavori').select('current_revision').eq('id', lavoroId).single();
+      const { data } = await supabase
+        .from('lavori')
+        .select('current_revision')
+        .eq('id', lavoroId)
+        .single();
       if (data?.current_revision) setRevision(data.current_revision);
     };
     loadRevision();
@@ -38,10 +62,16 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
 
   useEffect(() => {
     const checkCustomTemplate = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
-      const { data: profile } = await supabase.from('profiles').select('custom_template_html').eq('id', user.id).single();
-      setHasCustomTemplate(!!(profile?.custom_template_html));
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('custom_template_html')
+        .eq('id', user.id)
+        .single();
+      setHasCustomTemplate(!!profile?.custom_template_html);
     };
     checkCustomTemplate();
   }, []);
@@ -49,16 +79,31 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
   const generatePreview = async () => {
     setLoading(true);
     try {
-      const { data: dettaglio, error: dettaglioErr } = await supabase.from('preventivi_dettaglio').select('*').eq('lavoro_id', lavoroId);
+      const { data: dettaglio, error: dettaglioErr } = await supabase
+        .from('preventivi_dettaglio')
+        .select('*')
+        .eq('lavoro_id', lavoroId);
       if (dettaglioErr) throw dettaglioErr;
-      
-      const { data: lavoroData, error: lavoroErr } = await supabase.from('lavori').select('*, clienti(*)').eq('id', lavoroId).single();
+
+      const { data: lavoroData, error: lavoroErr } = await supabase
+        .from('lavori')
+        .select('*, clienti(*)')
+        .eq('id', lavoroId)
+        .single();
       if (lavoroErr) throw lavoroErr;
-      
-      const { data: profile, error: profileErr } = await supabase.from('profiles').select('*').eq('id', lavoroData.profile_id).single();
+
+      const { data: profile, error: profileErr } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', lavoroData.profile_id)
+        .single();
       if (profileErr) throw profileErr;
-      
-      const { data: revData } = await supabase.from('lavori').select('current_revision').eq('id', lavoroId).single();
+
+      const { data: revData } = await supabase
+        .from('lavori')
+        .select('current_revision')
+        .eq('id', lavoroId)
+        .single();
       const currentRev = revData?.current_revision ?? 1;
       setRevision(currentRev);
 
@@ -84,7 +129,8 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
         swift: profile?.swift,
         countryCode: normalizeCountryCode(profile?.country_code),
         templateType: selectedTemplate,
-        customTemplateHtml: selectedTemplate === 'custom' ? profile?.custom_template_html : undefined,
+        customTemplateHtml:
+          selectedTemplate === 'custom' ? profile?.custom_template_html : undefined,
       };
 
       const html = generateQuoteHTML(quoteData);
@@ -104,7 +150,10 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
   };
 
   const handleDownload = async (asPdf = false) => {
-    if (!approved) { toast.error(t('quote.approveBefore')); return; }
+    if (!approved) {
+      toast.error(t('quote.approveBefore'));
+      return;
+    }
     const rev = String(revision).padStart(2, '0');
 
     if (asPdf) {
@@ -128,7 +177,9 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
       URL.revokeObjectURL(url);
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     await supabase.from('preventivi_versioni').insert({
       lavoro_id: lavoroId,
       revision,
@@ -136,38 +187,61 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
       approved_at: new Date().toISOString(),
       approved_by: user?.id,
     });
-    await supabase.from('lavori').update({ current_revision: revision + 1 }).eq('id', lavoroId);
+    await supabase
+      .from('lavori')
+      .update({ current_revision: revision + 1 })
+      .eq('id', lavoroId);
     setRevision(revision + 1);
     toast.success('Preventivo salvato nella cronologia');
   };
 
   const handleSendEmail = async () => {
-    if (!approved || !recipientEmail) { toast.error('Approva e inserisci email destinatario'); return; }
+    if (!approved || !recipientEmail) {
+      toast.error('Approva e inserisci email destinatario');
+      return;
+    }
     try {
-      const res = await fetch('/api/quote/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: recipientEmail,
-          subject: `Preventivo - ${lavoro.title}`,
-          html: htmlContent,
-          lavoroId,
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      // Saved first: its secret link goes in the email. Marked as sent only after sending.
+      const { data: version, error: saveError } = await supabase
+        .from('preventivi_versioni')
+        .insert({
+          lavoro_id: lavoroId,
           revision,
-        }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from('preventivi_versioni').insert({
-        lavoro_id: lavoroId,
-        revision,
-        html_content: htmlContent,
-        approved_at: new Date().toISOString(),
-        approved_by: user?.id,
-        sent_via_email: true,
-        sent_at: new Date().toISOString(),
-        recipient_email: recipientEmail,
-      });
-      await supabase.from('lavori').update({ current_revision: revision + 1 }).eq('id', lavoroId);
+          html_content: htmlContent,
+          approved_at: new Date().toISOString(),
+          approved_by: user?.id,
+          recipient_email: recipientEmail,
+        })
+        .select('id, public_token')
+        .single();
+      if (saveError) throw saveError;
+
+      const { data: sent, error: sendError } = await supabase.functions.invoke(
+        'send-email',
+        {
+          body: {
+            to: recipientEmail,
+            subject: `Preventivo - ${lavoro.title}`,
+            html: withAcceptanceLink(htmlContent, version.public_token),
+          },
+        }
+      );
+      if (sendError || sent?.error) {
+        await supabase.from('preventivi_versioni').delete().eq('id', version.id);
+        throw new Error(sent?.error || 'Invio email non riuscito');
+      }
+
+      await supabase
+        .from('preventivi_versioni')
+        .update({ sent_via_email: true, sent_at: new Date().toISOString() })
+        .eq('id', version.id);
+      await supabase
+        .from('lavori')
+        .update({ current_revision: revision + 1 })
+        .eq('id', lavoroId);
       setRevision(revision + 1);
       toast.success(t('quote.emailSent'));
       setShowEmailModal(false);
@@ -178,9 +252,13 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
 
   return (
     <div className="flex gap-2 items-center">
-      <select 
-        value={selectedTemplate} 
-        onChange={(e) => setSelectedTemplate(e.target.value as 'classic' | 'minimal' | 'professional' | 'custom')}
+      <select
+        value={selectedTemplate}
+        onChange={(e) =>
+          setSelectedTemplate(
+            e.target.value as 'classic' | 'minimal' | 'professional' | 'custom'
+          )
+        }
         className="px-3 py-2 border rounded-lg text-sm"
       >
         <option value="classic">Template: Classico</option>
@@ -196,18 +274,43 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-4 border-b flex justify-between">
-              <span>{t('quote.preview')} {String(revision).padStart(2, '0')}</span>
-              <button onClick={() => setShowPreview(false)} className="text-slate-500 hover:text-black">✕</button>
+              <span>
+                {t('quote.preview')} {String(revision).padStart(2, '0')}
+              </span>
+              <button
+                onClick={() => setShowPreview(false)}
+                className="text-slate-500 hover:text-black"
+              >
+                ✕
+              </button>
             </div>
-            <div id="quote-preview-content" className="flex-1 overflow-auto p-4" dangerouslySetInnerHTML={{ __html: htmlContent }} />
+            <div
+              id="quote-preview-content"
+              className="flex-1 overflow-auto p-4"
+              dangerouslySetInnerHTML={{ __html: htmlContent }}
+            />
             <div className="p-4 border-t flex gap-2 flex-wrap">
               {!approved ? (
-                <button onClick={handleApprove} className="btn-primary">{t('quote.validateApprove')}</button>
+                <button onClick={handleApprove} className="btn-primary">
+                  {t('quote.validateApprove')}
+                </button>
               ) : (
                 <>
-                  <button onClick={() => handleDownload(true)} className="btn-primary">{t('quote.downloadPdf')}</button>
-                  <button onClick={() => handleDownload(false)} className="btn-primary">{t('quote.downloadHtml')}</button>
-                  <button onClick={() => { setShowEmailModal(true); setRecipientEmail((lavoro.clienti as { email?: string })?.email || ''); }} className="btn-primary">
+                  <button onClick={() => handleDownload(true)} className="btn-primary">
+                    {t('quote.downloadPdf')}
+                  </button>
+                  <button onClick={() => handleDownload(false)} className="btn-primary">
+                    {t('quote.downloadHtml')}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowEmailModal(true);
+                      setRecipientEmail(
+                        (lavoro.clienti as { email?: string })?.email || ''
+                      );
+                    }}
+                    className="btn-primary"
+                  >
                     {t('quote.sendEmail')}
                   </button>
                 </>
@@ -229,10 +332,20 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
               className="w-full border rounded-lg px-3 py-2 mb-4"
               placeholder="email@example.com"
             />
-            <p className="text-xs text-slate-500 mb-4">Subject: Preventivo - {lavoro.title} (Rev. {String(revision).padStart(2, '0')})</p>
+            <p className="text-xs text-slate-500 mb-4">
+              Subject: Preventivo - {lavoro.title} (Rev.{' '}
+              {String(revision).padStart(2, '0')})
+            </p>
             <div className="flex gap-2">
-              <button onClick={() => setShowEmailModal(false)} className="flex-1 py-2 border rounded-lg">{t('quote.cancel')}</button>
-              <button onClick={handleSendEmail} className="flex-1 btn-primary">{t('quote.send')}</button>
+              <button
+                onClick={() => setShowEmailModal(false)}
+                className="flex-1 py-2 border rounded-lg"
+              >
+                {t('quote.cancel')}
+              </button>
+              <button onClick={handleSendEmail} className="flex-1 btn-primary">
+                {t('quote.send')}
+              </button>
             </div>
           </div>
         </div>

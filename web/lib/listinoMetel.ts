@@ -51,7 +51,7 @@ const METEL_UNITS: Record<string, string> = {
 function looksLikeDetailRecord(line: string): boolean {
   if (line.length < MIN_DETAIL_LENGTH) return false;
   return (
-    /^[A-Z0-9]{3}$/i.test(line.slice(0, 3)) &&
+    /^[A-Z0-9 ]{3}$/i.test(line.slice(0, 3)) &&
     /^\d{11}$/.test(line.slice(97, 108)) &&
     /^\d{11}$/.test(line.slice(108, 119)) &&
     /^\d{6}$/.test(line.slice(119, 125))

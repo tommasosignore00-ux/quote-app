@@ -18,6 +18,9 @@ const publicRoutes = [
   '/subscription/cancel',
   '/api/auth',
   '/api/stripe/webhook',
+  // Quote link sent to the client, who has no account.
+  '/q/',
+  '/api/public/',
 ];
 
 // Session timeout in milliseconds (30 minutes)
@@ -69,7 +72,10 @@ export async function middleware(request: NextRequest) {
 
   try {
     // Use getUser() - it validates the token with Supabase server
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
     if (userError || !user) {
       console.log('Middleware: no valid user, redirecting to login', { pathname });

@@ -1,3 +1,4 @@
+import { buildWebApiUrl, isWebApiConfigured } from '../lib/webApi';
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, TextInput, Alert, SafeAreaView, ActivityIndicator, ScrollView } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -20,6 +21,17 @@ import { trackTimeSaving } from '../lib/timeSavings';
 import SignaturePad from '../components/SignaturePad';
 
 type Lavoro = { id: string; title: string; clienti?: { name?: string; email?: string } };
+
+// Button added to the email only: the document itself stays the plain quote.
+function withAcceptanceLink(html: string, token?: string | null): string {
+  if (!token || !isWebApiConfigured()) return html;
+  const url = buildWebApiUrl(`/q/${token}`);
+  const block = `<div style="margin:24px 0;text-align:center;font-family:Arial,sans-serif">
+    <a href="${url}" style="display:inline-block;background:#15803d;color:#ffffff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">Visualizza e accetta il preventivo</a>
+    <p style="color:#64748b;font-size:12px;margin-top:8px">Puoi accettarlo o rifiutarlo online, senza registrarti.</p>
+  </div>`;
+  return html.includes('</body>') ? html.replace('</body>', `${block}</body>`) : `${html}${block}`;
+}
 
 export default function QuoteScreen() {
   const { t } = useTranslation();
@@ -187,25 +199,39 @@ export default function QuoteScreen() {
     if (!approved || !recipientEmail || !lavoro) return;
     setLoading(true);
     try {
-      await sendEmail(
-        recipientEmail,
-        `Preventivo - ${lavoro.title}`,
-        preview || '<p>Quote</p>'
-      );
-
       const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from('preventivi_versioni').insert({
-        lavoro_id: lavoro.id,
-        revision,
-        html_content: preview,
-        approved_at: new Date().toISOString(),
-        approved_by: user?.id,
-        sent_via_email: true,
-        sent_at: new Date().toISOString(),
-        recipient_email: recipientEmail,
-        signature_svg: signatureSvg,
-        signed_at: signatureSvg ? new Date().toISOString() : null,
-      });
+      // Saved first: its secret link goes in the email. Marked as sent only after sending.
+      const { data: version, error: saveError } = await supabase
+        .from('preventivi_versioni')
+        .insert({
+          lavoro_id: lavoro.id,
+          revision,
+          html_content: preview,
+          approved_at: new Date().toISOString(),
+          approved_by: user?.id,
+          recipient_email: recipientEmail,
+          signature_svg: signatureSvg,
+          signed_at: signatureSvg ? new Date().toISOString() : null,
+        })
+        .select('id, public_token')
+        .single();
+      if (saveError) throw saveError;
+
+      try {
+        await sendEmail(
+          recipientEmail,
+          `Preventivo - ${lavoro.title}`,
+          withAcceptanceLink(preview || '<p>Quote</p>', version.public_token)
+        );
+      } catch (sendError) {
+        await supabase.from('preventivi_versioni').delete().eq('id', version.id);
+        throw sendError;
+      }
+
+      await supabase
+        .from('preventivi_versioni')
+        .update({ sent_via_email: true, sent_at: new Date().toISOString() })
+        .eq('id', version.id);
       await supabase.from('lavori').update({ current_revision: revision + 1 }).eq('id', lavoro.id);
       setRevision(revision + 1);
 
