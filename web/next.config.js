@@ -1,5 +1,13 @@
 const { withSentryConfig } = require('@sentry/nextjs');
 
+const PDF_RUNTIME_FILES = [
+  './scripts/extract-pdf-text.cjs',
+  './scripts/render-pdf-pages.cjs',
+  './node_modules/pdf-parse/dist/pdf-parse/cjs/pdf.worker.mjs',
+  './node_modules/pdf-parse/dist/pdf-parse/esm/pdf.worker.mjs',
+  './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+];
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -11,9 +19,11 @@ const nextConfig = {
     serverComponentsExternalPackages: ['@napi-rs/canvas', 'pdf-parse', 'pdfjs-dist'],
     // The PDF fallback extractors run as child processes loaded by path at runtime,
     // so the bundler cannot see them: ship them with the routes that spawn them.
+    // pdf.js also loads its worker module dynamically: without it on Vercel every PDF
+    // read fails with "Setting up fake worker failed: Cannot find module pdf.worker.mjs".
     outputFileTracingIncludes: {
-      '/api/listini/upload': ['./scripts/extract-pdf-text.cjs', './scripts/render-pdf-pages.cjs'],
-      '/api/listini/ai-organize': ['./scripts/extract-pdf-text.cjs', './scripts/render-pdf-pages.cjs'],
+      '/api/listini/upload': PDF_RUNTIME_FILES,
+      '/api/listini/ai-organize': PDF_RUNTIME_FILES,
     },
   },
   images: {
