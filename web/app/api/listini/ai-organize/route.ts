@@ -17,10 +17,6 @@ import {
   processListinoImport,
   type ProcessListinoImportResult,
 } from '../../../../lib/listinoImportShared';
-import {
-  reportDebugEvent,
-  getActiveDebugRunId,
-} from '../../../../lib/listinoDebugShared';
 import { scheduleEmbeddingsForListino } from '../../../../lib/bulkGenerateEmbeddings';
 import {
   LISTINO_PARSER_VERSION,
@@ -226,7 +222,6 @@ async function categorizeAllRows(params: {
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
-  const runId = getActiveDebugRunId('ai-organize');
   const startedAt = Date.now();
   try {
     const user = await getRequestUser(req);
@@ -234,13 +229,6 @@ export async function POST(req: Request) {
     const { listinoId, profileId: claimedProfileId } = await req.json();
     if (!isOwnProfile(user, claimedProfileId)) return forbiddenResponse();
     const profileId = user.id;
-    await reportDebugEvent({
-      runId,
-      hypothesisId: 'E',
-      location: 'web/app/api/listini/ai-organize/route.ts:POST:start',
-      msg: '[DEBUG] AI organize request received',
-      data: { listinoId, profileId },
-    });
     if (!listinoId || !profileId) {
       return NextResponse.json(
         { error: 'listinoId e profileId sono obbligatori' },
@@ -269,20 +257,6 @@ export async function POST(req: Request) {
     let usedStoredSource = false;
     let pricingDiagnostics = sourceMetadata?.pricingDiagnostics || null;
 
-    await reportDebugEvent({
-      runId,
-      hypothesisId: 'D',
-      location: 'web/app/api/listini/ai-organize/route.ts:POST:source-metadata',
-      msg: '[DEBUG] Loaded source metadata for AI organize',
-      data: {
-        sourceRowsCount: sourceRows.length,
-        candidateItemsCount: candidateItems.length,
-        parsedRows: sourceMetadata?.parsedSummary?.parsedRows ?? null,
-        pendingReferenceRows: sourceMetadata?.parsedSummary?.pendingReferenceRows ?? null,
-        requiresPricingRules: sourceMetadata?.requiresPricingRules ?? null,
-      },
-    });
-
     if (
       // Re-read the PDF when it was never parsed or was parsed by an older parser.
       (!candidateItems.length ||
@@ -290,18 +264,6 @@ export async function POST(req: Request) {
       sourceMetadata?.storagePath &&
       /pdf/i.test(String(sourceMetadata.mimeType || ''))
     ) {
-      await reportDebugEvent({
-        runId,
-        hypothesisId: 'D',
-        location: 'web/app/api/listini/ai-organize/route.ts:POST:stale-source-reprocess',
-        msg: '[DEBUG] Reprocessing stored PDF source because metadata has no candidates',
-        data: {
-          storagePath: sourceMetadata.storagePath,
-          fileName: sourceMetadata.fileName,
-          sourceRowsCount: sourceRows.length,
-        },
-      });
-
       let rebuildResult: ProcessListinoImportResult = {
         ok: false,
         status: 500,
@@ -328,7 +290,6 @@ export async function POST(req: Request) {
             uploadedFileType: sourceMetadata.mimeType || 'application/pdf',
             arrayBuffer,
             sourceOnly: true,
-            runId,
           });
         }
       } catch (downloadErr: any) {
@@ -338,22 +299,6 @@ export async function POST(req: Request) {
           error: downloadErr?.message || String(downloadErr),
         };
       }
-
-      await reportDebugEvent({
-        runId,
-        hypothesisId: 'D',
-        location:
-          'web/app/api/listini/ai-organize/route.ts:POST:stale-source-reprocess-response',
-        msg: '[DEBUG] Stored PDF source reprocess completed',
-        data: {
-          ok: rebuildResult.ok,
-          status: rebuildResult.status,
-          inserted: rebuildResult.inserted || 0,
-          parsedRows: rebuildResult.summary?.parsedRows || 0,
-          pendingReferenceRows: rebuildResult.summary?.pendingReferenceRows || 0,
-          error: rebuildResult.error || null,
-        },
-      });
 
       if (!rebuildResult.ok) {
         return NextResponse.json(
@@ -396,32 +341,6 @@ export async function POST(req: Request) {
     }
 
     if (candidateItems.length && !groupedCandidates.length) {
-      const candidatesWithBasis = candidateItems.filter(
-        (item) => item.pricing_basis_unit && (item.pricing_basis_quantity || 0) > 0
-      );
-      const candidatesWithRuleKey = candidateItems.filter(
-        (item) => item.inferred_rule_key
-      );
-      const candidatesWithPrice = candidateItems.filter((item) => item.unit_price > 0);
-      await reportDebugEvent({
-        runId,
-        hypothesisId: 'A',
-        location: 'web/app/api/listini/ai-organize/route.ts:POST:candidate-quality',
-        msg: '[DEBUG] Candidate item quality snapshot',
-        data: {
-          totalCandidates: candidateItems.length,
-          withPricingBasis: candidatesWithBasis.length,
-          withRuleKey: candidatesWithRuleKey.length,
-          withDirectPrice: candidatesWithPrice.length,
-          sample: candidateItems.slice(0, 5).map((item) => ({
-            description: item.description,
-            pricing_basis_unit: item.pricing_basis_unit || null,
-            pricing_basis_quantity: item.pricing_basis_quantity || null,
-            inferred_rule_key: item.inferred_rule_key || null,
-            unit_price: item.unit_price || 0,
-          })),
-        },
-      });
       const parsed: UniversalImportResult = {
         items: candidateItems,
         summary: sourceMetadata?.parsedSummary || {
@@ -442,29 +361,6 @@ export async function POST(req: Request) {
       pricingDiagnostics = pricingResolution.diagnostics;
       usedStoredSource = true;
 
-      await reportDebugEvent({
-        runId,
-        hypothesisId: 'B',
-        location: 'web/app/api/listini/ai-organize/route.ts:POST:pricing-resolution',
-        msg: '[DEBUG] Pricing resolution completed on PDF candidates',
-        data: {
-          resolvedCount: pricingResolution.items.length,
-          unresolvedCount: pricingResolution.unresolvedItems.length,
-          resolvedFromFile: pricingResolution.diagnostics.resolvedFromFile,
-          resolvedFromDerived: pricingResolution.diagnostics.resolvedFromDerived,
-          resolvedFromRule: pricingResolution.diagnostics.resolvedFromRule,
-          recommendedRules: pricingResolution.diagnostics.recommendedRules,
-          unresolvedExamples: pricingResolution.diagnostics.unresolvedExamples,
-          resolvedSample: pricingResolution.items.slice(0, 5).map((item) => ({
-            description: item.description,
-            unit_price: item.unit_price,
-            pricing_source: item.pricing_source,
-            pricing_basis_unit: item.pricing_basis_unit || null,
-            inferred_rule_key: item.inferred_rule_key || null,
-          })),
-        },
-      });
-
       const existingDescriptions = new Set(
         sourceRows.map((row) => normalizeListinoDescriptionKey(row.description))
       );
@@ -473,24 +369,6 @@ export async function POST(req: Request) {
         if (!key || existingDescriptions.has(key)) return false;
         existingDescriptions.add(key);
         return true;
-      });
-
-      await reportDebugEvent({
-        runId,
-        hypothesisId: 'C',
-        location: 'web/app/api/listini/ai-organize/route.ts:POST:dedupe-filter',
-        msg: '[DEBUG] Candidate rows filtered before insert',
-        data: {
-          existingRowsCount: sourceRows.length,
-          resolvedRowsCount: pricingResolution.items.length,
-          rowsToImportCount: rowsToImport.length,
-          droppedAsExistingCount: pricingResolution.items.length - rowsToImport.length,
-          rowsToImportSample: rowsToImport.slice(0, 5).map((row) => ({
-            description: row.description,
-            unit_price: row.unit_price,
-            pricing_source: row.pricing_source,
-          })),
-        },
       });
 
       if (rowsToImport.length) {
@@ -513,18 +391,6 @@ export async function POST(req: Request) {
     }
 
     if (!sourceRows.length) {
-      await reportDebugEvent({
-        runId,
-        hypothesisId: 'E',
-        location: 'web/app/api/listini/ai-organize/route.ts:POST:empty-response',
-        msg: '[DEBUG] AI organize returning without source rows',
-        data: {
-          importedCount,
-          candidateItemsCount: candidateItems.length,
-          usedStoredSource,
-          pricingDiagnostics,
-        },
-      });
       return NextResponse.json({
         ok: true,
         updatedCount: importedCount,
@@ -578,19 +444,6 @@ export async function POST(req: Request) {
         );
     }
 
-    await reportDebugEvent({
-      runId,
-      hypothesisId: 'E',
-      location: 'web/app/api/listini/ai-organize/route.ts:POST:final-response',
-      msg: '[DEBUG] AI organize returning final payload',
-      data: {
-        processedCount: sourceRows.length,
-        updatedCount,
-        importedCount,
-        usedStoredSource,
-        pricingDiagnostics,
-      },
-    });
     return NextResponse.json({
       ok: true,
       processedCount: sourceRows.length,
@@ -605,15 +458,6 @@ export async function POST(req: Request) {
       pendingPricingGroups,
     });
   } catch (err) {
-    await reportDebugEvent({
-      runId,
-      hypothesisId: 'E',
-      location: 'web/app/api/listini/ai-organize/route.ts:POST:catch',
-      msg: '[DEBUG] AI organize route failed',
-      data: {
-        error: (err as Error).message || String(err),
-      },
-    });
     console.error('AI organize listino error:', err);
     return NextResponse.json(
       { error: (err as Error).message || 'AI organize failed' },

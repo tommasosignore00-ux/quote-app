@@ -8,10 +8,6 @@ import {
 import path from 'path';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import { LISTINO_SOURCE_BUCKET } from '../../../../lib/listinoSourceStorage';
-import {
-  getActiveDebugRunId,
-  reportDebugEvent,
-} from '../../../../lib/listinoDebugShared';
 import { processListinoImport } from '../../../../lib/listinoImportShared';
 
 const supabase = supabaseAdmin;
@@ -121,17 +117,6 @@ export async function POST(req: Request) {
     const { status, ok, storedSource: _storedSource, ...rest } = result;
     return NextResponse.json({ ok: ok || undefined, ...rest }, { status });
   } catch (err: any) {
-    const runId = getActiveDebugRunId('upload-post');
-    await reportDebugEvent({
-      runId,
-      hypothesisId: 'C',
-      location: 'web/app/api/listini/upload/route.ts:POST:outer-catch',
-      msg: '[DEBUG] Upload POST outer catch',
-      data: {
-        error: err?.message || String(err),
-        stack: err?.stack?.slice?.(0, 1000) || null,
-      },
-    });
     console.error('Upload listini outer error:', err);
     return NextResponse.json({ error: err.message || 'Upload failed' }, { status: 500 });
   }

@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -14,16 +13,8 @@ import {
   parseUniversalPdfText,
   parseUniversalSpreadsheetRows,
 } from './listinoUniversalImport';
-import {
-  type PricingDiagnostics,
-  type PricingResolutionResult,
-  resolveImportPricing,
-} from './listinoPricing';
-import {
-  LISTINO_SOURCE_BUCKET,
-  uploadListinoSource,
-  type ListinoSourceMetadata,
-} from './listinoSourceStorage';
+import { type PricingDiagnostics, resolveImportPricing } from './listinoPricing';
+import { uploadListinoSource, type ListinoSourceMetadata } from './listinoSourceStorage';
 import { scheduleEmbeddingsForListino } from './bulkGenerateEmbeddings';
 import { saveListinoItems } from './listinoItemsStore';
 import {
@@ -34,11 +25,6 @@ import {
   isPricelessCatalogue,
   syncPricingGroups,
 } from './listinoPricingGroups';
-import {
-  reportDebugEvent,
-  getActiveDebugRunId,
-  getActiveDebugSessionId,
-} from './listinoDebugShared';
 
 const supabase = supabaseAdmin;
 const openai = process.env.OPENAI_API_KEY
@@ -81,7 +67,6 @@ export type ProcessListinoImportParams = {
   uploadedFileType: string;
   arrayBuffer: ArrayBuffer;
   sourceOnly?: boolean;
-  runId?: string | null;
 };
 
 let pdfParseCtorPromise: Promise<any> | null = null;
@@ -979,8 +964,6 @@ function inferUploadExtension(params: {
 export async function processListinoImport(
   params: ProcessListinoImportParams
 ): Promise<ProcessListinoImportResult> {
-  const runId = params.runId || getActiveDebugRunId('upload');
-
   const profileId = params.profileId;
   const listinoIdParam = params.listinoId || null;
   const listinoName = params.listinoName || null;
@@ -995,37 +978,10 @@ export async function processListinoImport(
   }
 
   try {
-    await reportDebugEvent({
-      runId,
-      hypothesisId: 'C',
-      location: 'web/app/api/listini/upload/route.ts:processListinoImport:start',
-      msg: '[DEBUG] Import started',
-      data: {
-        fileName: uploadedFileName,
-        fileType: uploadedFileType,
-        profileId,
-        listinoId: listinoIdParam,
-        originalFileName,
-        sourceOnly,
-      },
-    });
-
     const ext = inferUploadExtension({
       fileName: uploadedFileName,
       originalFileName,
       mimeType: uploadedFileType,
-    });
-
-    await reportDebugEvent({
-      runId,
-      hypothesisId: 'C',
-      location: 'web/app/api/listini/upload/route.ts:processListinoImport:ext',
-      msg: '[DEBUG] Import decoded file bytes',
-      data: {
-        ext,
-        byteLength: arrayBuffer.byteLength,
-        fileName: uploadedFileName,
-      },
     });
 
     let parsed: ReturnType<typeof parseUniversalSpreadsheetRows>;
@@ -1059,18 +1015,6 @@ export async function processListinoImport(
         selectedSources.map((source) => source.parsed)
       );
     } else if (ext === 'pdf') {
-      await reportDebugEvent({
-        runId,
-        hypothesisId: 'D',
-        location: 'web/app/api/listini/upload/route.ts:processListinoImport:pdf-branch',
-        msg: '[DEBUG] Import entered PDF branch',
-        data: {
-          fileName: uploadedFileName,
-          fileType: uploadedFileType,
-          byteLength: arrayBuffer.byteLength,
-        },
-      });
-
       const pdfBuffer = Buffer.from(arrayBuffer);
       let pdfText = '';
       let combinedPdfText = '';
@@ -1088,31 +1032,9 @@ export async function processListinoImport(
         pdfText = extracted.text;
         pdfReadMethod = extracted.method;
         if (extracted.error) pdfReadErrorMessage = extracted.error;
-        await reportDebugEvent({
-          runId,
-          hypothesisId: 'D',
-          location: 'web/app/api/listini/upload/route.ts:processListinoImport:pdf-text',
-          msg: '[DEBUG] PDF text extraction completed',
-          data: {
-            textLength: pdfText.length,
-            method: pdfReadMethod,
-            preview: pdfText.slice(0, 200),
-            error: extracted.error || null,
-          },
-        });
       } catch (pdfError) {
         pdfReadError = pdfError;
         pdfReadErrorMessage = (pdfError as Error)?.message || String(pdfError);
-        await reportDebugEvent({
-          runId,
-          hypothesisId: 'D',
-          location:
-            'web/app/api/listini/upload/route.ts:processListinoImport:pdf-text-error',
-          msg: '[DEBUG] PDF text extraction failed',
-          data: {
-            error: pdfReadErrorMessage,
-          },
-        });
       }
 
       parsed = parseUniversalPdfText(pdfText || '');
@@ -1642,16 +1564,6 @@ export async function processListinoImport(
       pricingDiagnostics: pricingResolution.diagnostics,
     };
   } catch (err: any) {
-    await reportDebugEvent({
-      runId,
-      hypothesisId: 'C',
-      location: 'web/app/api/listini/upload/route.ts:processListinoImport:catch',
-      msg: '[DEBUG] Import threw',
-      data: {
-        error: err?.message || String(err),
-        stack: err?.stack?.slice?.(0, 1000) || null,
-      },
-    });
     console.error('Upload listini error:', err);
     return { ok: false, status: 500, error: err.message || 'Upload failed' };
   }
