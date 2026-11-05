@@ -209,6 +209,44 @@ function parseUploadPayload(body: string): UploadPayload {
   }
 }
 
+// Base64 inflates the file by ~33%: above this size the JSON body would exceed
+// Vercel's 4.5 MB request limit.
+const PDF_BASE64_MAX_BYTES = 3 * 1024 * 1024;
+
+async function uploadPdfToSignedStorage(params: {
+  uri: string;
+  fileName: string;
+  profileId: string;
+  listinoId: string;
+}): Promise<string> {
+  const signedRes = await fetch(buildWebApiUrl('/api/listini/source-upload-url'), {
+    method: 'POST',
+    headers: await getWebApiAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
+      profileId: params.profileId,
+      listinoId: params.listinoId,
+      fileName: params.fileName,
+    }),
+  });
+  const signed = parseUploadPayload(await signedRes.text()) as UploadPayload & {
+    signedUrl?: string;
+    storagePath?: string;
+  };
+  if (!signedRes.ok || !signed.signedUrl || !signed.storagePath) {
+    throw new Error(signed.error || `URL di caricamento non disponibile (HTTP ${signedRes.status})`);
+  }
+
+  const upload = await FileSystem.uploadAsync(signed.signedUrl, params.uri, {
+    httpMethod: 'PUT',
+    uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+    headers: { 'Content-Type': 'application/pdf', 'x-upsert': 'true' },
+  });
+  if (upload.status < 200 || upload.status >= 300) {
+    throw new Error(`Storage HTTP ${upload.status}`);
+  }
+  return signed.storagePath;
+}
+
 async function readFileBase64(uri: string): Promise<string> {
   const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
   if (!base64?.trim()) {
@@ -657,12 +695,29 @@ export default function ListiniScreen() {
       let statusCode = 0;
 
       if (mimeType === 'application/pdf') {
-        const fileBase64 = await readFileBase64(asset.uri);
+        // The server runs on Vercel, which rejects request bodies over 4.5 MB: a PDF sent
+        // as base64 JSON fails from ~3 MB. Upload it straight to Storage with a signed URL
+        // and send only its path; base64 stays as fallback for small files.
+        let storagePath: string | null = null;
+        try {
+          storagePath = await uploadPdfToSignedStorage({
+            uri: asset.uri,
+            fileName,
+            profileId,
+            listinoId: selectedListino.id,
+          });
+        } catch (storageError) {
+          const sizeBytes = 'size' in fileInfo ? Number(fileInfo.size || 0) : 0;
+          if (sizeBytes > PDF_BASE64_MAX_BYTES) {
+            throw new Error(`Caricamento PDF non riuscito: ${(storageError as Error).message}`);
+          }
+        }
+
         const response = await fetch(buildWebApiUrl('/api/listini/upload'), {
           method: 'POST',
           headers: await getWebApiAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
-            fileBase64,
+            ...(storagePath ? { storagePath } : { fileBase64: await readFileBase64(asset.uri) }),
             fileName,
             mimeType,
             profileId,
@@ -671,7 +726,7 @@ export default function ListiniScreen() {
           }),
         });
         statusCode = response.status;
-        payload = (await response.json()) as UploadPayload;
+        payload = parseUploadPayload(await response.text());
       } else {
         const response = await FileSystem.uploadAsync(buildWebApiUrl('/api/listini/upload'), asset.uri, {
           fieldName: 'file',

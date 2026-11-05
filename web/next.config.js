@@ -9,6 +9,12 @@ const nextConfig = {
     // da node_modules, non inclusi nel bundle webpack (altrimenti la build fallisce
     // su file .node come skia.linux-x64-gnu.node).
     serverComponentsExternalPackages: ['@napi-rs/canvas', 'pdf-parse', 'pdfjs-dist'],
+    // The PDF fallback extractors run as child processes loaded by path at runtime,
+    // so the bundler cannot see them: ship them with the routes that spawn them.
+    outputFileTracingIncludes: {
+      '/api/listini/upload': ['./scripts/extract-pdf-text.cjs', './scripts/render-pdf-pages.cjs'],
+      '/api/listini/ai-organize': ['./scripts/extract-pdf-text.cjs', './scripts/render-pdf-pages.cjs'],
+    },
   },
   images: {
     formats: ['image/avif', 'image/webp'],
