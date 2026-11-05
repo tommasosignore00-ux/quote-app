@@ -633,7 +633,8 @@ async function summarizePdfSourceWithAi(params: {
         content:
           'Sei un assistente che riassume listini tecnici importati da PDF. ' +
           'Devi dare un riscontro breve e pratico in italiano, massimo 4 frasi. ' +
-          'Spiega cosa sei riuscito a leggere, se mancano prezzi espliciti e quali regole prezzo servono per completare l import.',
+          'Spiega cosa sei riuscito a leggere, se mancano prezzi espliciti e quali regole prezzo servono per completare l import. ' +
+          'Parla solo del contenuto letto: niente consigli su spedizioni, pagamenti, resi, sconti o condizioni commerciali.',
       },
       {
         role: 'user',
