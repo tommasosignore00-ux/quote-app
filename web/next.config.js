@@ -4,6 +4,12 @@ const { withSentryConfig } = require('@sentry/nextjs');
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@supabase/supabase-js'],
+  experimental: {
+    // Moduli nativi / pesanti usati dall'import PDF: vanno caricati a runtime
+    // da node_modules, non inclusi nel bundle webpack (altrimenti la build fallisce
+    // su file .node come skia.linux-x64-gnu.node).
+    serverComponentsExternalPackages: ['@napi-rs/canvas', 'pdf-parse', 'pdfjs-dist'],
+  },
   images: {
     formats: ['image/avif', 'image/webp'],
   },
