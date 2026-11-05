@@ -1,3 +1,4 @@
+import { startListinoJob, wantsBackgroundJob } from '../../../../lib/listinoJobs';
 import { enforceAiQuota } from '../../../../lib/aiQuota';
 import { NextResponse } from 'next/server';
 import {
@@ -17,6 +18,13 @@ const supabase = supabaseAdmin;
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
+  // Only JSON uploads (PDF already in Storage) can be replayed as a background job.
+  if (
+    wantsBackgroundJob(req) &&
+    (req.headers.get('content-type') || '').includes('application/json')
+  ) {
+    return startListinoJob(req, 'listino_import', POST);
+  }
   try {
     const user = await getRequestUser(req);
     if (!user) return unauthorizedResponse();

@@ -155,6 +155,43 @@ async function uploadWithFetch(
   };
 }
 
+const JOB_POLL_INTERVAL_MS = 2500;
+const JOB_MAX_WAIT_MS = 6 * 60 * 1000;
+
+/**
+ * Long listini requests run as background jobs (202 + jobId): wait for the job and
+ * return its outcome as if it were the original response. Other responses pass through.
+ */
+async function resolveListinoJob(
+  result: UploadRequestResult
+): Promise<UploadRequestResult> {
+  const jobId = result.status === 202 ? result.payload?.jobId : null;
+  if (!jobId) return result;
+
+  const deadline = Date.now() + JOB_MAX_WAIT_MS;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, JOB_POLL_INTERVAL_MS));
+    const poll = await uploadWithFetch(
+      `/api/listini/jobs?id=${encodeURIComponent(jobId)}`
+    );
+    const job = poll.payload?.job;
+    if (!poll.ok || !job) continue;
+    if (job.status === 'done' || job.status === 'error') {
+      const status = Number(job.http_status || (job.status === 'done' ? 200 : 500));
+      return {
+        ok: status >= 200 && status < 300,
+        status,
+        contentType: 'application/json',
+        payload: job.result,
+        responseText: JSON.stringify(job.result ?? null),
+      };
+    }
+  }
+  throw new Error(
+    'Il lavoro sta impiegando troppo: ricarica la pagina tra qualche minuto.'
+  );
+}
+
 function uploadWithXhr(url: string, formData: FormData): Promise<UploadRequestResult> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -232,18 +269,20 @@ async function uploadPdfViaStorageReference(params: {
     throw storageUpload.error;
   }
 
-  return uploadWithFetch('/api/listini/upload', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      storagePath,
-      fileName: params.file.name,
-      mimeType: params.file.type || 'application/pdf',
-      profileId: params.profileId,
-      listinoId: params.listinoId,
-      originalFileName: params.file.name,
-    }),
-  });
+  return resolveListinoJob(
+    await uploadWithFetch('/api/listini/upload?async=1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        storagePath,
+        fileName: params.file.name,
+        mimeType: params.file.type || 'application/pdf',
+        profileId: params.profileId,
+        listinoId: params.listinoId,
+        originalFileName: params.file.name,
+      }),
+    })
+  );
 }
 
 export default function ListiniPage() {
@@ -851,13 +890,15 @@ export default function ListiniPage() {
   ) => {
     try {
       setOrganizingAi(true);
-      const res = await fetch('/api/listini/ai-organize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ listinoId, profileId }),
-      });
+      const res = await resolveListinoJob(
+        await uploadWithFetch('/api/listini/ai-organize?async=1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ listinoId, profileId }),
+        })
+      );
 
-      const payload = await res.json();
+      const payload = res.payload || {};
       if (!res.ok) {
         throw new Error(payload?.error || 'Organizzazione AI non riuscita');
       }

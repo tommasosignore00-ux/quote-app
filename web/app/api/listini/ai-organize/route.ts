@@ -1,3 +1,4 @@
+import { startListinoJob, wantsBackgroundJob } from '../../../../lib/listinoJobs';
 import { enforceAiQuota } from '../../../../lib/aiQuota';
 import { NextResponse } from 'next/server';
 import {
@@ -223,6 +224,7 @@ async function categorizeAllRows(params: {
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
+  if (wantsBackgroundJob(req)) return startListinoJob(req, 'ai_organize', POST);
   const startedAt = Date.now();
   try {
     const user = await getRequestUser(req);
