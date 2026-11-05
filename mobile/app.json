@@ -19,7 +19,8 @@
       ],
       "expo-localization",
       "expo-font",
-      "expo-asset"
+      "expo-asset",
+      "expo-web-browser"
     ],
     "ios": {
       "bundleIdentifier": "com.quoteapp.mobile",

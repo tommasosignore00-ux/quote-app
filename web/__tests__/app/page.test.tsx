@@ -16,21 +16,22 @@ describe('HomePage', () => {
 
   it('renders the homepage title and subtitle', () => {
     render(<HomePage />);
-    expect(screen.getByText('app.title')).toBeInTheDocument();
-    expect(screen.getByText('app.subtitle')).toBeInTheDocument();
+    // La homepage ripete titolo e sottotitolo anche nel footer
+    expect(screen.getAllByText(/app\.title/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/app\.subtitle/).length).toBeGreaterThan(0);
   });
 
   it('renders register and login links', () => {
     render(<HomePage />);
-    expect(screen.getByText('auth.register')).toBeInTheDocument();
-    expect(screen.getByText('auth.login')).toBeInTheDocument();
+    expect(screen.getAllByText('auth.register').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('auth.login').length).toBeGreaterThan(0);
   });
 
   it('has correct link hrefs', () => {
     render(<HomePage />);
-    const registerLink = screen.getByText('auth.register').closest('a');
-    const loginLink = screen.getByText('auth.login').closest('a');
-    expect(registerLink).toHaveAttribute('href', '/auth/register');
-    expect(loginLink).toHaveAttribute('href', '/auth/login');
+    const hrefs = (text: string) =>
+      screen.getAllByText(text).map((el) => el.closest('a')?.getAttribute('href'));
+    expect(hrefs('auth.register')).toContain('/auth/register');
+    expect(hrefs('auth.login')).toContain('/auth/login');
   });
 });
