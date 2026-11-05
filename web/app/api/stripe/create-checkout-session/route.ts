@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getRequestUser, unauthorizedResponse, forbiddenResponse, isOwnProfile } from '../../../../lib/apiAuth';
 import Stripe from 'stripe';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import { checkoutSessionSchema, validateRequest } from '../../../../lib/validations';
@@ -8,12 +9,26 @@ const supabase = supabaseAdmin;
 
 export async function POST(req: Request) {
   try {
+    const user = await getRequestUser(req);
+    if (!user) return unauthorizedResponse();
     const body = await req.json();
     const validation = validateRequest(checkoutSessionSchema, body);
     if (!validation.success) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
-    const { userId, email, companyName, priceId } = validation.data;
+    const { userId: claimedUserId, companyName, priceId: requestedPlan } = validation.data;
+    if (!isOwnProfile(user, claimedUserId)) return forbiddenResponse();
+    const userId = user.id;
+    const email = user.email;
+
+    // Solo i piani configurati sul server: mai un price id arbitrario dal client
+    const planKey = String(requestedPlan).replace(/^price_/i, '').toUpperCase();
+    const stripePriceId = ['MONTHLY', 'YEARLY', 'TEAM'].includes(planKey)
+      ? process.env[`STRIPE_PRICE_${planKey}`]
+      : undefined;
+    if (!stripePriceId) {
+      return NextResponse.json({ error: 'Piano non valido' }, { status: 400 });
+    }
 
     // Create or update Stripe customer
     let customerId: string | null = null;
@@ -48,7 +63,7 @@ export async function POST(req: Request) {
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       customer: customerId,
-      line_items: [{ price: process.env[`STRIPE_PRICE_${priceId.toUpperCase()}`] || priceId, quantity: 1 }],
+      line_items: [{ price: stripePriceId, quantity: 1 }],
       ...(isFoundingMember
         ? { discounts: [{ coupon: 'hiYX4PTU' }] }
         : { allow_promotion_codes: true }),

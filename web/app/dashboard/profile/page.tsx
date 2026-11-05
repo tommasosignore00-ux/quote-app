@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
-import { COUNTRIES, LANGUAGES, LEGAL_FRAMEWORKS } from '@/lib/constants';
+import { COUNTRIES, DEFAULT_LANGUAGE, LEGAL_FRAMEWORKS, normalizeCountryCode } from '@/lib/constants';
 import toast from 'react-hot-toast';
 import { setLanguage } from '@/lib/language';
 import TemplateUploader from '@/components/TemplateUploader';
@@ -87,15 +87,17 @@ export default function ProfilePage() {
   const [newWebhookEvents, setNewWebhookEvents] = useState<string[]>(['quote.approved']);
   const [usState, setUsState] = useState('');
 
+  // App disponibile solo in Italia: qualsiasi paese salvato viene ricondotto a IT
+  const countryCode = normalizeCountryCode(profile.country_code as string | null | undefined);
   const fiscalConfig = useMemo(
-    () => getFiscalConfig(String(profile.country_code || 'IT')),
-    [profile.country_code]
+    () => getFiscalConfig(countryCode),
+    [countryCode]
   );
 
   const subscriptionStatus = String(profile.subscription_status || 'inactive');
   const hasWebhookAccess = subscriptionStatus === 'active' || subscriptionStatus === 'team';
   const isTeamPlan = subscriptionStatus === 'team' || Boolean(profile.team_plan);
-  const legalFramework = LEGAL_FRAMEWORKS[String(profile.country_code || 'IT')] || 'GDPR';
+  const legalFramework = LEGAL_FRAMEWORKS[countryCode] || 'GDPR';
 
   useEffect(() => {
     const load = async () => {
@@ -167,8 +169,8 @@ export default function ProfilePage() {
         vat_percent: profile.vat_percent ?? 22,
         material_markup_vat_percent: profile.material_markup_vat_percent || 0,
         fiscal_code: profile.fiscal_code,
-        country_code: profile.country_code,
-        language: profile.language,
+        country_code: countryCode,
+        language: DEFAULT_LANGUAGE,
         address: profile.address,
         city: profile.city,
         postal_code: profile.postal_code,
@@ -436,37 +438,10 @@ export default function ProfilePage() {
 
           <label className="space-y-1 text-sm font-medium text-slate-700">
             <span>{t('profile.country')}</span>
-            <select
-              value={String(profile.country_code || 'IT')}
-              onChange={(e) => {
-                const nextCountry = e.target.value;
-                const countryInfo = COUNTRIES.find((country) => country.code === nextCountry);
-                setProfile({
-                  ...profile,
-                  country_code: nextCountry,
-                  vat_percent: countryInfo?.vatDefault ?? fiscalConfig.defaultVatRate,
-                });
-                if (nextCountry !== 'US') setUsState('');
-              }}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2"
-            >
-              {COUNTRIES.map((country) => (
-                <option key={country.code} value={country.code}>{country.name}</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="space-y-1 text-sm font-medium text-slate-700">
-            <span>{t('profile.language')}</span>
-            <select
-              value={String(profile.language || 'it')}
-              onChange={(e) => setProfile({ ...profile, language: e.target.value })}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2"
-            >
-              {LANGUAGES.map((language) => (
-                <option key={language.code} value={language.code}>{language.name}</option>
-              ))}
-            </select>
+            <div className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-600">
+              🇮🇹 {COUNTRIES.find((country) => country.code === countryCode)?.name || 'Italia'}
+            </div>
+            <span className="block text-xs font-normal text-slate-500">Al momento il servizio è disponibile solo in Italia.</span>
           </label>
 
           <label className="space-y-1 text-sm font-medium text-slate-700">
@@ -500,7 +475,7 @@ export default function ProfilePage() {
         {fiscalConfig.fields.length > 0 && (
           <>
             <div className="border-t border-slate-100 pt-4">
-              <h3 className="text-sm font-semibold text-slate-700">Dati fiscali ({String(profile.country_code || 'IT')})</h3>
+              <h3 className="text-sm font-semibold text-slate-700">Dati fiscali ({countryCode})</h3>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               {fiscalConfig.fields.map((field) => (
@@ -519,7 +494,7 @@ export default function ProfilePage() {
           </>
         )}
 
-        {String(profile.country_code || 'IT') === 'US' && (
+        {countryCode === 'US' && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
             <div className="grid gap-4 md:grid-cols-2">
               <label className="space-y-1 text-sm font-medium text-slate-700">

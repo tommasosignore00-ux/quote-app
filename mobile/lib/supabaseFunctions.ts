@@ -3,20 +3,24 @@ import { supabase } from '../lib/supabase'
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || ''
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ''
 
+/**
+ * Header per le Edge Functions: token di sessione dell'utente (non la chiave anon),
+ * così la funzione sa chi sta chiamando.
+ */
+export const getFunctionHeaders = async (extra: Record<string, string> = {}): Promise<Record<string, string>> => {
+  const { data } = await supabase.auth.getSession()
+  const token = data.session?.access_token
+  if (!token) throw new Error('Sessione scaduta: effettua di nuovo l\'accesso')
+  return { ...extra, apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` }
+}
+
 export const stripeCheckout = async (priceId: 'monthly' | 'yearly' | 'team', userId: string, isFoundingMember?: boolean) => {
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/stripe-checkout`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        priceId,
-        customerId: userId,
-        appType: 'mobile',
-        isFoundingMember: isFoundingMember || false,
-      }),
+      headers: await getFunctionHeaders({ 'Content-Type': 'application/json' }),
+      // Customer Stripe e sconto founding member vengono decisi dal server
+      body: JSON.stringify({ priceId, appType: 'mobile' }),
     })
 
     const data = await res.json()
@@ -31,10 +35,7 @@ export const sendEmail = async (to: string, subject: string, html: string, pdfBa
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers: await getFunctionHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         to,
         subject,
@@ -56,10 +57,7 @@ export const stripePortal = async (customerId: string) => {
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/stripe-portal`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers: await getFunctionHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         customerId,
       }),

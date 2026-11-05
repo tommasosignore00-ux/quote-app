@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
+import { normalizeCountryCode, resolveVatPercent } from '@/lib/constants';
 import { generateQuoteHTML, QuoteData } from '@/lib/QuoteTemplate';
 import toast from 'react-hot-toast';
 import { jsPDF } from 'jspdf';
@@ -71,7 +72,7 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
           quantity: Number(d.quantity),
           unit_price: Number(d.unit_price),
         })),
-        vat_percent: Number(profile?.vat_percent || 22),
+        vat_percent: resolveVatPercent(profile?.vat_percent),
         companyName: profile?.company_name,
         vatNumber: profile?.vat_number,
         fiscalCode: profile?.fiscal_code,
@@ -81,7 +82,7 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
         country: profile?.country,
         iban: profile?.iban,
         swift: profile?.swift,
-        countryCode: profile?.country_code?.toUpperCase(),
+        countryCode: normalizeCountryCode(profile?.country_code),
         templateType: selectedTemplate,
         customTemplateHtml: selectedTemplate === 'custom' ? profile?.custom_template_html : undefined,
       };

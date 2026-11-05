@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { getRequestUser, isInternalCall, jsonResponse } from '../_shared/auth.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || ''
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
@@ -18,6 +19,13 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
     const { profile_id, event_type, payload } = await req.json()
+
+    // Un utente può far partire solo i propri webhook
+    if (!isInternalCall(req)) {
+      const user = await getRequestUser(req)
+      if (!user) return jsonResponse({ error: 'Non autenticato' }, 401)
+      if (profile_id && profile_id !== user.id) return jsonResponse({ error: 'Accesso negato' }, 403)
+    }
     if (!profile_id || !event_type) {
       return new Response(JSON.stringify({ error: 'Missing profile_id or event_type' }), {
         status: 400,

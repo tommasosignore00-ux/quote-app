@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 import LegalModule from '@/components/LegalModule';
-import { COUNTRIES, LANGUAGES } from '@/lib/constants';
+import { DEFAULT_COUNTRY_CODE, DEFAULT_LANGUAGE } from '@/lib/constants';
 
 export default function RegisterPage() {
   const { t } = useTranslation();
@@ -15,8 +15,9 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [countryCode, setCountryCode] = useState('IT');
-  const [language, setLanguage] = useState('it');
+  // App disponibile solo in Italia
+  const countryCode = DEFAULT_COUNTRY_CODE;
+  const language = DEFAULT_LANGUAGE;
   const [legalAccepted, setLegalAccepted] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
 
@@ -68,19 +69,8 @@ export default function RegisterPage() {
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">{t('profile.country')}</label>
-            <select value={countryCode} onChange={e => setCountryCode(e.target.value)} className="w-full border rounded-lg px-3 py-2">
-              {COUNTRIES.map((c) => (
-                <option key={c.code} value={c.code}>{c.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">{t('profile.language')}</label>
-            <select value={language} onChange={e => setLanguage(e.target.value)} className="w-full border rounded-lg px-3 py-2">
-              {LANGUAGES.map((l) => (
-                <option key={l.code} value={l.code}>{l.name}</option>
-              ))}
-            </select>
+            <div className="w-full border rounded-lg px-3 py-2 bg-slate-50 text-slate-600">🇮🇹 Italia</div>
+            <p className="mt-1 text-xs text-slate-500">Al momento il servizio è disponibile solo in Italia.</p>
           </div>
           <LegalModule countryCode={countryCode} onAccept={setLegalAccepted} accepted={legalAccepted} />
           <button type="submit" disabled={loading} className="w-full btn-primary">

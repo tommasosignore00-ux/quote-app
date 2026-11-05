@@ -1,59 +1,21 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs/promises';
-import path from 'path';
+import { getRequestUser, unauthorizedResponse, forbiddenResponse, isOwnProfile } from '../../../../lib/apiAuth';
 import OpenAI from 'openai';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import { resolveImportPricing } from '../../../../lib/listinoPricing';
-import { getListinoSourceMetadata } from '../../../../lib/listinoSourceStorage';
+import { LISTINO_SOURCE_BUCKET, getListinoSourceMetadata } from '../../../../lib/listinoSourceStorage';
 import type { UniversalImportResult } from '../../../../lib/listinoUniversalImport';
+import {
+  processListinoImport,
+  type ProcessListinoImportResult,
+} from '../../../../lib/listinoImportShared';
+import { reportDebugEvent, getActiveDebugRunId } from '../../../../lib/listinoDebugShared';
+import { bulkGenerateEmbeddingsForListino } from '../../../../lib/bulkGenerateEmbeddings';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = process.env.OPENAI_API_KEY
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
 const supabase = supabaseAdmin;
-const DEBUG_SERVER_FALLBACK_URL = 'http://127.0.0.1:7777/event';
-const DEBUG_SESSION_ID = 'pdf-no-material';
-
-async function reportDebugEvent(event: {
-  runId: 'pre-fix' | 'post-fix';
-  hypothesisId: 'A' | 'B' | 'C' | 'D' | 'E';
-  location: string;
-  msg: string;
-  data?: Record<string, unknown>;
-}) {
-  let debugServerUrl = DEBUG_SERVER_FALLBACK_URL;
-
-  try {
-    const candidates = [
-      path.resolve(process.cwd(), '.dbg', `${DEBUG_SESSION_ID}.env`),
-      path.resolve(process.cwd(), '..', '.dbg', `${DEBUG_SESSION_ID}.env`),
-    ];
-
-    for (const candidate of candidates) {
-      try {
-        const envContents = await fs.readFile(candidate, 'utf-8');
-        const matchedUrl = envContents.match(/^DEBUG_SERVER_URL=(.+)$/m)?.[1]?.trim();
-        if (matchedUrl) {
-          debugServerUrl = matchedUrl;
-          break;
-        }
-      } catch {}
-    }
-  } catch {}
-
-  try {
-    await fetch(debugServerUrl, {
-      method: 'POST',
-      body: JSON.stringify({
-        sessionId: DEBUG_SESSION_ID,
-        runId: 'post-fix',
-        hypothesisId: event.hypothesisId,
-        location: event.location,
-        msg: event.msg,
-        data: event.data || {},
-        ts: Date.now(),
-      }),
-    });
-  } catch {}
-}
 
 type AiCategoryResponse = {
   items?: Array<{
@@ -105,6 +67,7 @@ async function categorizeChunk(params: {
   listinoName: string;
   chunk: Array<{ id: string; description: string; category: string | null }>;
 }): Promise<Array<{ id: string; category: string }>> {
+  if (!openai) throw new Error('OPENAI_API_KEY missing');
   const completion = await openai.chat.completions.create({
     model: process.env.OPENAI_AGENT_MODEL || 'gpt-4o-mini',
     temperature: 0.1,
@@ -154,17 +117,20 @@ async function categorizeChunk(params: {
 }
 
 export async function POST(req: Request) {
+  const runId = getActiveDebugRunId('ai-organize');
   try {
-    const { listinoId, profileId } = await req.json();
-    // #region debug-point E:route-start
+    const user = await getRequestUser(req);
+    if (!user) return unauthorizedResponse();
+    const { listinoId, profileId: claimedProfileId } = await req.json();
+    if (!isOwnProfile(user, claimedProfileId)) return forbiddenResponse();
+    const profileId = user.id;
     await reportDebugEvent({
-      runId: 'pre-fix',
+      runId,
       hypothesisId: 'E',
       location: 'web/app/api/listini/ai-organize/route.ts:POST:start',
       msg: '[DEBUG] AI organize request received',
       data: { listinoId, profileId },
     });
-    // #endregion
     if (!listinoId || !profileId) {
       return NextResponse.json({ error: 'listinoId e profileId sono obbligatori' }, { status: 400 });
     }
@@ -190,9 +156,8 @@ export async function POST(req: Request) {
     let usedStoredSource = false;
     let pricingDiagnostics = sourceMetadata?.pricingDiagnostics || null;
 
-    // #region debug-point D:source-metadata
     await reportDebugEvent({
-      runId: 'pre-fix',
+      runId,
       hypothesisId: 'D',
       location: 'web/app/api/listini/ai-organize/route.ts:POST:source-metadata',
       msg: '[DEBUG] Loaded source metadata for AI organize',
@@ -204,16 +169,14 @@ export async function POST(req: Request) {
         requiresPricingRules: sourceMetadata?.requiresPricingRules ?? null,
       },
     });
-    // #endregion
 
     if (
       !candidateItems.length &&
       sourceMetadata?.storagePath &&
       /pdf/i.test(String(sourceMetadata.mimeType || ''))
     ) {
-      // #region debug-point D:stale-source-reprocess
       await reportDebugEvent({
-        runId: 'pre-fix',
+        runId,
         hypothesisId: 'D',
         location: 'web/app/api/listini/ai-organize/route.ts:POST:stale-source-reprocess',
         msg: '[DEBUG] Reprocessing stored PDF source because metadata has no candidates',
@@ -223,54 +186,59 @@ export async function POST(req: Request) {
           sourceRowsCount: sourceRows.length,
         },
       });
-      // #endregion
 
-      const origin = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
-      const rebuildResponse = await fetch(`${origin}/api/listini/upload`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          profileId,
-          listinoId,
-          listinoName: listino.name,
-          storagePath: sourceMetadata.storagePath,
-          fileName: sourceMetadata.fileName,
-          originalFileName: sourceMetadata.fileName,
-          mimeType: sourceMetadata.mimeType,
-          sourceOnly: true,
-        }),
-      });
+      let rebuildResult: ProcessListinoImportResult = { ok: false, status: 500, error: 'reprocess not run' };
+      try {
+        const sourceDownload = await supabase.storage
+          .from(LISTINO_SOURCE_BUCKET)
+          .download(sourceMetadata.storagePath);
 
-      const rebuildPayload = await rebuildResponse.json().catch(() => ({}));
+        if (sourceDownload.error) {
+          rebuildResult = { ok: false, status: 500, error: sourceDownload.error.message };
+        } else {
+          const arrayBuffer = await sourceDownload.data.arrayBuffer();
+          rebuildResult = await processListinoImport({
+            profileId,
+            listinoId,
+            listinoName: listino.name,
+            originalFileName: sourceMetadata.fileName,
+            uploadedFileName: sourceMetadata.fileName || sourceMetadata.storagePath.split('/').pop() || 'source.pdf',
+            uploadedFileType: sourceMetadata.mimeType || 'application/pdf',
+            arrayBuffer,
+            sourceOnly: true,
+            runId,
+          });
+        }
+      } catch (downloadErr: any) {
+        rebuildResult = { ok: false, status: 500, error: downloadErr?.message || String(downloadErr) };
+      }
 
-      // #region debug-point D:stale-source-reprocess-response
       await reportDebugEvent({
-        runId: 'pre-fix',
+        runId,
         hypothesisId: 'D',
         location: 'web/app/api/listini/ai-organize/route.ts:POST:stale-source-reprocess-response',
         msg: '[DEBUG] Stored PDF source reprocess completed',
         data: {
-          ok: rebuildResponse.ok,
-          status: rebuildResponse.status,
-          inserted: rebuildPayload?.inserted || 0,
-          parsedRows: rebuildPayload?.summary?.parsedRows || 0,
-          pendingReferenceRows: rebuildPayload?.summary?.pendingReferenceRows || 0,
-          error: rebuildPayload?.error || null,
+          ok: rebuildResult.ok,
+          status: rebuildResult.status,
+          inserted: rebuildResult.inserted || 0,
+          parsedRows: rebuildResult.summary?.parsedRows || 0,
+          pendingReferenceRows: rebuildResult.summary?.pendingReferenceRows || 0,
+          error: rebuildResult.error || null,
         },
       });
-      // #endregion
 
-      if (!rebuildResponse.ok) {
+      if (!rebuildResult.ok) {
         return NextResponse.json(
-          { error: rebuildPayload?.error || 'Rigenerazione sorgente PDF non riuscita' },
-          { status: 500 }
+          { error: rebuildResult.error || 'Rigenerazione sorgente PDF non riuscita' },
+          { status: rebuildResult.status || 500 }
         );
       }
 
-      importedCount += Number(rebuildPayload?.inserted || 0);
+      importedCount += Number(rebuildResult.inserted || 0);
       sourceMetadata = await getListinoSourceMetadata({ profileId, listinoId });
       candidateItems = sourceMetadata?.candidateItems || [];
-      pricingDiagnostics = sourceMetadata?.pricingDiagnostics || rebuildPayload?.pricingDiagnostics || null;
+      pricingDiagnostics = sourceMetadata?.pricingDiagnostics || rebuildResult.pricingDiagnostics || null;
       usedStoredSource = Boolean(candidateItems.length || importedCount);
       sourceRows = await fetchListinoRows({ listinoId, profileId });
     }
@@ -279,9 +247,8 @@ export async function POST(req: Request) {
       const candidatesWithBasis = candidateItems.filter((item) => item.pricing_basis_unit && (item.pricing_basis_quantity || 0) > 0);
       const candidatesWithRuleKey = candidateItems.filter((item) => item.inferred_rule_key);
       const candidatesWithPrice = candidateItems.filter((item) => item.unit_price > 0);
-      // #region debug-point A:candidate-quality
       await reportDebugEvent({
-        runId: 'pre-fix',
+        runId,
         hypothesisId: 'A',
         location: 'web/app/api/listini/ai-organize/route.ts:POST:candidate-quality',
         msg: '[DEBUG] Candidate item quality snapshot',
@@ -299,7 +266,6 @@ export async function POST(req: Request) {
           })),
         },
       });
-      // #endregion
       const parsed: UniversalImportResult = {
         items: candidateItems,
         summary: sourceMetadata?.parsedSummary || {
@@ -316,9 +282,8 @@ export async function POST(req: Request) {
       pricingDiagnostics = pricingResolution.diagnostics;
       usedStoredSource = true;
 
-      // #region debug-point B:pricing-resolution
       await reportDebugEvent({
-        runId: 'pre-fix',
+        runId,
         hypothesisId: 'B',
         location: 'web/app/api/listini/ai-organize/route.ts:POST:pricing-resolution',
         msg: '[DEBUG] Pricing resolution completed on PDF candidates',
@@ -339,7 +304,6 @@ export async function POST(req: Request) {
           })),
         },
       });
-      // #endregion
 
       const existingDescriptions = new Set(sourceRows.map((row) => normalizeDescriptionKey(row.description)));
       const rowsToImport = pricingResolution.items.filter((row) => {
@@ -349,9 +313,8 @@ export async function POST(req: Request) {
         return true;
       });
 
-      // #region debug-point C:dedupe-filter
       await reportDebugEvent({
-        runId: 'pre-fix',
+        runId,
         hypothesisId: 'C',
         location: 'web/app/api/listini/ai-organize/route.ts:POST:dedupe-filter',
         msg: '[DEBUG] Candidate rows filtered before insert',
@@ -367,7 +330,6 @@ export async function POST(req: Request) {
           })),
         },
       });
-      // #endregion
 
       if (rowsToImport.length) {
         const itemsToInsert = rowsToImport.map((row) => ({
@@ -393,12 +355,7 @@ export async function POST(req: Request) {
         importedCount += itemsToInsert.length;
 
         try {
-          const origin = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
-          await fetch(`${origin}/api/embeddings/bulk-generate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ listinoId }),
-          });
+          await bulkGenerateEmbeddingsForListino({ listinoId });
         } catch (e) {
           console.warn('Failed to trigger bulk embeddings', e);
         }
@@ -408,9 +365,8 @@ export async function POST(req: Request) {
     }
 
     if (!sourceRows.length) {
-      // #region debug-point E:empty-response
       await reportDebugEvent({
-        runId: 'pre-fix',
+        runId,
         hypothesisId: 'E',
         location: 'web/app/api/listini/ai-organize/route.ts:POST:empty-response',
         msg: '[DEBUG] AI organize returning without source rows',
@@ -421,7 +377,6 @@ export async function POST(req: Request) {
           pricingDiagnostics,
         },
       });
-      // #endregion
       return NextResponse.json({
         ok: true,
         updatedCount: importedCount,
@@ -460,9 +415,8 @@ export async function POST(req: Request) {
       if (!error) updatedCount++;
     }
 
-    // #region debug-point E:final-response
     await reportDebugEvent({
-      runId: 'pre-fix',
+      runId,
       hypothesisId: 'E',
       location: 'web/app/api/listini/ai-organize/route.ts:POST:final-response',
       msg: '[DEBUG] AI organize returning final payload',
@@ -474,7 +428,6 @@ export async function POST(req: Request) {
         pricingDiagnostics,
       },
     });
-    // #endregion
     return NextResponse.json({
       ok: true,
       processedCount: sourceRows.length,
@@ -486,9 +439,8 @@ export async function POST(req: Request) {
       chunkCount: chunks.length,
     });
   } catch (err) {
-    // #region debug-point E:route-error
     await reportDebugEvent({
-      runId: 'pre-fix',
+      runId,
       hypothesisId: 'E',
       location: 'web/app/api/listini/ai-organize/route.ts:POST:catch',
       msg: '[DEBUG] AI organize route failed',
@@ -496,7 +448,6 @@ export async function POST(req: Request) {
         error: (err as Error).message || String(err),
       },
     });
-    // #endregion
     console.error('AI organize listino error:', err);
     return NextResponse.json({ error: (err as Error).message || 'AI organize failed' }, { status: 500 });
   }

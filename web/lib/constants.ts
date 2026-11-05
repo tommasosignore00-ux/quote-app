@@ -1,4 +1,15 @@
-export const COUNTRIES = [
+// ── Mercato attivo ──────────────────────────────────────────
+// Per ora l'app è disponibile solo in Italia. Le liste complete restano
+// in ALL_COUNTRIES / ALL_LANGUAGES per una futura riapertura ad altri paesi:
+// basterà aggiungere i codici in ACTIVE_COUNTRY_CODES / ACTIVE_LANGUAGE_CODES.
+export const DEFAULT_COUNTRY_CODE = 'IT';
+export const DEFAULT_LANGUAGE = 'it';
+export const DEFAULT_LOCALE = 'it-IT';
+export const DEFAULT_CURRENCY = 'EUR';
+export const ACTIVE_COUNTRY_CODES: readonly string[] = [DEFAULT_COUNTRY_CODE];
+export const ACTIVE_LANGUAGE_CODES: readonly string[] = [DEFAULT_LANGUAGE];
+
+export const ALL_COUNTRIES = [
   // Europa occidentale
   { code: 'IT', name: 'Italia', currency: 'EUR', vatDefault: 22 },
   { code: 'DE', name: 'Deutschland', currency: 'EUR', vatDefault: 19 },
@@ -37,7 +48,7 @@ export const COUNTRIES = [
   { code: 'BR', name: 'Brasil', currency: 'BRL', vatDefault: 17 },
 ] as const;
 
-export const LANGUAGES = [
+export const ALL_LANGUAGES = [
   { code: 'it', name: 'Italiano' },
   { code: 'en', name: 'English' },
   { code: 'de', name: 'Deutsch' },
@@ -61,6 +72,24 @@ export const LANGUAGES = [
   { code: 'ko', name: '한국어' },
 ] as const;
 
+export const COUNTRIES = ALL_COUNTRIES.filter((c) => ACTIVE_COUNTRY_CODES.includes(c.code));
+export const LANGUAGES = ALL_LANGUAGES.filter((l) => ACTIVE_LANGUAGE_CODES.includes(l.code));
+
+export function isActiveCountry(code: string | null | undefined): boolean {
+  return !!code && ACTIVE_COUNTRY_CODES.includes(code.toUpperCase());
+}
+
+/** Riporta qualsiasi codice paese non attivo al paese di default (Italia). */
+export function normalizeCountryCode(code: string | null | undefined): string {
+  return isActiveCountry(code) ? String(code).toUpperCase() : DEFAULT_COUNTRY_CODE;
+}
+
+/** Riporta qualsiasi lingua non attiva alla lingua di default (italiano). */
+export function normalizeLanguage(lang: string | null | undefined): string {
+  const base = (lang || '').toLowerCase().split('-')[0];
+  return ACTIVE_LANGUAGE_CODES.includes(base) ? base : DEFAULT_LANGUAGE;
+}
+
 export const LEGAL_FRAMEWORKS: Record<string, string> = {
   IT: 'GDPR', DE: 'GDPR', FR: 'GDPR', ES: 'GDPR', AT: 'GDPR',
   NL: 'GDPR', BE: 'GDPR', PT: 'GDPR', PL: 'GDPR', GB: 'UK_GDPR',
@@ -76,3 +105,13 @@ export const STRIPE_PRICES = {
   yearly: 29000, // 290€ in cents
   trialDays: 7,
 };
+
+/**
+ * Aliquota IVA del profilo, con 22% solo se manca davvero.
+ * Attenzione: `valore || 22` trasformerebbe un'aliquota 0% (es. forfettario) in 22%.
+ */
+export function resolveVatPercent(value: unknown, fallback = 22): number {
+  if (value === null || value === undefined || value === '') return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}

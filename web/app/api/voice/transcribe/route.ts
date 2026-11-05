@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getRequestUser, unauthorizedResponse } from '../../../../lib/apiAuth';
 import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
@@ -9,8 +10,11 @@ const supabase = supabaseAdmin;
 
 export async function POST(req: Request) {
   try {
+    const user = await getRequestUser(req);
+    if (!user) return unauthorizedResponse();
     const body = await req.json();
-    const { audioBase64, filename = 'audio.wav', mimeType = 'audio/wav', userId } = body;
+    const { audioBase64, filename = 'audio.wav', mimeType = 'audio/wav' } = body;
+    const userId = user.id;
 
     if (!audioBase64) {
       return NextResponse.json({ error: 'audioBase64 is required' }, { status: 400 });
@@ -23,6 +27,7 @@ export async function POST(req: Request) {
     const transcription = await openai.audio.transcriptions.create({
       file: stream as any,
       model: process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1',
+      language: 'it',
     } as any);
 
     const text = transcription.text || '';

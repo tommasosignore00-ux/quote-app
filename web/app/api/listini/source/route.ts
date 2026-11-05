@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getRequestUser, unauthorizedResponse, forbiddenResponse, isOwnProfile } from '../../../../lib/apiAuth';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import { getListinoSourceMetadata, getListinoSourceSignedUrl } from '../../../../lib/listinoSourceStorage';
 
@@ -6,12 +7,15 @@ const supabase = supabaseAdmin;
 
 export async function GET(req: Request) {
   try {
+    const user = await getRequestUser(req);
+    if (!user) return unauthorizedResponse();
     const { searchParams } = new URL(req.url);
     const listinoId = searchParams.get('listinoId');
-    const profileId = searchParams.get('profileId');
+    if (!isOwnProfile(user, searchParams.get('profileId'))) return forbiddenResponse();
+    const profileId = user.id;
 
-    if (!listinoId || !profileId) {
-      return NextResponse.json({ error: 'listinoId e profileId sono obbligatori' }, { status: 400 });
+    if (!listinoId) {
+      return NextResponse.json({ error: 'listinoId è obbligatorio' }, { status: 400 });
     }
 
     const { data: listino, error: listinoError } = await supabase

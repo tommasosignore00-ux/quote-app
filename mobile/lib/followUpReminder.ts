@@ -65,8 +65,8 @@ export async function scheduleFollowUp(params: {
   await scheduleLocalNotification(
     `📧 Follow-up: ${params.clientName}`,
     `Il preventivo "${params.lavoroTitle}" inviato a ${params.recipientEmail} non ha ancora ricevuto risposta. Vuoi inviare un promemoria?`,
-    reminderDelay,
-    { screen: 'Quote', lavoroId: params.lavoroId }
+    { screen: 'Quote', lavoroId: params.lavoroId },
+    reminderDelay
   );
 }
 

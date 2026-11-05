@@ -1,5 +1,6 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
+import { ACTIVE_LANGUAGE_CODES, DEFAULT_LANGUAGE } from './constants';
 
 const resources = {
   it: {
@@ -406,9 +407,11 @@ i18n
   .use(initReactI18next)
   .init({
     resources,
-    lng: 'en',
-    fallbackLng: 'en',
-    supportedLngs: ['it', 'en', 'de', 'fr', 'es', 'pt', 'pl', 'nl', 'zh', 'ru', 'cs', 'hu', 'ro', 'uk', 'hr', 'sk', 'bg', 'sl', 'el', 'ja', 'ko'],
+    // App disponibile solo in Italia: interfaccia fissa in italiano.
+    // Le traduzioni delle altre lingue restano in `resources` per il futuro.
+    lng: DEFAULT_LANGUAGE,
+    fallbackLng: DEFAULT_LANGUAGE,
+    supportedLngs: [...ACTIVE_LANGUAGE_CODES],
     interpolation: { escapeValue: false },
   });
 

@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, FlatList, StyleSheet, Modal, TextInput, A
 import { useTranslation } from 'react-i18next';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
+import { DEFAULT_COUNTRY_CODE, DEFAULT_CURRENCY, DEFAULT_LANGUAGE, DEFAULT_LOCALE, resolveVatPercent } from '../lib/market';
 import VoiceButton from '../components/VoiceButton';
 import { useFocusEffect } from '@react-navigation/native';
 import { trackTimeSaving, getTimeSavingsStats } from '../lib/timeSavings';
@@ -42,8 +43,8 @@ export default function DashboardScreen() {
   const [creatingJob, setCreatingJob] = useState(false);
 
   // Punto 22/23: Client country + language for new client modal
-  const [newClientCountry, setNewClientCountry] = useState('IT');
-  const [newClientLanguage, setNewClientLanguage] = useState('it');
+  const newClientCountry = DEFAULT_COUNTRY_CODE;
+  const newClientLanguage = DEFAULT_LANGUAGE;
 
   // Punto 24: Currency selector for new job modal
   const CURRENCY_OPTIONS = [
@@ -126,7 +127,7 @@ export default function DashboardScreen() {
     if (profile) {
       pid = profile.id;
       setProfileCountryCode((profile as any).country_code || null);
-      setProfileVatPercent(Number((profile as any).vat_percent) || 22);
+      setProfileVatPercent(resolveVatPercent((profile as any).vat_percent));
       setProfileMaterialMarkup(Number((profile as any).material_markup) || 0);
       setSubscriptionStatus(profile.subscription_status || null);
     } else if (profileErr) {
@@ -184,7 +185,7 @@ export default function DashboardScreen() {
   // Gating: mostra messaggio se utente Free tenta funzioni Pro/Team
   const showUpgradeAlert = (feature: string) => {
     Alert.alert('Funzione riservata', `${feature} è disponibile solo per abbonati Pro o Team.`, [
-      { text: 'Scopri i piani', onPress: () => navigation.navigate('Subscription') },
+      { text: 'Scopri i piani', onPress: () => (navigation as any).navigate('Subscription') },
       { text: 'Annulla', style: 'cancel' },
     ]);
   };
@@ -247,12 +248,14 @@ export default function DashboardScreen() {
 
   const selectedCliente = clienti.find((cliente) => cliente.id === selectedClienteId) || null;
   const voiceContext = {
-    appLanguage: i18n.language,
-    selectedInputLanguage: i18n.language,
+    // App disponibile solo in Italia
+    appLanguage: DEFAULT_LANGUAGE,
+    selectedInputLanguage: DEFAULT_LANGUAGE,
     userIntentMode: 'voice',
     company: {
-      country: profileCountryCode,
-      locale: i18n.language,
+      country: DEFAULT_COUNTRY_CODE,
+      locale: DEFAULT_LOCALE,
+      currency: DEFAULT_CURRENCY,
       defaultVatRate: profileVatPercent,
       vatMode: 'standard',
     },
@@ -274,7 +277,7 @@ export default function DashboardScreen() {
       ? {
           jobId: selectedLavoro.id,
           customerId: selectedLavoro.cliente_id,
-          language: i18n.language,
+          language: DEFAULT_LANGUAGE,
           items: costi.map((costo) => ({
             id: costo.id,
             description: costo.description,
@@ -393,8 +396,6 @@ export default function DashboardScreen() {
       if (error) throw error;
       if (created && created[0]) setClienti((p) => [...p, created[0]]);
       setNewClientName('');
-      setNewClientCountry('IT');
-      setNewClientLanguage('it');
       setShowClientModal(false);
     } catch (err) {
       Alert.alert(t('messages.error'), (err as Error).message);
@@ -535,7 +536,7 @@ export default function DashboardScreen() {
 
     if (resultItems.length === 0) return [];
 
-    const listinoIds = Array.from(new Set(resultItems.map((item) => item.listino_id).filter(Boolean)));
+    const listinoIds = Array.from(new Set(resultItems.map((item: any) => item.listino_id).filter(Boolean)));
     let listiniById = new Map<string, string>();
     if (listinoIds.length > 0) {
       const { data: listini, error: listiniError } = await supabase
@@ -543,10 +544,10 @@ export default function DashboardScreen() {
         .select('id, name')
         .in('id', listinoIds as string[]);
       if (listiniError) throw listiniError;
-      listiniById = new Map((listini || []).map((listino) => [listino.id, listino.name]));
+      listiniById = new Map((listini || []).map((listino: { id: string; name: string }) => [listino.id, listino.name] as [string, string]));
     }
 
-    return resultItems.map((item) => ({
+    return resultItems.map((item: any) => ({
       ...item,
       listino_name: item.listino_id ? (listiniById.get(item.listino_id) || t('dashboard.unknownListino')) : t('dashboard.unknownListino'),
     }));
@@ -878,24 +879,7 @@ export default function DashboardScreen() {
           <View style={[styles.modal, { backgroundColor: colors.modalBg }]}>
             <Text style={[styles.modalTitle, { color: colors.text }]}>{t('actions.addClient') || 'Aggiungi cliente'}</Text>
             <TextInput style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} placeholder={t('profile.company') || 'Nome cliente'} value={newClientName} onChangeText={setNewClientName} placeholderTextColor={colors.textTertiary} />
-            {/* Punto 22: Country code picker */}
-            <Text style={{ marginBottom: 4, color: colors.textSecondary, fontSize: 13 }}>Paese / Country</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12, maxHeight: 40 }}>
-              {['IT','DE','FR','ES','GB','US','AT','CH','NL','BE','PT','PL','RO','CZ','HR','HU','SK','SI','BG','EL','RU','UA','JA','KO','ZH'].map(cc => (
-                <TouchableOpacity key={cc} onPress={() => setNewClientCountry(cc)} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, marginRight: 6, backgroundColor: newClientCountry === cc ? '#dc2626' : '#f1f5f9' }}>
-                  <Text style={{ color: newClientCountry === cc ? '#fff' : '#374151', fontWeight: newClientCountry === cc ? '700' : '400', fontSize: 13 }}>{cc}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-            {/* Punto 23: Language picker */}
-            <Text style={{ marginBottom: 4, color: colors.textSecondary, fontSize: 13 }}>Lingua preventivi / Quote language</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12, maxHeight: 40 }}>
-              {[{c:'it',l:'Italiano'},{c:'en',l:'English'},{c:'de',l:'Deutsch'},{c:'fr',l:'Français'},{c:'es',l:'Español'},{c:'nl',l:'Nederlands'},{c:'pt',l:'Português'},{c:'pl',l:'Polski'},{c:'ro',l:'Română'},{c:'cs',l:'Čeština'},{c:'hu',l:'Magyar'},{c:'sk',l:'Slovenčina'},{c:'sl',l:'Slovenščina'},{c:'hr',l:'Hrvatski'},{c:'bg',l:'Български'},{c:'el',l:'Ελληνικά'},{c:'ru',l:'Русский'},{c:'uk',l:'Українська'},{c:'ja',l:'日本語'},{c:'ko',l:'한국어'},{c:'zh',l:'中文'}].map(lang => (
-                <TouchableOpacity key={lang.c} onPress={() => setNewClientLanguage(lang.c)} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, marginRight: 6, backgroundColor: newClientLanguage === lang.c ? '#dc2626' : '#f1f5f9' }}>
-                  <Text style={{ color: newClientLanguage === lang.c ? '#fff' : '#374151', fontWeight: newClientLanguage === lang.c ? '700' : '400', fontSize: 13 }}>{lang.l}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+            {/* Paese e lingua cliente fissi: app disponibile solo in Italia */}
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <TouchableOpacity style={styles.btn} onPress={() => setShowClientModal(false)}>
                 <Text style={styles.btnText}>{t('buttons.cancel')}</Text>

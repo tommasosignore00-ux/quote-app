@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { isInternalCall, jsonResponse } from '../_shared/auth.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || ''
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
@@ -25,6 +26,11 @@ serve(async (req) => {
         'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
       },
     })
+  }
+
+  // Job interno: chiunque con la chiave anon potrebbe altrimenti far partire la fatturazione
+  if (!isInternalCall(req)) {
+    return jsonResponse({ error: 'Accesso negato' }, 403)
   }
 
   try {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { resolveVatPercent } from '@/lib/constants';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
@@ -65,7 +66,7 @@ export default function DashboardPage() {
     if (profile) {
       pid = profile.id;
       setProfileCountryCode(profile.country_code || null);
-      setProfileVatPercent(Number(profile.vat_percent) || 22);
+      setProfileVatPercent(resolveVatPercent(profile.vat_percent));
       setProfileMaterialMarkup(Number(profile.material_markup) || 0);
     } else if (profileErr) {
       // Columns might not exist yet – try without them

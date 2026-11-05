@@ -23,7 +23,7 @@ export default function AuthScreen() {
       }
     };
     checkSession();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: string, session: unknown) => {
       if (session) checkSession();
     });
     return () => subscription.unsubscribe();

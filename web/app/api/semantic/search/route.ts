@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getRequestUser, unauthorizedResponse } from '../../../../lib/apiAuth';
 import OpenAI from 'openai';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 
@@ -7,6 +8,8 @@ const supabase = supabaseAdmin;
 
 export async function POST(req: Request) {
   try {
+    const user = await getRequestUser(req);
+    if (!user) return unauthorizedResponse();
     const { query, k = 8 } = await req.json();
     if (!query) return NextResponse.json({ error: 'query required' }, { status: 400 });
 
@@ -17,7 +20,14 @@ export async function POST(req: Request) {
     if (!qEmbedding) return NextResponse.json({ error: 'no embedding returned' }, { status: 500 });
 
     // Call Postgres function to perform k-NN search (function must be added via migration)
-    const { data, error } = await supabase.rpc('search_listini', { query_embedding: qEmbedding, limit_k: k });
+    // Solo i listini dell'utente: search_listini non filtra per profilo
+    const limitK = Math.min(Math.max(Number(k) || 8, 1), 50);
+    const { data, error } = await supabase.rpc('match_listini', {
+      query_embedding: qEmbedding,
+      match_threshold: 0,
+      match_count: limitK,
+      p_profile_id: user.id,
+    });
     if (error) {
       console.error('Search RPC error:', error);
       return NextResponse.json({ error: error.message || 'Search failed' }, { status: 500 });

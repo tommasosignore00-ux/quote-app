@@ -59,7 +59,7 @@ export default function IntegrazioniScreen() {
 
       if (data) {
         const map: Record<string, Integrazione> = {};
-        data.forEach(i => map[i.provider] = i);
+        data.forEach((i: Integrazione) => { map[i.provider] = i; });
         setIntegrazioni(map);
       }
     } catch (error) {
@@ -129,7 +129,7 @@ export default function IntegrazioniScreen() {
         contentContainerStyle={styles.list}
         renderItem={({ item: [category, providers] }) => (
           <View style={styles.category}>
-            <Text style={[styles.categoryTitle, { color: colors.secondaryText }]}>
+            <Text style={[styles.categoryTitle, { color: colors.textSecondary }]}>
               {category}
             </Text>
             {providers.map(provider => {
@@ -145,7 +145,7 @@ export default function IntegrazioniScreen() {
                       <Text style={[styles.providerName, { color: colors.text }]}>
                         {provider.name}
                       </Text>
-                      <Text style={[styles.providerDesc, { color: colors.secondaryText }]}>
+                      <Text style={[styles.providerDesc, { color: colors.textSecondary }]}>
                         {provider.description}
                       </Text>
                     </View>
@@ -161,7 +161,7 @@ export default function IntegrazioniScreen() {
                     {integrazione?.is_active ? (
                       <>
                         <TouchableOpacity
-                          style={[styles.actionBtn, { backgroundColor: colors.secondary }]}
+                          style={[styles.actionBtn, { backgroundColor: colors.primaryDark }]}
                           onPress={() => handleSync(provider.id)}
                         >
                           <Text style={styles.actionBtnText}>🔄 Sincronizza</Text>
@@ -183,7 +183,7 @@ export default function IntegrazioniScreen() {
                     )}
                   </View>
                   {integrazione?.last_sync && (
-                    <Text style={[styles.lastSync, { color: colors.secondaryText }]}>
+                    <Text style={[styles.lastSync, { color: colors.textSecondary }]}>
                       Ultima sincronizzazione: {new Date(integrazione.last_sync).toLocaleString()}
                     </Text>
                   )}

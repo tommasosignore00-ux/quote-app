@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { getRequestUser, jsonResponse } from '../_shared/auth.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 const EMAIL_FROM = Deno.env.get('EMAIL_FROM') || 'noreply@quoteapp.it'
@@ -9,6 +10,10 @@ serve(async (req) => {
   }
 
   try {
+    // Solo utenti autenticati: altrimenti la funzione sarebbe un relay di spam
+    const user = await getRequestUser(req)
+    if (!user) return jsonResponse({ error: 'Non autenticato' }, 401)
+
     const { to, subject, html, pdfBase64, pdfFilename } = await req.json()
 
     if (!to || !subject || !html) {
@@ -21,6 +26,7 @@ serve(async (req) => {
     formData.append('to', to)
     formData.append('subject', subject)
     formData.append('html', html)
+    if (user.email) formData.append('reply_to', user.email)
 
     // Add PDF attachment if provided
     if (pdfBase64 && pdfFilename) {

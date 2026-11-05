@@ -3,7 +3,8 @@ import { View, Text, TouchableOpacity, StyleSheet, Modal, TextInput, Alert, Safe
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
-import { sendEmail } from '../lib/supabaseFunctions';
+import { normalizeCountryCode, resolveVatPercent } from '../lib/market';
+import { sendEmail, getFunctionHeaders } from '../lib/supabaseFunctions';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
@@ -100,7 +101,7 @@ export default function QuoteScreen() {
           unit_price: Number(d.unit_price),
           tax_rate: Number(d.tax_rate || 0),
         })),
-        Number(profile?.vat_percent || 22)
+        resolveVatPercent(profile?.vat_percent)
       );
 
       if (!validationResult.valid) {
@@ -123,7 +124,7 @@ export default function QuoteScreen() {
       }
 
       // Punto 30: Arrotondamento Intelligente
-      const countryCode = profile?.country_code?.toUpperCase() || 'IT';
+      const countryCode = normalizeCountryCode(profile?.country_code);
 
       const quoteData: QuoteData = {
         lavoroTitle: lavoroData.title,
@@ -136,7 +137,7 @@ export default function QuoteScreen() {
           unit_price: roundForCountry(Number(d.unit_price), countryCode),
           material_markup: Number(d.tax_rate || profile?.material_markup || 0),
         })),
-        vat_percent: Number(profile?.vat_percent || 22),
+        vat_percent: resolveVatPercent(profile?.vat_percent),
         companyName: profile?.company_name,
         vatNumber: profile?.vat_number,
         fiscalCode: profile?.fiscal_code,
@@ -270,7 +271,7 @@ export default function QuoteScreen() {
   // Punto 46: Export helper
   const handleExport = async (format: 'json' | 'xml' | 'csv') => {
     if (!profileData || !dettaglioItems.length || !lavoro) return;
-    const vatPercent = Number(profileData?.vat_percent || 22);
+    const vatPercent = resolveVatPercent(profileData?.vat_percent);
     const items = dettaglioItems.map((d: any) => {
       const qty = Number(d.quantity);
       const price = Number(d.unit_price);
@@ -454,7 +455,7 @@ export default function QuoteScreen() {
                   if (supabaseUrl) {
                     fetch(`${supabaseUrl}/functions/v1/webhook-dispatch`, {
                       method: 'POST',
-                      headers: { Authorization: `Bearer ${supabaseAnonKey}`, 'Content-Type': 'application/json' },
+                      headers: await getFunctionHeaders({ 'Content-Type': 'application/json' }),
                       body: JSON.stringify({
                         profile_id: user.id,
                         event_type: 'quote_approved',

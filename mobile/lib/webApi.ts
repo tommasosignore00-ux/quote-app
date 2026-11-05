@@ -39,3 +39,14 @@ export function buildWebApiUrl(path: string): string {
 
   return `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
 }
+
+/**
+ * Header di autenticazione per le API del sito web: il server rifiuta
+ * le richieste senza il token di sessione Supabase dell'utente.
+ */
+export async function getWebApiAuthHeaders(extra: Record<string, string> = {}): Promise<Record<string, string>> {
+  const { supabase } = await import('./supabase');
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return token ? { ...extra, Authorization: `Bearer ${token}` } : { ...extra };
+}

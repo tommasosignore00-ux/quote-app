@@ -4,6 +4,7 @@
  * Integrates with existing offline.ts queue system.
  */
 import * as FileSystem from 'expo-file-system/legacy';
+import { getFunctionHeaders } from './supabaseFunctions';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 
@@ -111,7 +112,7 @@ export async function syncOfflineRecordings(
 
       const res = await fetch(`${supabaseUrl}/functions/v1/voice-process`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${supabaseAnonKey}` },
+        headers: await getFunctionHeaders(),
         body: formData,
       });
 

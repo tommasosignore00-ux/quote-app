@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { loadStripe } from '@stripe/stripe-js';
 import toast from 'react-hot-toast';
 import { setLanguage } from '@/lib/language';
+import { DEFAULT_COUNTRY_CODE, DEFAULT_LANGUAGE } from '@/lib/constants';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_KEY!);
 
@@ -20,7 +21,7 @@ const LEGAL_DOCUMENT_TYPES = ['privacy_policy', 'terms_of_service'] as const;
 type LegalDocumentType = (typeof LEGAL_DOCUMENT_TYPES)[number];
 
 export default function OnboardingPage() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const router = useRouter();
   const [mainStep, setMainStep] = useState(1); // 1: Welcome, 2: Tutorial, 3: Legal Consent, 4: Company Info, 5: Plan, 6: Done
   const [tutorialStep, setTutorialStep] = useState(0);
@@ -31,8 +32,9 @@ export default function OnboardingPage() {
   const [formData, setFormData] = useState({
     company_name: '',
     vat_number: '',
-    country_code: 'IT',
-    language: i18n.language || 'en',
+    // App disponibile solo in Italia
+    country_code: DEFAULT_COUNTRY_CODE,
+    language: DEFAULT_LANGUAGE,
   });
   const [legalConsent, setLegalConsent] = useState<{
     privacy_policy: boolean;
@@ -211,7 +213,7 @@ export default function OnboardingPage() {
               <span className="text-green-400 mr-3 text-xl">✓</span> Voice-powered quote creation
             </li>
             <li className="flex items-center">
-              <span className="text-green-400 mr-3 text-xl">✓</span> Multi-language support
+              <span className="text-green-400 mr-3 text-xl">✓</span> Pensato per il mercato italiano (IVA, fatturazione elettronica)
             </li>
             <li className="flex items-center">
               <span className="text-green-400 mr-3 text-xl">✓</span> Professional templates for 32 countries
@@ -386,32 +388,8 @@ export default function OnboardingPage() {
 
             <div>
               <label className="block text-sm font-medium mb-1">Country</label>
-              <select
-                name="country_code"
-                value={formData.country_code}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
-              >
-                <option value="IT">Italy</option>
-                <option value="ES">Spain</option>
-                <option value="FR">France</option>
-                <option value="DE">Germany</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">Preferred Language</label>
-              <select
-                name="language"
-                value={formData.language}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
-              >
-                <option value="en">English</option>
-                <option value="it">Italiano</option>
-                <option value="es">Español</option>
-                <option value="fr">Français</option>
-              </select>
+              <div className="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-slate-300">🇮🇹 Italia</div>
+              <p className="mt-1 text-xs text-slate-400">Al momento il servizio è disponibile solo in Italia.</p>
             </div>
           </form>
 
@@ -477,7 +455,7 @@ export default function OnboardingPage() {
 
           <div className="bg-white/10 border border-white/20 rounded-lg p-4 mb-8">
             <p className="text-sm text-slate-300">
-              <strong className="text-white">What's included:</strong> Unlimited quotes, clients, price lists, voice transcription, 21 languages, professional templates, and more.
+              <strong className="text-white">What's included:</strong> Unlimited quotes, clients, price lists, voice transcription in Italian, professional templates, and more.
             </p>
           </div>
 

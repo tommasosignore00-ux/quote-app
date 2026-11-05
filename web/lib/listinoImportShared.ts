@@ -1,0 +1,1387 @@
+import { NextResponse } from 'next/server';
+import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
+import { spawn } from 'child_process';
+import OpenAI from 'openai';
+import { supabaseAdmin } from './supabase-server';
+import * as XLSX from 'xlsx';
+import {
+  type UniversalImportResult,
+  type UniversalParsedItem,
+  mergeUniversalImportResults,
+  parseUniversalCsvText,
+  parseUniversalPdfText,
+  parseUniversalSpreadsheetRows,
+} from './listinoUniversalImport';
+import {
+  type PricingDiagnostics,
+  type PricingResolutionResult,
+  resolveImportPricing,
+} from './listinoPricing';
+import { LISTINO_SOURCE_BUCKET, uploadListinoSource } from './listinoSourceStorage';
+import { bulkGenerateEmbeddingsForListino } from './bulkGenerateEmbeddings';
+import {
+  reportDebugEvent,
+  getActiveDebugRunId,
+  getActiveDebugSessionId,
+} from './listinoDebugShared';
+
+
+const supabase = supabaseAdmin;
+const openai = process.env.OPENAI_API_KEY
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
+
+const PDF_OCR_MAX_PAGES = 12;
+const PDF_OCR_BATCH_SIZE = 2;
+const PDF_OCR_SCREENSHOT_WIDTH = 1600;
+
+export type ProcessListinoImportResult = {
+  ok: boolean;
+  status: number;
+  error?: string;
+  inserted?: number;
+  listinoId?: string | null;
+  summary?: UniversalImportResult['summary'];
+  sourceDiagnostics?: Array<Record<string, unknown>>;
+  pricingDiagnostics?: PricingDiagnostics;
+  sourceStored?: boolean;
+  aiFeedback?: string | null;
+  sourceInfo?: { fileName: string; mimeType: string; uploadedAt: string } | null;
+};
+
+export type ProcessListinoImportParams = {
+  profileId: string;
+  listinoId?: string | null;
+  listinoName?: string | null;
+  originalFileName?: string | null;
+  uploadedFileName: string;
+  uploadedFileType: string;
+  arrayBuffer: ArrayBuffer;
+  sourceOnly?: boolean;
+  runId?: string | null;
+};
+
+let pdfParseCtorPromise: Promise<any> | null = null;
+let pdfScreenshotPolyfillsPromise: Promise<void> | null = null;
+
+async function extractPdfText(buffer: Buffer) {
+  const PDFParse = await getPdfParseCtor();
+  const parser = new PDFParse({ data: buffer });
+
+  try {
+    const result = await parser.getText();
+    return result.text || '';
+  } finally {
+    await parser.destroy();
+  }
+}
+
+function isPdfParserFatalError(error: unknown): boolean {
+  const message = String((error as Error)?.message || error || '').toLowerCase();
+  return (
+    /expected pattern/.test(message) ||
+    /invalid pdf/.test(message) ||
+    /pdf parse/.test(message) ||
+    /parser/.test(message) ||
+    /defineproperty/.test(message) ||
+    /non-object/.test(message)
+  );
+}
+
+function runPdfSubprocess(scriptName: 'extract-pdf-text.cjs' | 'render-pdf-pages.cjs', args: string[], inputBuffer?: Buffer): Promise<{
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+}> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const resolveOnce = (value: { ok: boolean; stdout: string; stderr: string }) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+
+    try {
+      const scriptPath = path.resolve(process.cwd(), 'scripts', scriptName);
+      fs.access(scriptPath, fs.constants.F_OK).then(
+        () => {
+          try {
+            const child = spawn(process.execPath, [scriptPath, ...args], {
+              stdio: inputBuffer ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'],
+            });
+
+            let stdout = '';
+            let stderr = '';
+
+            child.stdout?.on('data', (chunk) => {
+              stdout += String(chunk || '');
+            });
+            child.stderr?.on('data', (chunk) => {
+              stderr += String(chunk || '');
+            });
+
+            child.on('error', (err) => {
+              resolveOnce({ ok: false, stdout: '', stderr: err?.message || 'spawn failed' });
+            });
+            child.on('close', (code, signal) => {
+              resolveOnce({
+                ok: (code === 0 && !signal),
+                stdout: stdout.trim(),
+                stderr: stderr.trim(),
+              });
+            });
+
+            if (inputBuffer && child.stdin) {
+              child.stdin.on('error', () => {});
+              child.stdin.end(inputBuffer);
+            }
+          } catch (err) {
+            resolveOnce({ ok: false, stdout: '', stderr: (err as Error)?.message || String(err) });
+          }
+        },
+        () => {
+          resolveOnce({ ok: false, stdout: '', stderr: `Script ${scriptName} non trovato` });
+        },
+      );
+    } catch (err) {
+      resolveOnce({ ok: false, stdout: '', stderr: (err as Error)?.message || String(err) });
+    }
+  });
+}
+
+function tryParseStderrError(stderrRaw: string): string | null {
+  if (!stderrRaw) return null;
+  try {
+    const parsed = JSON.parse(stderrRaw) as { error?: string };
+    if (parsed && typeof parsed.error === 'string' && parsed.error) return parsed.error;
+  } catch {
+  }
+  return stderrRaw || null;
+}
+
+async function extractPdfTextWithFallback(buffer: Buffer): Promise<{
+  text: string;
+  method: 'inline' | 'subprocess' | 'empty';
+  error?: string;
+}> {
+  let inlineFailureError: unknown = null;
+  let inlineProducedEmpty = false;
+
+  try {
+    const text = await extractPdfText(buffer);
+    if (text.trim()) {
+      return { text, method: 'inline' };
+    }
+    inlineProducedEmpty = true;
+  } catch (inlineError) {
+    if (!isPdfParserFatalError(inlineError)) {
+      throw inlineError;
+    }
+    inlineFailureError = inlineError;
+  }
+
+  if (inlineFailureError || inlineProducedEmpty) {
+    try {
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pdf-extract-'));
+      const tmpFile = path.join(tmpDir, 'source.pdf');
+      await fs.writeFile(tmpFile, buffer);
+
+      const result = await runPdfSubprocess('extract-pdf-text.cjs', [tmpFile]);
+
+      void fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+
+      const structuredStderr = tryParseStderrError(result.stderr);
+
+      if (result.ok && result.stdout) {
+        let parsed: { text?: string } = {};
+        try {
+          parsed = JSON.parse(result.stdout) as { text?: string };
+        } catch {
+          parsed = { text: result.stdout };
+        }
+        const fallbackText = String(parsed.text || '').trim();
+        if (fallbackText) {
+          return { text: fallbackText, method: 'subprocess' };
+        }
+      }
+      return {
+        text: '',
+        method: 'empty',
+        error: inlineFailureError
+          ? (inlineFailureError as Error)?.message || structuredStderr || 'extract failed'
+          : inlineProducedEmpty && !result.ok
+            ? structuredStderr || 'subprocess extract failed'
+            : structuredStderr || undefined,
+      };
+    } catch {
+      return {
+        text: '',
+        method: 'empty',
+        error: inlineFailureError ? (inlineFailureError as Error)?.message || 'extract failed' : undefined,
+      };
+    }
+  }
+
+  return { text: '', method: 'empty' };
+}
+
+async function ensurePdfScreenshotPolyfills() {
+  if (!pdfScreenshotPolyfillsPromise) {
+    pdfScreenshotPolyfillsPromise = import('@napi-rs/canvas').then((canvasModule) => {
+      const globals = globalThis as Record<string, unknown>;
+
+      if (!globals.DOMMatrix && canvasModule.DOMMatrix) {
+        globals.DOMMatrix = canvasModule.DOMMatrix as unknown;
+      }
+      if (!globals.ImageData && canvasModule.ImageData) {
+        globals.ImageData = canvasModule.ImageData as unknown;
+      }
+      if (!globals.Path2D && canvasModule.Path2D) {
+        globals.Path2D = canvasModule.Path2D as unknown;
+      }
+    });
+  }
+
+  await pdfScreenshotPolyfillsPromise;
+}
+
+async function renderPdfPages(params: { buffer: Buffer; maxPages?: number }) {
+  await ensurePdfScreenshotPolyfills();
+  const PDFParse = await getPdfParseCtor();
+  const parser = new PDFParse({ data: params.buffer });
+
+  try {
+    const result = await parser.getScreenshot({
+      imageDataUrl: false,
+      imageBuffer: true,
+      first: Number.isFinite(params.maxPages) && (params.maxPages || 0) > 0 ? params.maxPages : PDF_OCR_MAX_PAGES,
+      desiredWidth: PDF_OCR_SCREENSHOT_WIDTH,
+    });
+
+    const images = [] as Array<{ pageNumber: number; dataUrl: string }>;
+    for (const page of result.pages || []) {
+      const pageBuffer = Buffer.isBuffer(page.data) ? page.data : Buffer.from(page.data);
+      images.push({
+        pageNumber: Number(page.pageNumber || images.length + 1),
+        dataUrl: `data:image/png;base64,${pageBuffer.toString('base64')}`,
+      });
+    }
+
+    return {
+      totalPages: result.total || images.length,
+      renderedPages: images.length,
+      images,
+    };
+  } finally {
+    await parser.destroy();
+  }
+}
+
+async function getPdfParseCtor() {
+  if (!pdfParseCtorPromise) {
+    pdfParseCtorPromise = import('pdf-parse').then((module) => {
+      const ctor = (module as any).PDFParse || (module as any).default?.PDFParse || (module as any).default;
+      if (!ctor) {
+        throw new Error('pdf-parse non esporta PDFParse');
+      }
+      return ctor;
+    });
+  }
+
+  return pdfParseCtorPromise;
+}
+
+function chunkArray<T>(items: T[], size: number): Array<T[]> {
+  const chunks: Array<T[]> = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+async function ocrPdfImages(params: {
+  fileName: string;
+  images: Array<{ pageNumber: number; dataUrl: string }>;
+}) {
+  if (!openai) {
+    throw new Error('OCR automatico non disponibile: manca OPENAI_API_KEY.');
+  }
+
+  const chunks = chunkArray(params.images, PDF_OCR_BATCH_SIZE);
+  const texts: string[] = [];
+
+  for (const chunk of chunks) {
+    const userContent: Array<
+      | { type: 'text'; text: string }
+      | { type: 'image_url'; image_url: { url: string; detail: 'high' } }
+    > = [
+      {
+        type: 'text',
+        text:
+          `Queste immagini arrivano dal PDF "${params.fileName}" e rappresentano un listino, prezzario o prontuario tecnico.\n` +
+          'Fai OCR e restituisci solo testo utile all import dei materiali:\n' +
+          '- una voce per riga quando possibile\n' +
+          '- mantieni codici, descrizioni, unita, misure, peso e prezzi\n' +
+          '- ignora loghi, foto decorative, note legali, numeri pagina e testo puramente grafico\n' +
+          '- non usare markdown\n' +
+          '- non spiegare nulla\n' +
+          '- restituisci solo testo puro',
+      },
+    ];
+
+    for (const image of chunk) {
+      userContent.push({ type: 'text', text: `Pagina ${image.pageNumber}` });
+      userContent.push({
+        type: 'image_url',
+        image_url: {
+          url: image.dataUrl,
+          detail: 'high',
+        },
+      });
+    }
+
+    const completion = await openai.chat.completions.create({
+      model: process.env.OPENAI_AGENT_MODEL || 'gpt-4o-mini',
+      temperature: 0,
+      max_tokens: 4000,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Sei un OCR specializzato in listini tecnici. Devi trascrivere il contenuto delle immagini in testo leggibile e importabile, mantenendo i dati numerici accurati.',
+        },
+        {
+          role: 'user',
+          content: userContent,
+        },
+      ],
+    });
+
+    const text = completion.choices[0]?.message?.content?.trim() || '';
+    if (text) texts.push(text);
+  }
+
+  return texts.join('\n');
+}
+
+type SourceAnalysis = {
+  sourceName: string;
+  parsed: ReturnType<typeof parseUniversalSpreadsheetRows>;
+  score: number;
+  selected: boolean;
+  reason?: string;
+};
+
+const PRICE_HINTS = [
+  'prezzo',
+  'price',
+  'costo',
+  'cost',
+  'importo',
+  'amount',
+  'listino',
+  'eur',
+  '€',
+  'precio',
+  'prix',
+  'preis',
+  'cena',
+];
+
+const DESCRIPTION_HINTS = [
+  'descrizione',
+  'description',
+  'articolo',
+  'materiale',
+  'prodotto',
+  'voce',
+  'item',
+  'desc',
+];
+
+function normalizeCell(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function analyzeRowsForImport(rows: unknown[][], sourceName: string): SourceAnalysis {
+  const parsed = parseUniversalSpreadsheetRows(rows);
+  const probeRows = rows.slice(0, 20);
+  const probeCells = probeRows.flat().map(normalizeCell).filter(Boolean);
+  const hasPriceSignal = probeCells.some((cell) => PRICE_HINTS.some((hint) => cell.includes(hint)));
+  const hasDescriptionSignal = probeCells.some((cell) => DESCRIPTION_HINTS.some((hint) => cell.includes(hint)));
+
+  let numericCells = 0;
+  let textCells = 0;
+  for (const row of rows.slice(0, 40)) {
+    for (const cell of row) {
+      const text = String(cell ?? '').trim();
+      if (!text) continue;
+      const normalized = text.replace(/\s/g, '');
+      if (/^-?[0-9]+(?:[.,][0-9]+)?$/.test(normalized)) {
+        numericCells++;
+      } else {
+        textCells++;
+      }
+    }
+  }
+
+  const numericHeavy = numericCells > Math.max(textCells * 1.4, 10);
+  const score =
+    parsed.summary.parsedRows * 4 +
+    (hasPriceSignal ? 24 : 0) +
+    (hasDescriptionSignal ? 10 : 0) +
+    (parsed.summary.unitDetectedRows > 0 ? 6 : 0) +
+    (parsed.summary.normalizedPriceRows > 0 ? 4 : 0) -
+    (!hasPriceSignal ? 8 : 0) -
+    (numericHeavy && !hasPriceSignal ? 18 : 0) -
+    (parsed.summary.parsedRows === 0 ? 30 : 0);
+
+  const selected =
+    parsed.items.length > 0 &&
+    (hasPriceSignal || score >= 18) &&
+    !(numericHeavy && !hasPriceSignal && parsed.summary.parsedRows < 8);
+
+  let reason: string | undefined;
+  if (!parsed.items.length) {
+    reason = 'nessuna voce valida trovata';
+  } else if (numericHeavy && !hasPriceSignal && !selected) {
+    reason = 'sembra piu una scheda tecnica che un listino';
+  } else if (!hasPriceSignal && !selected) {
+    reason = 'manca un segnale prezzo affidabile';
+  }
+
+  return { sourceName, parsed, score, selected, reason };
+}
+
+function selectSpreadsheetSources(sources: SourceAnalysis[]): SourceAnalysis[] {
+  const selected = sources.filter((source) => source.selected);
+  if (selected.length > 0) {
+    return selected;
+  }
+
+  const best = [...sources]
+    .sort((a, b) => b.score - a.score)[0];
+
+  if (best && best.parsed.items.length > 0 && best.score >= 18) {
+    return [{ ...best, selected: true, reason: undefined }];
+  }
+
+  return [];
+}
+
+function getReadablePdfError(error: unknown): string {
+  const message = String((error as Error)?.message || error || '').trim();
+
+  if (!message) {
+    return 'Non sono riuscito a leggere il PDF.';
+  }
+
+  if (
+    /expected pattern/i.test(message) ||
+    /invalid pdf/i.test(message) ||
+    /parser/i.test(message)
+  ) {
+    return 'Non sono riuscito a leggere il PDF. Se e un PDF scansito o fotografico, serve OCR oppure un PDF con testo selezionabile.';
+  }
+
+  if (/password/i.test(message)) {
+    return 'Il PDF e protetto da password e non puo essere importato automaticamente.';
+  }
+
+  return `Non sono riuscito a leggere il PDF: ${message}`;
+}
+
+function buildEmptySummary(): UniversalImportResult['summary'] {
+  return {
+    totalRows: 0,
+    parsedRows: 0,
+    skippedRows: 0,
+    normalizedPriceRows: 0,
+    unitDetectedRows: 0,
+    pendingReferenceRows: 0,
+  };
+}
+
+function buildSummaryFromItems(items: UniversalParsedItem[]): UniversalImportResult['summary'] {
+  return {
+    totalRows: items.length,
+    parsedRows: items.length,
+    skippedRows: 0,
+    normalizedPriceRows: items.filter((item) => item.unit_price > 0).length,
+    unitDetectedRows: items.filter((item) => item.pricing_basis_unit).length,
+    pendingReferenceRows: items.filter((item) => item.pricing_status === 'needs_reference').length,
+  };
+}
+
+function normalizeCandidateFingerprint(value: string | null | undefined) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function scoreCandidateItem(item: UniversalParsedItem) {
+  let score = 0;
+  if (item.unit_price > 0) score += 10;
+  if (item.pricing_basis_unit) score += 4;
+  if ((item.pricing_basis_quantity || 0) > 0) score += 3;
+  if (item.inferred_rule_key) score += 2;
+  if (item.category) score += 1;
+  score += Math.min(item.description.trim().length / 40, 2);
+  return score;
+}
+
+function mergeCandidateItems(...candidateSets: UniversalParsedItem[][]): UniversalParsedItem[] {
+  const merged = new Map<string, UniversalParsedItem>();
+
+  for (const items of candidateSets) {
+    for (const item of items) {
+      const description = String(item.description || '').trim();
+      if (!description) continue;
+
+      const fingerprint = [
+        normalizeCandidateFingerprint(description),
+        normalizeCandidateFingerprint(item.pricing_basis_unit || ''),
+        Number(item.pricing_basis_quantity || 0).toFixed(6),
+      ].join('::');
+
+      const existing = merged.get(fingerprint);
+      if (!existing || scoreCandidateItem(item) > scoreCandidateItem(existing)) {
+        merged.set(fingerprint, {
+          ...item,
+          description,
+        });
+      }
+    }
+  }
+
+  return Array.from(merged.values());
+}
+
+async function summarizePdfSourceWithAi(params: {
+  fileName: string;
+  sourceText: string;
+  parsed: UniversalImportResult;
+}) {
+  const preview = params.sourceText.trim().slice(0, 12000);
+  if (!preview) {
+    if (params.parsed.items.length > 0) {
+      const pending = params.parsed.summary.pendingReferenceRows || 0;
+      return pending > 0
+        ? `PDF salvato come sorgente tecnica del listino. Ho trovato ${params.parsed.items.length} voci candidate, di cui ${pending} da completare con le regole prezzo.`
+        : `PDF salvato come sorgente del listino. Ho trovato ${params.parsed.items.length} voci candidate pronte per l import.`;
+    }
+    return 'PDF salvato come sorgente del listino. Non sono riuscito a leggere abbastanza testo utile per ricavare voci affidabili.';
+  }
+
+  if (!openai) {
+    return params.parsed.items.length
+      ? `PDF salvato come sorgente del listino. Ho trovato ${params.parsed.items.length} voci potenziali da usare con le regole prezzo.`
+      : 'PDF salvato come sorgente del listino. Imposta le regole prezzo e rilancia l AI per provare a ricavare le voci.';
+  }
+
+  const completion = await openai.chat.completions.create({
+    model: process.env.OPENAI_AGENT_MODEL || 'gpt-4o-mini',
+    temperature: 0.1,
+    messages: [
+      {
+        role: 'system',
+        content:
+          'Sei un assistente che riassume listini tecnici importati da PDF. ' +
+          'Devi dare un riscontro breve e pratico in italiano, massimo 4 frasi. ' +
+          'Spiega cosa sei riuscito a leggere, se mancano prezzi espliciti e quali regole prezzo servono per completare l import.',
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          file_name: params.fileName,
+          parsed_summary: params.parsed.summary,
+          candidate_count: params.parsed.items.length,
+          text_preview: preview,
+        }),
+      },
+    ],
+  });
+
+  return completion.choices[0]?.message?.content?.trim()
+    || 'PDF salvato come sorgente del listino. Ho preparato il contenuto per un secondo passaggio AI con le regole prezzo.';
+}
+
+async function extractPdfCandidatesWithAi(params: {
+  fileName: string;
+  sourceText: string;
+}): Promise<UniversalParsedItem[]> {
+  const preview = params.sourceText.trim().slice(0, 18000);
+  if (!preview || !openai) return [];
+
+  const completion = await openai.chat.completions.create({
+    model: process.env.OPENAI_AGENT_MODEL || 'gpt-4o-mini',
+    temperature: 0,
+    response_format: { type: 'json_object' },
+    messages: [
+      {
+        role: 'system',
+        content:
+          'Estrai da un PDF di listino tecnico un elenco di voci importabili. ' +
+          'Restituisci solo JSON nel formato {"items":[...]} con campi: ' +
+          'description, category, unit_price, pricing_basis_unit, pricing_basis_quantity, inferred_rule_key. ' +
+          'Usa unit_price solo se il prezzo e chiaramente presente. ' +
+          'Se il prezzo non c e ma esistono misure utili, compila pricing_basis_unit e pricing_basis_quantity. ' +
+          'Usa inferred_rule_key solo tra: metal_ferrous, metal_nonferrous, electric_cable, piping, paint_chemical, wood_panel, generic. ' +
+          'Le unita ammesse sono: kg, m, l, m2, pcs. Non inventare dati.',
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          file_name: params.fileName,
+          text_preview: preview,
+        }),
+      },
+    ],
+  });
+
+  const raw = completion.choices[0]?.message?.content || '{}';
+  let parsed: {
+    items?: Array<{
+      description?: string;
+      category?: string | null;
+      unit_price?: number | string | null;
+      pricing_basis_unit?: string | null;
+      pricing_basis_quantity?: number | string | null;
+      inferred_rule_key?: string | null;
+    }>;
+  } = {};
+
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+
+  return mapAiCandidateItems(parsed.items || []);
+}
+
+function mapAiCandidateItems(
+  items: Array<{
+    description?: string;
+    category?: string | null;
+    unit_price?: number | string | null;
+    pricing_basis_unit?: string | null;
+    pricing_basis_quantity?: number | string | null;
+    inferred_rule_key?: string | null;
+  }>
+): UniversalParsedItem[] {
+  const mappedItems: UniversalParsedItem[] = [];
+
+  for (const item of items) {
+    const description = String(item.description || '').trim();
+    const unitPrice = Number(item.unit_price || 0);
+    const pricingBasisQuantity = Number(item.pricing_basis_quantity || 0);
+    const pricingBasisUnit = String(item.pricing_basis_unit || '').trim() || null;
+    const inferredRuleKey = String(item.inferred_rule_key || '').trim() || null;
+    const category = String(item.category || '').trim() || null;
+
+    if (!description) continue;
+
+    mappedItems.push({
+      description,
+      unit_price: Number.isFinite(unitPrice) && unitPrice > 0 ? unitPrice : 0,
+      markup_percent: 0,
+      category,
+      pricing_source: Number.isFinite(unitPrice) && unitPrice > 0 ? 'file' : 'needs_reference',
+      pricing_status: Number.isFinite(unitPrice) && unitPrice > 0 ? 'resolved' : 'needs_reference',
+      pricing_basis_unit: pricingBasisUnit,
+      pricing_basis_quantity: Number.isFinite(pricingBasisQuantity) && pricingBasisQuantity > 0 ? pricingBasisQuantity : null,
+      inferred_rule_key: inferredRuleKey,
+    });
+  }
+
+  return mappedItems;
+}
+
+async function extractPdfCandidatesFromImagesWithAi(params: {
+  fileName: string;
+  images: Array<{ pageNumber: number; dataUrl: string }>;
+}): Promise<UniversalParsedItem[]> {
+  if (!openai || !params.images.length) return [];
+
+  const chunks = chunkArray(params.images, PDF_OCR_BATCH_SIZE);
+  const extractedCandidates: UniversalParsedItem[] = [];
+
+  for (const chunk of chunks) {
+    const userContent: Array<
+      | { type: 'text'; text: string }
+      | { type: 'image_url'; image_url: { url: string; detail: 'high' } }
+    > = [
+      {
+        type: 'text',
+        text:
+          `Queste immagini arrivano dal PDF "${params.fileName}" e mostrano un catalogo o listino tecnico.\n` +
+          'Estrai solo voci utili all import materiali, anche se il prezzo non e presente.\n' +
+          'Per ogni voce cerca di restituire:\n' +
+          '- description\n' +
+          '- category breve in italiano se evidente\n' +
+          '- unit_price solo se davvero leggibile\n' +
+          '- pricing_basis_unit e pricing_basis_quantity quando trovi misure come kg, m, l, m2 o pezzi\n' +
+          '- inferred_rule_key tra metal_ferrous, metal_nonferrous, electric_cable, piping, paint_chemical, wood_panel, generic\n' +
+          'Ignora loghi, immagini decorative, titoli generici, numeri pagina e testo non collegato a una voce materiale.\n' +
+          'Restituisci solo JSON nel formato {"items":[...]}',
+      },
+    ];
+
+    for (const image of chunk) {
+      userContent.push({ type: 'text', text: `Pagina ${image.pageNumber}` });
+      userContent.push({
+        type: 'image_url',
+        image_url: {
+          url: image.dataUrl,
+          detail: 'high',
+        },
+      });
+    }
+
+    const completion = await openai.chat.completions.create({
+      model: process.env.OPENAI_AGENT_MODEL || 'gpt-4o-mini',
+      temperature: 0,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Sei un assistente che estrae voci tecniche da cataloghi PDF. ' +
+            'Quando i prezzi non sono visibili devi comunque restituire le voci con unita e misure utili alle regole prezzo. ' +
+            'Non inventare dati e non restituire testo fuori formato JSON.',
+        },
+        {
+          role: 'user',
+          content: userContent,
+        },
+      ],
+    });
+
+    const raw = completion.choices[0]?.message?.content || '{}';
+    try {
+      const parsed = JSON.parse(raw) as {
+        items?: Array<{
+          description?: string;
+          category?: string | null;
+          unit_price?: number | string | null;
+          pricing_basis_unit?: string | null;
+          pricing_basis_quantity?: number | string | null;
+          inferred_rule_key?: string | null;
+        }>;
+      };
+      extractedCandidates.push(...mapAiCandidateItems(parsed.items || []));
+    } catch {
+      continue;
+    }
+  }
+
+  return mergeCandidateItems(extractedCandidates);
+}
+
+function inferUploadExtension(params: {
+  fileName?: string | null;
+  originalFileName?: string | null;
+  mimeType?: string | null;
+}): string | null {
+  const candidates = [params.originalFileName, params.fileName]
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean);
+
+  for (const candidate of candidates) {
+    const cleanName = candidate.split(/[?#]/, 1)[0];
+    const maybeExt = cleanName.split('.').pop();
+    if (maybeExt && /^[a-z0-9]{2,8}$/i.test(maybeExt)) {
+      return maybeExt;
+    }
+  }
+
+  const mimeType = String(params.mimeType || '').toLowerCase();
+  if (mimeType === 'application/pdf') return 'pdf';
+  if (mimeType === 'text/csv') return 'csv';
+  if (mimeType === 'text/plain') return 'txt';
+  if (mimeType === 'application/vnd.ms-excel') return 'xls';
+  if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') return 'xlsx';
+  return null;
+}
+
+export async function processListinoImport(params: ProcessListinoImportParams): Promise<ProcessListinoImportResult> {
+  const runId = params.runId || getActiveDebugRunId('upload');
+
+  const profileId = params.profileId;
+  const listinoIdParam = params.listinoId || null;
+  const listinoName = params.listinoName || null;
+  const originalFileName = params.originalFileName || null;
+  const uploadedFileName = params.uploadedFileName;
+  const uploadedFileType = params.uploadedFileType;
+  const arrayBuffer = params.arrayBuffer;
+  const sourceOnly = Boolean(params.sourceOnly);
+
+  if (!profileId || !uploadedFileName) {
+    return { ok: false, status: 400, error: 'Missing file or profileId' };
+  }
+
+  try {
+    await reportDebugEvent({
+      runId,
+      hypothesisId: 'C',
+      location: 'web/app/api/listini/upload/route.ts:processListinoImport:start',
+      msg: '[DEBUG] Import started',
+      data: {
+        fileName: uploadedFileName,
+        fileType: uploadedFileType,
+        profileId,
+        listinoId: listinoIdParam,
+        originalFileName,
+        sourceOnly,
+      },
+    });
+
+    const ext = inferUploadExtension({
+      fileName: uploadedFileName,
+      originalFileName,
+      mimeType: uploadedFileType,
+    });
+
+    await reportDebugEvent({
+      runId,
+      hypothesisId: 'C',
+      location: 'web/app/api/listini/upload/route.ts:processListinoImport:ext',
+      msg: '[DEBUG] Import decoded file bytes',
+      data: {
+        ext,
+        byteLength: arrayBuffer.byteLength,
+        fileName: uploadedFileName,
+      },
+    });
+
+    let parsed: ReturnType<typeof parseUniversalSpreadsheetRows>;
+    let sourceDiagnostics: Array<Record<string, unknown>> = [];
+    let storedMetadata: { fileName: string; mimeType: string; uploadedAt: string } | null = null;
+    let aiFeedback: string | null = null;
+
+    if (ext === 'xlsx' || ext === 'xls') {
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      const analyses = workbook.SheetNames.map((sheetName) => {
+        const worksheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(worksheet, {
+          header: 1,
+          defval: '',
+          raw: false,
+          blankrows: false,
+        }) as unknown[][];
+        return analyzeRowsForImport(rows, sheetName);
+      });
+
+      const selectedSources = selectSpreadsheetSources(analyses);
+      sourceDiagnostics = analyses.map((analysis) => ({
+        sourceName: analysis.sourceName,
+        selected: selectedSources.some((selected) => selected.sourceName === analysis.sourceName),
+        parsedRows: analysis.parsed.summary.parsedRows,
+        totalRows: analysis.parsed.summary.totalRows,
+        score: analysis.score,
+        reason: analysis.reason || null,
+      }));
+
+      parsed = mergeUniversalImportResults(selectedSources.map((source) => source.parsed));
+    } else if (ext === 'pdf') {
+      await reportDebugEvent({
+        runId,
+        hypothesisId: 'D',
+        location: 'web/app/api/listini/upload/route.ts:processListinoImport:pdf-branch',
+        msg: '[DEBUG] Import entered PDF branch',
+        data: {
+          fileName: uploadedFileName,
+          fileType: uploadedFileType,
+          byteLength: arrayBuffer.byteLength,
+        },
+      });
+
+      const pdfBuffer = Buffer.from(arrayBuffer);
+      let pdfText = '';
+      let combinedPdfText = '';
+      let pdfReadError: unknown = null;
+      let pdfReadErrorMessage: string | null = null;
+      let pdfReadMethod: 'inline' | 'subprocess' | 'empty' = 'empty';
+      let ocrApplied = false;
+      let ocrFailedReason: string | null = null;
+      let ocrRenderedPages = 0;
+      let ocrTotalPages = 0;
+      let renderedPdfImages: Array<{ pageNumber: number; dataUrl: string }> = [];
+
+      try {
+        const extracted = await extractPdfTextWithFallback(pdfBuffer);
+        pdfText = extracted.text;
+        pdfReadMethod = extracted.method;
+        if (extracted.error) pdfReadErrorMessage = extracted.error;
+        await reportDebugEvent({
+          runId,
+          hypothesisId: 'D',
+          location: 'web/app/api/listini/upload/route.ts:processListinoImport:pdf-text',
+          msg: '[DEBUG] PDF text extraction completed',
+          data: {
+            textLength: pdfText.length,
+            method: pdfReadMethod,
+            preview: pdfText.slice(0, 200),
+            error: extracted.error || null,
+          },
+        });
+      } catch (pdfError) {
+        pdfReadError = pdfError;
+        pdfReadErrorMessage = (pdfError as Error)?.message || String(pdfError);
+        await reportDebugEvent({
+          runId,
+          hypothesisId: 'D',
+          location: 'web/app/api/listini/upload/route.ts:processListinoImport:pdf-text-error',
+          msg: '[DEBUG] PDF text extraction failed',
+          data: {
+            error: pdfReadErrorMessage,
+          },
+        });
+      }
+
+      parsed = parseUniversalPdfText(pdfText || '');
+
+      const shouldTryRenderedFallback =
+        parsed.items.length === 0 ||
+        (parsed.summary.parsedRows < 8 && parsed.summary.pendingReferenceRows < 3);
+
+      if (shouldTryRenderedFallback) {
+        try {
+          let rendered: Awaited<ReturnType<typeof renderPdfPages>> | null = null;
+          let renderTmpDir: string | null = null;
+          try {
+            rendered = await renderPdfPages({ buffer: pdfBuffer, maxPages: PDF_OCR_MAX_PAGES });
+          } catch (inlineRenderError) {
+            if (!isPdfParserFatalError(inlineRenderError)) {
+              throw inlineRenderError;
+            }
+            try {
+              renderTmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pdf-render-'));
+              const tmpFile = path.join(renderTmpDir, 'source.pdf');
+              await fs.writeFile(tmpFile, pdfBuffer);
+              const renderOutDir = path.join(renderTmpDir, 'pages');
+              await fs.mkdir(renderOutDir, { recursive: true });
+
+              const result = await runPdfSubprocess('render-pdf-pages.cjs', [
+                tmpFile,
+                renderOutDir,
+                String(PDF_OCR_MAX_PAGES),
+                String(PDF_OCR_SCREENSHOT_WIDTH),
+              ]);
+
+              const structuredStderr = tryParseStderrError(result.stderr);
+              if (result.ok && result.stdout) {
+                try {
+                  const parsedSub = JSON.parse(result.stdout) as {
+                    totalPages?: number;
+                    renderedPages?: number;
+                    pages?: Array<{ pageNumber: number; path: string; width?: number; height?: number }>;
+                  };
+                  if (parsedSub && Array.isArray(parsedSub.pages)) {
+                    const images: Array<{ pageNumber: number; dataUrl: string }> = [];
+                    for (const page of parsedSub.pages) {
+                      const pagePath = page?.path;
+                      if (!pagePath) continue;
+                      try {
+                        if (renderTmpDir && !path.isAbsolute(pagePath)) {
+                          void renderTmpDir;
+                        }
+                        const absPath = path.isAbsolute(pagePath) ? pagePath : path.resolve(renderOutDir, pagePath);
+                        const pageBuffer = await fs.readFile(absPath);
+                        if (pageBuffer && pageBuffer.length > 0) {
+                          images.push({
+                            pageNumber: Number(page.pageNumber || images.length + 1),
+                            dataUrl: `data:image/png;base64,${pageBuffer.toString('base64')}`,
+                          });
+                        }
+                      } catch {
+                      }
+                    }
+                    if (images.length > 0) {
+                      rendered = {
+                        totalPages: Number(parsedSub.totalPages || parsedSub.renderedPages || images.length),
+                        renderedPages: images.length,
+                        images,
+                      };
+                    }
+                  }
+                } catch (parseErr) {
+                  if (!rendered) {
+                    ocrFailedReason =
+                      structuredStderr ||
+                      (parseErr as Error)?.message ||
+                      'Rendering PDF in subprocesso non riuscito';
+                  }
+                }
+              } else if (structuredStderr && !rendered) {
+                ocrFailedReason = `Rendering PDF non riuscito: ${structuredStderr}`;
+              }
+            } catch (subprocessErr) {
+              if (!rendered) {
+                ocrFailedReason = (subprocessErr as Error)?.message || 'Rendering PDF non riuscito';
+              }
+            }
+          } finally {
+            if (renderTmpDir) {
+              void fs.rm(renderTmpDir, { recursive: true, force: true }).catch(() => {});
+            }
+          }
+
+          if (rendered) {
+            ocrRenderedPages = rendered.renderedPages;
+            ocrTotalPages = rendered.totalPages;
+            renderedPdfImages = rendered.images;
+          }
+
+          if (rendered && rendered.images.length > 0) {
+            const ocrText = await ocrPdfImages({
+              fileName: uploadedFileName,
+              images: rendered.images,
+            });
+
+            ocrApplied = true;
+            if (ocrText.trim()) {
+              combinedPdfText = [pdfText, ocrText].filter(Boolean).join('\n');
+              parsed = parseUniversalPdfText(combinedPdfText);
+            }
+          }
+        } catch (ocrError) {
+          ocrFailedReason = (ocrError as Error)?.message || 'OCR automatico non riuscito';
+        }
+      }
+
+      if (!combinedPdfText) {
+        combinedPdfText = pdfText;
+      }
+
+      if ((parsed.items.length === 0 || parsed.summary.pendingReferenceRows < 3) && combinedPdfText.trim()) {
+        const aiCandidates = await extractPdfCandidatesWithAi({
+          fileName: uploadedFileName,
+          sourceText: combinedPdfText,
+        });
+
+        if (aiCandidates.length) {
+          parsed = {
+            items: mergeCandidateItems(parsed.items, aiCandidates),
+            summary: buildSummaryFromItems(mergeCandidateItems(parsed.items, aiCandidates)),
+          };
+        }
+      }
+
+      if ((parsed.items.length === 0 || parsed.summary.pendingReferenceRows < 5) && renderedPdfImages.length > 0) {
+        const visionCandidates = await extractPdfCandidatesFromImagesWithAi({
+          fileName: uploadedFileName,
+          images: renderedPdfImages.slice(0, 6),
+        });
+
+        if (visionCandidates.length) {
+          const mergedItems = mergeCandidateItems(parsed.items, visionCandidates);
+          parsed = {
+            items: mergedItems,
+            summary: buildSummaryFromItems(mergedItems),
+          };
+        }
+      }
+
+      if (!parsed.items.length && (pdfReadError || pdfReadErrorMessage) && !ocrApplied && !ocrFailedReason) {
+        parsed = {
+          items: [],
+          summary: buildEmptySummary(),
+        };
+        sourceDiagnostics = [
+          {
+            sourceName: uploadedFileName,
+            selected: false,
+            parsedRows: 0,
+            totalRows: 0,
+            score: 0,
+            reason: getReadablePdfError(pdfReadError || pdfReadErrorMessage),
+            pdfReadMethod,
+            pdfReadErrorRaw: pdfReadErrorMessage,
+          },
+        ];
+      }
+
+      if (!sourceDiagnostics.length) {
+        const ocrHint =
+          ocrApplied && ocrRenderedPages > 0
+            ? ocrTotalPages > ocrRenderedPages
+              ? `OCR automatico usato sulle prime ${ocrRenderedPages} di ${ocrTotalPages} pagine`
+              : `OCR automatico usato su ${ocrRenderedPages} pagine`
+            : null;
+
+        const pdfHint = pdfReadMethod === 'subprocess'
+          ? 'PDF estratto tramite estrattore indipendente (backup).'
+          : pdfReadErrorMessage && parsed.items.length > 0
+            ? `PDF letto con errori interni compensati da fallback: ${getReadablePdfError(pdfReadErrorMessage).slice(0, 120)}`
+            : null;
+
+        const reasonBase =
+          parsed.summary.parsedRows > 0
+            ? [pdfHint, ocrHint].filter(Boolean).join(' ') || null
+            : ocrFailedReason
+              ? `Ho provato anche l OCR automatico, ma non e riuscito: ${ocrFailedReason}`
+              : ocrHint
+                ? `${ocrHint}, ma non ho trovato voci con prezzi riconoscibili`
+                : pdfReadErrorMessage
+                  ? `Il PDF risulta illeggibile: ${getReadablePdfError(pdfReadErrorMessage)}`
+                  : 'PDF senza testo utile o senza prezzi riconoscibili';
+
+        sourceDiagnostics = [
+          {
+            sourceName: uploadedFileName,
+            selected: true,
+            parsedRows: parsed.summary.parsedRows,
+            totalRows: parsed.summary.totalRows,
+            score: parsed.summary.parsedRows > 0 ? 100 : 0,
+            reason: reasonBase,
+            ocrApplied,
+            ocrRenderedPages,
+            ocrTotalPages,
+            aiCandidateFallback: parsed.items.length > 0 && !pdfText.trim(),
+            pdfReadMethod,
+            pdfReadErrorRaw: pdfReadErrorMessage,
+          },
+        ];
+      }
+
+      let targetListinoId = listinoIdParam;
+      if (targetListinoId) {
+        const { data: existingListino, error: existingListinoErr } = await supabase
+          .from('listini')
+          .select('id')
+          .eq('id', targetListinoId)
+          .eq('profile_id', profileId)
+          .maybeSingle();
+        if (existingListinoErr) return { ok: false, status: 500, error: existingListinoErr.message };
+        if (!existingListino) return { ok: false, status: 404, error: 'Listino non trovato' };
+      } else {
+        const { data: listino, error: listinoErr } = await supabase
+          .from('listini')
+          .insert({ profile_id: profileId, name: listinoName || `Imported ${new Date().toISOString()}` })
+          .select('id')
+          .single();
+        if (listinoErr) return { ok: false, status: 500, error: listinoErr.message };
+        targetListinoId = listino.id;
+      }
+
+      const pricingResolution = await resolveImportPricing({ profileId, parsed });
+      aiFeedback = await summarizePdfSourceWithAi({
+        fileName: uploadedFileName,
+        sourceText: combinedPdfText,
+        parsed,
+      });
+
+      const stored = await uploadListinoSource({
+        profileId,
+        listinoId: targetListinoId!,
+        fileName: originalFileName || uploadedFileName,
+        mimeType: uploadedFileType || 'application/pdf',
+        fileBuffer: pdfBuffer,
+        metadata: {
+          listinoId: targetListinoId!,
+          profileId,
+          fileName: originalFileName || uploadedFileName,
+          mimeType: uploadedFileType || 'application/pdf',
+          uploadedAt: new Date().toISOString(),
+          sourceText: combinedPdfText.slice(0, 200000),
+          sourceTextPreview: combinedPdfText.slice(0, 4000),
+          parsedSummary: parsed.summary,
+          candidateItems: parsed.items,
+          sourceDiagnostics,
+          pricingDiagnostics: pricingResolution.diagnostics,
+          aiFeedback,
+          requiresPricingRules: !pricingResolution.items.length,
+        },
+      });
+      storedMetadata = { fileName: stored.fileName, mimeType: stored.mimeType, uploadedAt: stored.uploadedAt };
+
+      if (sourceOnly || !pricingResolution.items.length) {
+        return {
+          ok: true,
+          status: sourceOnly || pricingResolution.items.length ? 200 : 400,
+          ...(sourceOnly || pricingResolution.items.length ? {} : {
+            error: 'Ho letto il file, ma nessuna voce ha un prezzo utilizzabile. Se il file non contiene prezzi, servono regole di riferimento per categoria oppure almeno alcune righe con prezzo da cui derivarli.',
+          }),
+          inserted: 0,
+          listinoId: targetListinoId,
+          summary: pricingResolution.summary,
+          sourceDiagnostics,
+          pricingDiagnostics: pricingResolution.diagnostics,
+          sourceStored: true,
+          aiFeedback,
+          sourceInfo: storedMetadata,
+        };
+      }
+
+      const itemsToInsert = pricingResolution.items.map((row) => ({
+        listino_id: targetListinoId,
+        profile_id: profileId,
+        description: row.description.trim(),
+        unit_price: row.unit_price,
+        markup_percent: row.markup_percent,
+        category: row.category || null,
+      }));
+
+      const batchSize = 200;
+      for (let i = 0; i < itemsToInsert.length; i += batchSize) {
+        const batch = itemsToInsert.slice(i, i + batchSize);
+        const { error } = await supabase.from('listini_vettoriali').insert(batch.map((item) => ({
+          profile_id: item.profile_id,
+          description: item.description,
+          unit_price: item.unit_price,
+          markup_percent: item.markup_percent,
+          category: item.category,
+          listino_id: item.listino_id,
+          embedding: null,
+          created_at: new Date().toISOString(),
+        })));
+        if (error) return { ok: false, status: 500, error: error.message };
+      }
+
+      try {
+        await bulkGenerateEmbeddingsForListino({ listinoId: targetListinoId! });
+      } catch (e) {
+        console.warn('Failed to trigger bulk embeddings', e);
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        inserted: itemsToInsert.length,
+        listinoId: targetListinoId,
+        summary: pricingResolution.summary,
+        sourceDiagnostics,
+        pricingDiagnostics: pricingResolution.diagnostics,
+        sourceStored: true,
+        aiFeedback,
+        sourceInfo: storedMetadata,
+      };
+    } else {
+      parsed = parseUniversalCsvText(Buffer.from(arrayBuffer).toString('utf-8'));
+      sourceDiagnostics = [
+        {
+          sourceName: uploadedFileName,
+          selected: true,
+          parsedRows: parsed.summary.parsedRows,
+          totalRows: parsed.summary.totalRows,
+          score: parsed.summary.parsedRows > 0 ? 100 : 0,
+          reason: parsed.summary.parsedRows > 0 ? null : 'Nessuna voce valida trovata nel file',
+        },
+      ];
+    }
+
+    if (!parsed.items.length) {
+      return {
+        ok: false,
+        status: 400,
+        error: ext === 'pdf'
+          ? 'Nessuna voce valida trovata nel PDF. Ho provato anche il fallback OCR automatico quando disponibile, ma non ho trovato righe con prezzi o misure riconoscibili.'
+          : 'Nessuna riga valida trovata nel file. Verifica che esistano almeno una colonna descrizione e una colonna prezzo o una misura utile come peso/metri.',
+        summary: parsed.summary,
+        sourceDiagnostics,
+      };
+    }
+
+    let targetListinoId = listinoIdParam;
+    if (targetListinoId) {
+      const { data: existingListino, error: existingListinoErr } = await supabase
+        .from('listini')
+        .select('id')
+        .eq('id', targetListinoId)
+        .eq('profile_id', profileId)
+        .maybeSingle();
+      if (existingListinoErr) return { ok: false, status: 500, error: existingListinoErr.message };
+      if (!existingListino) return { ok: false, status: 404, error: 'Listino non trovato' };
+    } else {
+      const { data: listino, error: listinoErr } = await supabase
+        .from('listini')
+        .insert({ profile_id: profileId, name: listinoName || `Imported ${new Date().toISOString()}` })
+        .select('id')
+        .single();
+      if (listinoErr) return { ok: false, status: 500, error: listinoErr.message };
+      targetListinoId = listino.id;
+    }
+
+    const pricingResolution = await resolveImportPricing({ profileId, parsed });
+
+    if (!pricingResolution.items.length) {
+      return {
+        ok: false,
+        status: 400,
+        error: 'Ho letto il file, ma nessuna voce ha un prezzo utilizzabile. Se il file non contiene prezzi, servono regole di riferimento per categoria oppure almeno alcune righe con prezzo da cui derivarli.',
+        summary: pricingResolution.summary,
+        sourceDiagnostics,
+        pricingDiagnostics: pricingResolution.diagnostics,
+      };
+    }
+
+    const itemsToInsert = [] as any[];
+    for (const row of pricingResolution.items) {
+      itemsToInsert.push({
+        listino_id: targetListinoId,
+        profile_id: profileId,
+        description: row.description.trim(),
+        unit_price: row.unit_price,
+        markup_percent: row.markup_percent,
+        category: row.category || null,
+      });
+    }
+
+    const batchSize = 200;
+    for (let i = 0; i < itemsToInsert.length; i += batchSize) {
+      const batch = itemsToInsert.slice(i, i + batchSize);
+      const { error } = await supabase.from('listini_vettoriali').insert(batch.map((item) => ({
+        profile_id: item.profile_id,
+        description: item.description,
+        unit_price: item.unit_price,
+        markup_percent: item.markup_percent,
+        category: item.category,
+        listino_id: item.listino_id,
+        embedding: null,
+        created_at: new Date().toISOString(),
+      })));
+      if (error) return { ok: false, status: 500, error: error.message };
+    }
+
+    try {
+      await bulkGenerateEmbeddingsForListino({ listinoId: targetListinoId! });
+    } catch (e) {
+      console.warn('Failed to trigger bulk embeddings', e);
+    }
+
+    return {
+      ok: true,
+      status: 200,
+      inserted: itemsToInsert.length,
+      listinoId: targetListinoId,
+      summary: pricingResolution.summary,
+      sourceDiagnostics,
+      pricingDiagnostics: pricingResolution.diagnostics,
+    };
+  } catch (err: any) {
+    await reportDebugEvent({
+      runId,
+      hypothesisId: 'C',
+      location: 'web/app/api/listini/upload/route.ts:processListinoImport:catch',
+      msg: '[DEBUG] Import threw',
+      data: {
+        error: err?.message || String(err),
+        stack: err?.stack?.slice?.(0, 1000) || null,
+      },
+    });
+    console.error('Upload listini error:', err);
+    return { ok: false, status: 500, error: err.message || 'Upload failed' };
+  }
+}

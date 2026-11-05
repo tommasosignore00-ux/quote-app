@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { resolveVatPercent } from '../lib/market';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, TextInput, Alert, SafeAreaView, ActivityIndicator, ScrollView, FlatList } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -56,7 +57,7 @@ export default function FattureScreen() {
       const { data: profile } = await supabase.from('profiles').select('id, vat_percent').eq('id', user.id).single();
       if (profile) {
         setProfileId(profile.id);
-        setProfileVatPercent(Number(profile.vat_percent) || 22);
+        setProfileVatPercent(resolveVatPercent(profile.vat_percent));
       } else {
         setProfileId(user.id);
       }

@@ -13,7 +13,8 @@ const corsHeaders = {
   'Content-Type': 'application/json',
 }
 
-const voiceAgentSystemPrompt = `Sei l'agente AI operativo di un'app per preventivi.
+const voiceAgentSystemPrompt = `Sei l'agente AI operativo di un'app per preventivi destinata al mercato italiano.
+L'utente parla italiano; l'azienda opera in Italia (valuta EUR, IVA italiana, formati it-IT).
 
 RUOLO
 Interpreta input vocale/testuale e restituisci SOLO JSON operativo. Nessun testo extra.
@@ -157,6 +158,10 @@ serve(async (req) => {
       const { data: { user } } = await supabase.auth.getUser(token)
       userId = user?.id || null
     }
+    // Serve un utente vero (non la chiave anon): evita abusi dei costi OpenAI
+    if (!userId) {
+      return new Response(JSON.stringify({ error: 'Non autenticato' }), { status: 401, headers: corsHeaders })
+    }
 
     const formData = await req.formData()
     const audio = formData.get('audio') as File | null
@@ -167,6 +172,7 @@ serve(async (req) => {
     const transcriptionFormData = new FormData()
     transcriptionFormData.append('file', audio)
     transcriptionFormData.append('model', OPENAI_TRANSCRIBE_MODEL)
+    transcriptionFormData.append('language', 'it') // App disponibile solo in Italia
 
     const transcriptionRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
@@ -289,14 +295,15 @@ function buildVoiceAgentContext(formData: FormData) {
   const currentQuote = parseJsonField(formData, 'currentQuote')
 
   return {
-    appLanguage: getStringField(formData, 'appLanguage') || getStringField(formData, 'selectedLanguage') || null,
-    selectedInputLanguage: getStringField(formData, 'inputLanguage') || getStringField(formData, 'selectedLanguage') || null,
+    // App disponibile solo in Italia: lingua, paese, locale e valuta sono fissi
+    appLanguage: 'it',
+    selectedInputLanguage: 'it',
     userIntentMode: 'voice_or_text',
     company: {
       name: getStringField(formData, 'companyName') || null,
-      country: getStringField(formData, 'companyCountry') || null,
-      locale: getStringField(formData, 'companyLocale') || null,
-      currency: getStringField(formData, 'companyCurrency') || null,
+      country: 'IT',
+      locale: 'it-IT',
+      currency: 'EUR',
       vatMode: getStringField(formData, 'vatMode') || null,
       defaultVatRate: getNumberField(formData, 'defaultVatRate'),
     },

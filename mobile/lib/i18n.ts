@@ -1,7 +1,7 @@
 import 'intl-pluralrules';
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import * as Localization from 'expo-localization';
+import { ACTIVE_LANGUAGE_CODES, DEFAULT_LANGUAGE } from './market';
 
 const resources = {
   it: { translation: require('../locales/it.json') },
@@ -29,9 +29,11 @@ const resources = {
 
 i18n.use(initReactI18next).init({
   resources,
-  lng: Localization.getLocales()[0]?.languageCode || 'en',
-  fallbackLng: 'en',
-  supportedLngs: ['it', 'en', 'de', 'fr', 'es', 'pt', 'pl', 'nl', 'zh', 'ru', 'cs', 'hu', 'ro', 'uk', 'hr', 'sk', 'bg', 'sl', 'el', 'ja', 'ko'],
+  // App disponibile solo in Italia: interfaccia fissa in italiano,
+  // indipendentemente dalla lingua del dispositivo.
+  lng: DEFAULT_LANGUAGE,
+  fallbackLng: DEFAULT_LANGUAGE,
+  supportedLngs: [...ACTIVE_LANGUAGE_CODES],
   compatibilityJSON: 'v3',
   interpolation: { escapeValue: false },
 });

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, FlatList, Modal } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
-import i18n from '../lib/i18n';
+import { DEFAULT_COUNTRY_CODE, DEFAULT_LANGUAGE } from '../lib/market';
 import { supabase } from '../lib/supabase';
 import { Alert } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
@@ -20,8 +20,6 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [showLangModal, setShowLangModal] = useState(false);
-  const [showCountryModal, setShowCountryModal] = useState(false);
   const [ibanError, setIbanError] = useState<string | null>(null);
   const [timeSavedStats, setTimeSavedStats] = useState<string>('');
   const [fiscalConfig, setFiscalConfig] = useState(getFiscalConfig('IT'));
@@ -49,15 +47,6 @@ export default function ProfileScreen() {
   const [newWebhookUrl, setNewWebhookUrl] = useState('');
   const [newWebhookEvents, setNewWebhookEvents] = useState<string[]>(['quote_approved']);
 
-  const languages = ['it', 'en', 'de', 'fr', 'es', 'pt', 'pl', 'nl', 'zh', 'ru', 'cs', 'hu', 'ro', 'uk', 'hr', 'sk', 'bg', 'sl', 'el', 'ja', 'ko'];
-  const languageLabels: Record<string, string> = {
-    it: 'Italiano', en: 'English', de: 'Deutsch', fr: 'Français', es: 'Español', pt: 'Português', pl: 'Polski', nl: 'Nederlands', zh: '中文', ru: 'Русский', cs: 'Čeština', hu: 'Magyar', ro: 'Română', uk: 'Українська', hr: 'Hrvatski', sk: 'Slovenčina', bg: 'Български', sl: 'Slovenščina', el: 'Ελληνικά', ja: '日本語', ko: '한국어'
-  };
-  const countries = ['IT', 'DE', 'FR', 'ES', 'GB', 'US', 'AT', 'CH', 'NL', 'BE', 'PT', 'PL', 'RO', 'CZ', 'HR', 'HU', 'SK', 'SI', 'BG', 'GR', 'RU', 'UA', 'JP', 'KR', 'CN'];
-  const countryLabels: Record<string, string> = {
-    IT: '🇮🇹 Italia', DE: '🇩🇪 Germania', FR: '🇫🇷 Francia', ES: '🇪🇸 Spagna', GB: '🇬🇧 Regno Unito', US: '🇺🇸 Stati Uniti', AT: '🇦🇹 Austria', CH: '🇨🇭 Svizzera', NL: '🇳🇱 Paesi Bassi', BE: '🇧🇪 Belgio', PT: '🇵🇹 Portogallo', PL: '🇵🇱 Polonia', RO: '🇷🇴 Romania', CZ: '🇨🇿 Rep. Ceca', HR: '🇭🇷 Croazia', HU: '🇭🇺 Ungheria', SK: '🇸🇰 Slovacchia', SI: '🇸🇮 Slovenia', BG: '🇧🇬 Bulgaria', GR: '🇬🇷 Grecia', RU: '🇷🇺 Russia', UA: '🇺🇦 Ucraina', JP: '🇯🇵 Giappone', KR: '🇰🇷 Corea del Sud', CN: '🇨🇳 Cina'
-  };
-
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -65,7 +54,7 @@ export default function ProfileScreen() {
       const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       if (data) {
         setProfile(data);
-        setFiscalConfig(getFiscalConfig(data.country_code || 'IT'));
+        setFiscalConfig(getFiscalConfig(DEFAULT_COUNTRY_CODE));
         if (data.us_state) setUsState(data.us_state);
       }
 
@@ -86,7 +75,7 @@ export default function ProfileScreen() {
       if (referrals) {
         setReferralStats({
           total: referrals.length,
-          converted: referrals.filter(r => r.status === 'converted').length,
+          converted: referrals.filter((r: { status?: string }) => r.status === 'converted').length,
         });
       }
 
@@ -141,8 +130,9 @@ export default function ProfileScreen() {
         material_markup: profile.material_markup_vat_percent || 0,
         material_markup_vat_percent: profile.material_markup_vat_percent || 0,
         fiscal_code: profile.fiscal_code,
-        country_code: profile.country_code,
-        language: profile.language,
+        // App disponibile solo in Italia
+        country_code: DEFAULT_COUNTRY_CODE,
+        language: DEFAULT_LANGUAGE,
         address: profile.address,
         city: profile.city,
         postal_code: profile.postal_code,
@@ -152,9 +142,6 @@ export default function ProfileScreen() {
         us_state: usState || null,
         updated_at: new Date().toISOString(),
       }).eq('id', user.id);
-      if (profile.language) {
-        i18n.changeLanguage(profile.language);
-      }
       Alert.alert(t('messages.success'), t('messages.saved'));
     } catch (err: unknown) {
       Alert.alert(t('messages.error'), (err as Error).message);
@@ -385,37 +372,10 @@ export default function ProfileScreen() {
       <Text style={[styles.label, { color: colors.text }]}>{t('profile.fiscalCode')}</Text>
       <TextInput style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} placeholder={t('profile.fiscalCode')} value={profile.fiscal_code || ''} onChangeText={(v) => setProfile({ ...profile, fiscal_code: v })} placeholderTextColor={colors.textTertiary} />
       <Text style={[styles.label, { color: colors.text }]}>{t('profile.country')}</Text>
-      <TouchableOpacity style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border }]} onPress={() => setShowCountryModal(true)}>
-        <Text style={{ color: colors.text }}>{countryLabels[profile.country_code] || profile.country_code || 'Seleziona nazione'}</Text>
-      </TouchableOpacity>
-      <Modal visible={showCountryModal} transparent animationType="fade" onRequestClose={() => setShowCountryModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modal, { backgroundColor: colors.modalBg }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>{t('profile.country')}</Text>
-            <FlatList data={countries} keyExtractor={(i) => i} renderItem={({ item }) => (
-              <TouchableOpacity onPress={() => { setProfile({ ...profile, country_code: item }); setFiscalConfig(getFiscalConfig(item)); setShowCountryModal(false); }} style={[styles.langItem, { borderBottomColor: colors.border }, profile.country_code === item && styles.langItemSelected]}>
-                <Text style={[{ color: colors.text }, profile.country_code === item ? styles.langItemSelectedText : undefined]}>{countryLabels[item]}</Text>
-              </TouchableOpacity>
-            )} />
-          </View>
-        </View>
-      </Modal>
-      <Text style={[styles.label, { color: colors.text }]}>{t('profile.language')}</Text>
-      <TouchableOpacity style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border }]} onPress={() => setShowLangModal(true)}>
-        <Text style={{ color: colors.text }}>{languageLabels[profile.language] || 'Seleziona lingua'}</Text>
-      </TouchableOpacity>
-      <Modal visible={showLangModal} transparent animationType="fade" onRequestClose={() => setShowLangModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modal, { backgroundColor: colors.modalBg }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>{t('profile.language')}</Text>
-            <FlatList data={languages} keyExtractor={(i) => i} renderItem={({ item }) => (
-              <TouchableOpacity onPress={() => { setProfile({ ...profile, language: item }); setShowLangModal(false); }} style={[styles.langItem, { borderBottomColor: colors.border }, profile.language === item && styles.langItemSelected]}>
-                <Text style={[{ color: colors.text }, profile.language === item ? styles.langItemSelectedText : undefined]}>{languageLabels[item]}</Text>
-              </TouchableOpacity>
-            )} />
-          </View>
-        </View>
-      </Modal>
+      <View style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, opacity: 0.8 }]}>
+        <Text style={{ color: colors.text }}>🇮🇹 Italia</Text>
+      </View>
+      <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: -6, marginBottom: 12 }}>Al momento il servizio è disponibile solo in Italia.</Text>
       <Text style={styles.label}>{t('profile.iban')}</Text>
       <TextInput style={[styles.input, ibanError ? styles.inputError : null]} placeholder={t('profile.iban')} value={profile.iban || ''} onChangeText={(v) => { setProfile({ ...profile, iban: v.toUpperCase().replace(/\s/g, '') }); setIbanError(null); }} onBlur={() => { if (profile.iban) { const r = validateIBAN(profile.iban); if (!r.valid) setIbanError(r.error || 'IBAN non valido'); else { setIbanError(null); setProfile({ ...profile, iban: formatIBAN(profile.iban) }); } } }} autoCapitalize="characters" placeholderTextColor="#94a3b8" />
       {ibanError && <Text style={styles.errorText}>⚠️ {ibanError}</Text>}
@@ -482,7 +442,7 @@ export default function ProfileScreen() {
       </View>
 
       {/* Punto 25: US State Picker (only shown for US country) */}
-      {(profile.country_code || '').toUpperCase() === 'US' && (
+      {DEFAULT_COUNTRY_CODE !== 'IT' && (profile.country_code || '').toUpperCase() === 'US' && (
         <View style={styles.sectionBox}>
           <Text style={[styles.sectionTitle, { color: '#1e40af' }]}>🇺🇸 US Sales Tax State</Text>
           <TouchableOpacity style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border }]} onPress={() => setShowUsStatePicker(!showUsStatePicker)}>

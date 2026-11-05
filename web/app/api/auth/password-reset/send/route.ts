@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { rateLimitAuth } from '../../../../../lib/rate-limit';
 import { supabaseAdmin } from '../../../../../lib/supabase-server';
 import { createHash, randomBytes } from 'crypto';
 import { NextResponse } from 'next/server';
@@ -54,6 +54,12 @@ async function sendResetEmail(email: string, resetUrl: string): Promise<void> {
 
 export async function POST(req: Request) {
   try {
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || 'unknown';
+    const rl = rateLimitAuth(`password-reset:${ip}`);
+    if (!rl.success) {
+      return NextResponse.json({ error: 'Troppe richieste. Riprova tra poco.' }, { status: 429, headers: rl.headers });
+    }
+
     const body = await req.json();
     const { email } = body;
 
@@ -63,18 +69,24 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+    const normalizedEmail = email.trim().toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`);
 
     // Find user by email
-    const { data: userData, error: userError } = await supabase.auth.admin.listUsers();
+    // listUsers() restituisce solo la prima pagina (50 utenti): cerchiamo nel profilo
+    const { data: profileRow, error: userError } = await supabase
+      .from('profiles')
+      .select('id, email')
+      .ilike('email', normalizedEmail)
+      .maybeSingle();
     if (userError) {
-      console.error('Failed to list users:', userError);
+      console.error('Failed to look up user:', userError);
       return NextResponse.json(
         { error: 'Failed to process request' },
         { status: 500 }
       );
     }
 
-    const user = userData.users.find((u) => u.email === email);
+    const user = profileRow ? { id: profileRow.id as string } : null;
     if (!user) {
       // Don't reveal if email exists (security)
       return NextResponse.json(

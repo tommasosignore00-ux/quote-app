@@ -1,12 +1,26 @@
 import { z } from 'zod';
+import { ACTIVE_COUNTRY_CODES, ACTIVE_LANGUAGE_CODES } from './constants';
 
 // ── Auth Schemas ──────────────────────────────────────────
+
+// App disponibile solo in Italia: accetta solo IT / it
+const activeCountrySchema = z
+  .string()
+  .length(2)
+  .transform((v) => v.toUpperCase())
+  .refine((v) => ACTIVE_COUNTRY_CODES.includes(v), 'Il servizio è disponibile solo in Italia');
+const activeLanguageSchema = z
+  .string()
+  .min(2)
+  .max(5)
+  .transform((v) => v.toLowerCase().split('-')[0])
+  .refine((v) => ACTIVE_LANGUAGE_CODES.includes(v), 'Lingua non supportata: è disponibile solo l\'italiano');
 
 export const registerSchema = z.object({
   email: z.string().email('Email non valida'),
   password: z.string().min(8, 'La password deve avere almeno 8 caratteri'),
-  country_code: z.string().length(2).optional().nullable(),
-  language: z.string().min(2).max(5).optional().nullable(),
+  country_code: activeCountrySchema.optional().nullable(),
+  language: activeLanguageSchema.optional().nullable(),
   legalAccepted: z.array(z.object({
     id: z.string().uuid(),
     version: z.string(),
@@ -88,8 +102,8 @@ export const updateProfileSchema = z.object({
   company_name: z.string().max(255).optional().nullable(),
   vat_number: z.string().max(50).optional().nullable(),
   fiscal_code: z.string().max(50).optional().nullable(),
-  country_code: z.string().length(2).optional().nullable(),
-  language: z.string().min(2).max(5).optional().nullable(),
+  country_code: activeCountrySchema.optional().nullable(),
+  language: activeLanguageSchema.optional().nullable(),
   address: z.string().optional().nullable(),
   city: z.string().max(100).optional().nullable(),
   postal_code: z.string().max(20).optional().nullable(),

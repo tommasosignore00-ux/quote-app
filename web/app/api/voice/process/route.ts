@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getRequestUser, unauthorizedResponse } from '../../../../lib/apiAuth';
 import OpenAI from 'openai';
 import { rateLimitVoice } from '../../../../lib/rate-limit';
 import { runVoiceAgent } from '../../../../lib/voice-agent/orchestrator';
@@ -14,8 +15,9 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function POST(req: Request) {
   try {
-    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-    const rl = rateLimitVoice(ip);
+    const user = await getRequestUser(req);
+    if (!user) return unauthorizedResponse();
+    const rl = rateLimitVoice(user.id);
     if (!rl.success) {
       return NextResponse.json(
         { error: 'Troppe richieste vocali. Riprova tra poco.' },
@@ -30,6 +32,7 @@ export async function POST(req: Request) {
     const transcription = await openai.audio.transcriptions.create({
       file: audio,
       model: process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1',
+      language: 'it', // App disponibile solo in Italia
     });
 
     const text = transcription.text?.trim() || '';
@@ -88,14 +91,15 @@ function buildVoiceAgentContext(formData: FormData): VoiceAgentRuntimeContext {
   const currentQuote = parseJsonField<VoiceAgentQuoteRef>(formData, 'currentQuote');
 
   return {
-    appLanguage: getStringField(formData, 'appLanguage') || getStringField(formData, 'selectedLanguage') || null,
-    selectedInputLanguage: getStringField(formData, 'inputLanguage') || getStringField(formData, 'selectedLanguage') || null,
+    // App disponibile solo in Italia: lingua, paese, locale e valuta sono fissi
+    appLanguage: 'it',
+    selectedInputLanguage: 'it',
     userIntentMode: 'voice_or_text',
     company: {
       name: getStringField(formData, 'companyName') || null,
-      country: getStringField(formData, 'companyCountry') || null,
-      locale: getStringField(formData, 'companyLocale') || null,
-      currency: getStringField(formData, 'companyCurrency') || null,
+      country: 'IT',
+      locale: 'it-IT',
+      currency: 'EUR',
       vatMode: getStringField(formData, 'vatMode') || null,
       defaultVatRate: getNumberField(formData, 'defaultVatRate'),
     },

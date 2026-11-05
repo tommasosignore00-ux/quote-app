@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getRequestUser, unauthorizedResponse, forbiddenResponse, isOwnProfile } from '../../../../lib/apiAuth';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import {
   buildListinoSourcePaths,
@@ -10,13 +11,16 @@ const supabase = supabaseAdmin;
 
 export async function POST(req: Request) {
   try {
+    const user = await getRequestUser(req);
+    if (!user) return unauthorizedResponse();
     const payload = await req.json() as {
       profileId?: string | null;
       listinoId?: string | null;
       fileName?: string | null;
     };
 
-    const profileId = payload.profileId?.trim();
+    if (!isOwnProfile(user, payload.profileId?.trim())) return forbiddenResponse();
+    const profileId = user.id;
     const listinoId = payload.listinoId?.trim();
     const fileName = payload.fileName?.trim();
 

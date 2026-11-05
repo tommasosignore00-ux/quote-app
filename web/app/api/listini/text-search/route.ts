@@ -1,13 +1,19 @@
 import { NextResponse } from 'next/server';
+import { getRequestUser, unauthorizedResponse, forbiddenResponse, isOwnProfile } from '../../../../lib/apiAuth';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 
 export async function POST(req: Request) {
   try {
-    const { query, profileId } = await req.json();
-    if (!query || !profileId) return NextResponse.json({ error: 'Missing params' }, { status: 400 });
+    const user = await getRequestUser(req);
+    if (!user) return unauthorizedResponse();
+    const { query, profileId: claimedProfileId } = await req.json();
+    if (!isOwnProfile(user, claimedProfileId)) return forbiddenResponse();
+    const profileId = user.id;
+    if (!query) return NextResponse.json({ error: 'Missing params' }, { status: 400 });
 
     // Simple text search using PostgreSQL ILIKE
-    const searchTerm = `%${query.toLowerCase()}%`;
+    // Escape dei caratteri jolly di ILIKE per evitare match indesiderati
+    const searchTerm = `%${String(query).toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     
     const { data: items, error } = await supabaseAdmin
       .from('listini_vettoriali')

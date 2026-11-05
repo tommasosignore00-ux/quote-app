@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getRequestUser, unauthorizedResponse, forbiddenResponse, isOwnProfile } from '@/lib/apiAuth';
 import Stripe from 'stripe';
 import { supabaseAdmin } from '@/lib/supabase-server';
 
@@ -7,7 +8,12 @@ const supabase = supabaseAdmin;
 
 export async function POST(req: Request) {
   try {
-    const { userId, email, plan } = await req.json();
+    const user = await getRequestUser(req);
+    if (!user) return unauthorizedResponse();
+    const { userId: claimedUserId, plan } = await req.json();
+    if (!isOwnProfile(user, claimedUserId)) return forbiddenResponse();
+    const userId = user.id;
+    const email = user.email;
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
     const priceId = plan === 'team'
       ? process.env.STRIPE_PRICE_TEAM

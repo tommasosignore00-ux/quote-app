@@ -17,7 +17,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../lib/darkMode';
-import { buildWebApiUrl, isWebApiConfigured } from '../lib/webApi';
+import { buildWebApiUrl, getWebApiAuthHeaders, isWebApiConfigured } from '../lib/webApi';
 
 type Listino = { id: string; name: string };
 type ListinoSourceInfo = {
@@ -323,7 +323,8 @@ export default function ListiniScreen() {
 
     try {
       const res = await fetch(
-        buildWebApiUrl(`/api/listini/source?listinoId=${encodeURIComponent(listinoId)}&profileId=${encodeURIComponent(nextProfileId)}`)
+        buildWebApiUrl(`/api/listini/source?listinoId=${encodeURIComponent(listinoId)}&profileId=${encodeURIComponent(nextProfileId)}`),
+        { headers: await getWebApiAuthHeaders() }
       );
       const payload = await res.json();
       if (!res.ok) throw new Error(payload?.error || 'Lettura sorgente non riuscita');
@@ -497,7 +498,7 @@ export default function ListiniScreen() {
           try {
             const res = await fetch(buildWebApiUrl('/api/listini/embed'), {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: await getWebApiAuthHeaders({ 'Content-Type': 'application/json' }),
               body: JSON.stringify({ description: payload.description }),
             });
             const data = await res.json();
@@ -560,7 +561,7 @@ export default function ListiniScreen() {
     try {
       const res = await fetch(buildWebApiUrl('/api/listini/ai-organize'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getWebApiAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ listinoId, profileId }),
       });
 
@@ -653,7 +654,7 @@ export default function ListiniScreen() {
         const fileBase64 = await readFileBase64(asset.uri);
         const response = await fetch(buildWebApiUrl('/api/listini/upload'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await getWebApiAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             fileBase64,
             fileName,
@@ -669,6 +670,7 @@ export default function ListiniScreen() {
         const response = await FileSystem.uploadAsync(buildWebApiUrl('/api/listini/upload'), asset.uri, {
           fieldName: 'file',
           httpMethod: 'POST',
+          headers: await getWebApiAuthHeaders(),
           mimeType,
           parameters: {
             profileId,

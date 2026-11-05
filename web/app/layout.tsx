@@ -5,8 +5,8 @@ import './globals.css';
 import { Toaster } from 'react-hot-toast';
 import { I18nextProvider } from 'react-i18next';
 import i18n from '@/lib/i18n';
-import { supabase } from '@/lib/supabase';
-import { setLanguage, getStoredLanguage } from '@/lib/language';
+import { setLanguage } from '@/lib/language';
+import { DEFAULT_LANGUAGE } from '@/lib/constants';
 import { PostHogProvider } from '@/lib/analytics';
 import WebVitals from '@/components/WebVitals';
 
@@ -16,27 +16,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   useEffect(() => {
-    const restoreLanguage = async () => {
-      // 1. Try localStorage first
-      const saved = getStoredLanguage();
-      if (saved && saved !== 'en') {
-        await setLanguage(saved);
-        return;
-      }
-      // 2. Fallback: load from user profile in DB
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data: profile } = await supabase.from('profiles').select('language').eq('id', user.id).single();
-          if (profile?.language && profile.language !== 'en') {
-            await setLanguage(profile.language);
-          }
-        }
-      } catch (err) {
-        console.error('[Layout] Error loading profile language:', err);
-      }
-    };
-    restoreLanguage();
+    // App disponibile solo in Italia: interfaccia sempre in italiano.
+    setLanguage(DEFAULT_LANGUAGE);
   }, []);
 
   return (

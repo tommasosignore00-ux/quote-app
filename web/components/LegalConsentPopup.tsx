@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { normalizeCountryCode } from '@/lib/constants';
 import toast from 'react-hot-toast';
 
 const LEGAL_DOCUMENT_TYPES = ['privacy_policy', 'terms_of_service'] as const;
@@ -28,7 +29,7 @@ export default function LegalConsentPopup() {
         .eq('id', user.id)
         .single();
 
-      const countryCode = profile?.country_code || 'IT';
+      const countryCode = normalizeCountryCode(profile?.country_code);
 
       const latestDocs = await Promise.all(
         LEGAL_DOCUMENT_TYPES.map(async (type) => {

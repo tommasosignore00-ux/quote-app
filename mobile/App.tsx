@@ -34,12 +34,12 @@ function AppNavigator() {
     const handleWatchAction = (message: any, reply?: (payload: any) => void) => {
       if (message?.action === 'start_recording') {
         if (navigationRef.isReady()) {
-          navigationRef.navigate('Dashboard' as never, { startVoice: true } as never);
+          (navigationRef as any).navigate('Dashboard', { startVoice: true });
         }
         if (typeof reply === 'function') {
           reply({ recording: true });
-        } else if (typeof watchEvents.sendMessage === 'function') {
-          watchEvents.sendMessage({ recording: true });
+        } else if (typeof (watchEvents as any).sendMessage === 'function') {
+          (watchEvents as any).sendMessage({ recording: true });
         }
       }
 
@@ -47,13 +47,13 @@ function AppNavigator() {
         DeviceEventEmitter.emit('stopVoiceRecording');
         if (typeof reply === 'function') {
           reply({ recording: false });
-        } else if (typeof watchEvents.sendMessage === 'function') {
-          watchEvents.sendMessage({ recording: false });
+        } else if (typeof (watchEvents as any).sendMessage === 'function') {
+          (watchEvents as any).sendMessage({ recording: false });
         }
       }
     };
 
-    const unsubscribeMessage = watchEvents.on('message', (message: any, reply?: (payload: any) => void) => {
+    const unsubscribeMessage = (watchEvents as any).on('message', (message: any, reply?: (payload: any) => void) => {
       handleWatchAction(message, reply);
     });
 

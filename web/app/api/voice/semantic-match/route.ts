@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getRequestUser, unauthorizedResponse, forbiddenResponse, isOwnProfile } from '../../../../lib/apiAuth';
 import OpenAI from 'openai';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 
@@ -7,8 +8,12 @@ const supabase = supabaseAdmin;
 
 export async function POST(req: Request) {
   try {
-    const { query, profileId } = await req.json();
-    if (!query || !profileId) return NextResponse.json({ error: 'Missing params' }, { status: 400 });
+    const user = await getRequestUser(req);
+    if (!user) return unauthorizedResponse();
+    const { query, profileId: claimedProfileId } = await req.json();
+    if (!isOwnProfile(user, claimedProfileId)) return forbiddenResponse();
+    const profileId = user.id;
+    if (!query) return NextResponse.json({ error: 'Missing params' }, { status: 400 });
 
     const embeddingRes = await openai.embeddings.create({
       model: 'text-embedding-3-small',

@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveVatPercent } from '@/lib/constants';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
@@ -25,7 +26,7 @@ function toCSV(items: ExportItem[], meta: Record<string, any>): string {
     csv += `"${item.descrizione}"${sep}${item.quantita}${sep}${item.prezzo_unitario.toFixed(2)}${sep}${item.totale.toFixed(2)}\n`;
   }
   const subtotal = items.reduce((s, i) => s + i.totale, 0);
-  const vatRate = meta.vat_percent || 22;
+  const vatRate = resolveVatPercent(meta.vat_percent);
   const vat = subtotal * vatRate / 100;
   csv += `\n${sep}${sep}Subtotale${sep}${subtotal.toFixed(2)}\n`;
   csv += `${sep}${sep}IVA ${vatRate}%${sep}${vat.toFixed(2)}\n`;
@@ -42,7 +43,7 @@ function toXML(items: ExportItem[], meta: Record<string, any>): string {
   }
   xml += `  </voci>\n`;
   const subtotal = items.reduce((s, i) => s + i.totale, 0);
-  const vatRate = meta.vat_percent || 22;
+  const vatRate = resolveVatPercent(meta.vat_percent);
   const vat = subtotal * vatRate / 100;
   xml += `  <totali>\n    <subtotale>${subtotal.toFixed(2)}</subtotale>\n    <iva_percentuale>${vatRate}</iva_percentuale>\n    <iva>${vat.toFixed(2)}</iva>\n    <totale>${(subtotal + vat).toFixed(2)}</totale>\n  </totali>\n`;
   xml += `</preventivo>`;
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
       case 'json':
       default: {
         const subtotal = items.reduce((s: number, i: ExportItem) => s + i.totale, 0);
-        const vatRate = meta?.vat_percent || 22;
+        const vatRate = resolveVatPercent(meta?.vat_percent);
         const vat = subtotal * vatRate / 100;
         const jsonExport = {
           preventivo: {

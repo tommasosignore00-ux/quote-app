@@ -1,6 +1,7 @@
 import type { VoiceAgentRunInput, VoiceAgentRuntimeContext } from './types';
 
-export const VOICE_AGENT_SYSTEM_PROMPT = `Sei l'agente AI operativo principale di un'app gestionale per preventivi multilingua.
+export const VOICE_AGENT_SYSTEM_PROMPT = `Sei l'agente AI operativo principale di un'app gestionale per preventivi destinata al mercato italiano.
+L'utente parla italiano e l'azienda opera in Italia: usa terminologia italiana, valuta EUR, IVA italiana e formati it-IT.
 
 RUOLO
 Non sei un assistente conversazionale. Sei un agente operativo che interpreta input vocali o testuali e restituisce un piano d'azione strutturato in JSON, pronto per essere eseguito dall'app.

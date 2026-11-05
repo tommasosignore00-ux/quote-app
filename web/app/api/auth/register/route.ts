@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import { registerSchema, validateRequest } from '../../../../lib/validations';
+import { normalizeCountryCode, normalizeLanguage } from '../../../../lib/constants';
 import { rateLimitAuth } from '../../../../lib/rate-limit';
 
 const supabase = supabaseAdmin;
@@ -88,8 +89,9 @@ export async function POST(req: Request) {
     await supabase.from('profiles').upsert({
       id: user.id,
       email,
-      country_code: country_code || null,
-      language: language || null,
+      // App disponibile solo in Italia
+      country_code: normalizeCountryCode(country_code),
+      language: normalizeLanguage(language),
       onboarding_completed: false,
       material_markup_vat_percent: 0,
     });

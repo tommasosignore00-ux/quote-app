@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { getFunctionHeaders } from '../lib/supabaseFunctions';
 import { TouchableOpacity, Text, StyleSheet, Alert, View, Animated, DeviceEventEmitter } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Audio } from 'expo-av';
@@ -129,9 +130,7 @@ export default function VoiceButton({ onResult, clienti = [], context, size = 64
 
       const res = await fetch(`${supabaseUrl}/functions/v1/voice-process`, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${supabaseAnonKey}`,
-        },
+        headers: await getFunctionHeaders(),
         body: formData,
       });
       const result = await res.json();

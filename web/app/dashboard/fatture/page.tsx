@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { resolveVatPercent } from '@/lib/constants';
 import { supabase } from '@/lib/supabase';
 import { Plus, FileText, Eye, Download, Mail, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -85,7 +86,7 @@ export default function FatturePage() {
 
       if (profile) {
         setProfileId(profile.id);
-        setProfileVatPercent(Number(profile.vat_percent) || 22);
+        setProfileVatPercent(resolveVatPercent(profile.vat_percent));
       } else {
         setProfileId(user.id);
       }
