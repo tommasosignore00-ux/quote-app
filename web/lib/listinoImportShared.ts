@@ -21,12 +21,12 @@ import {
 } from './listinoPricing';
 import { LISTINO_SOURCE_BUCKET, uploadListinoSource } from './listinoSourceStorage';
 import { bulkGenerateEmbeddingsForListino } from './bulkGenerateEmbeddings';
+import { saveListinoItems } from './listinoItemsStore';
 import {
   reportDebugEvent,
   getActiveDebugRunId,
   getActiveDebugSessionId,
 } from './listinoDebugShared';
-
 
 const supabase = supabaseAdmin;
 const openai = process.env.OPENAI_API_KEY
@@ -42,6 +42,9 @@ export type ProcessListinoImportResult = {
   status: number;
   error?: string;
   inserted?: number;
+  updated?: number;
+  duplicatesSkipped?: number;
+  warning?: string;
   listinoId?: string | null;
   summary?: UniversalImportResult['summary'];
   sourceDiagnostics?: Array<Record<string, unknown>>;
@@ -90,7 +93,11 @@ function isPdfParserFatalError(error: unknown): boolean {
   );
 }
 
-function runPdfSubprocess(scriptName: 'extract-pdf-text.cjs' | 'render-pdf-pages.cjs', args: string[], inputBuffer?: Buffer): Promise<{
+function runPdfSubprocess(
+  scriptName: 'extract-pdf-text.cjs' | 'render-pdf-pages.cjs',
+  args: string[],
+  inputBuffer?: Buffer
+): Promise<{
   ok: boolean;
   stdout: string;
   stderr: string;
@@ -123,11 +130,15 @@ function runPdfSubprocess(scriptName: 'extract-pdf-text.cjs' | 'render-pdf-pages
             });
 
             child.on('error', (err) => {
-              resolveOnce({ ok: false, stdout: '', stderr: err?.message || 'spawn failed' });
+              resolveOnce({
+                ok: false,
+                stdout: '',
+                stderr: err?.message || 'spawn failed',
+              });
             });
             child.on('close', (code, signal) => {
               resolveOnce({
-                ok: (code === 0 && !signal),
+                ok: code === 0 && !signal,
                 stdout: stdout.trim(),
                 stderr: stderr.trim(),
               });
@@ -138,15 +149,27 @@ function runPdfSubprocess(scriptName: 'extract-pdf-text.cjs' | 'render-pdf-pages
               child.stdin.end(inputBuffer);
             }
           } catch (err) {
-            resolveOnce({ ok: false, stdout: '', stderr: (err as Error)?.message || String(err) });
+            resolveOnce({
+              ok: false,
+              stdout: '',
+              stderr: (err as Error)?.message || String(err),
+            });
           }
         },
         () => {
-          resolveOnce({ ok: false, stdout: '', stderr: `Script ${scriptName} non trovato` });
-        },
+          resolveOnce({
+            ok: false,
+            stdout: '',
+            stderr: `Script ${scriptName} non trovato`,
+          });
+        }
       );
     } catch (err) {
-      resolveOnce({ ok: false, stdout: '', stderr: (err as Error)?.message || String(err) });
+      resolveOnce({
+        ok: false,
+        stdout: '',
+        stderr: (err as Error)?.message || String(err),
+      });
     }
   });
 }
@@ -156,8 +179,7 @@ function tryParseStderrError(stderrRaw: string): string | null {
   try {
     const parsed = JSON.parse(stderrRaw) as { error?: string };
     if (parsed && typeof parsed.error === 'string' && parsed.error) return parsed.error;
-  } catch {
-  }
+  } catch {}
   return stderrRaw || null;
 }
 
@@ -219,7 +241,9 @@ async function extractPdfTextWithFallback(buffer: Buffer): Promise<{
       return {
         text: '',
         method: 'empty',
-        error: inlineFailureError ? (inlineFailureError as Error)?.message || 'extract failed' : undefined,
+        error: inlineFailureError
+          ? (inlineFailureError as Error)?.message || 'extract failed'
+          : undefined,
       };
     }
   }
@@ -256,7 +280,10 @@ async function renderPdfPages(params: { buffer: Buffer; maxPages?: number }) {
     const result = await parser.getScreenshot({
       imageDataUrl: false,
       imageBuffer: true,
-      first: Number.isFinite(params.maxPages) && (params.maxPages || 0) > 0 ? params.maxPages : PDF_OCR_MAX_PAGES,
+      first:
+        Number.isFinite(params.maxPages) && (params.maxPages || 0) > 0
+          ? params.maxPages
+          : PDF_OCR_MAX_PAGES,
       desiredWidth: PDF_OCR_SCREENSHOT_WIDTH,
     });
 
@@ -282,7 +309,10 @@ async function renderPdfPages(params: { buffer: Buffer; maxPages?: number }) {
 async function getPdfParseCtor() {
   if (!pdfParseCtorPromise) {
     pdfParseCtorPromise = import('pdf-parse').then((module) => {
-      const ctor = (module as any).PDFParse || (module as any).default?.PDFParse || (module as any).default;
+      const ctor =
+        (module as any).PDFParse ||
+        (module as any).default?.PDFParse ||
+        (module as any).default;
       if (!ctor) {
         throw new Error('pdf-parse non esporta PDFParse');
       }
@@ -414,8 +444,12 @@ function analyzeRowsForImport(rows: unknown[][], sourceName: string): SourceAnal
   const parsed = parseUniversalSpreadsheetRows(rows);
   const probeRows = rows.slice(0, 20);
   const probeCells = probeRows.flat().map(normalizeCell).filter(Boolean);
-  const hasPriceSignal = probeCells.some((cell) => PRICE_HINTS.some((hint) => cell.includes(hint)));
-  const hasDescriptionSignal = probeCells.some((cell) => DESCRIPTION_HINTS.some((hint) => cell.includes(hint)));
+  const hasPriceSignal = probeCells.some((cell) =>
+    PRICE_HINTS.some((hint) => cell.includes(hint))
+  );
+  const hasDescriptionSignal = probeCells.some((cell) =>
+    DESCRIPTION_HINTS.some((hint) => cell.includes(hint))
+  );
 
   let numericCells = 0;
   let textCells = 0;
@@ -466,8 +500,7 @@ function selectSpreadsheetSources(sources: SourceAnalysis[]): SourceAnalysis[] {
     return selected;
   }
 
-  const best = [...sources]
-    .sort((a, b) => b.score - a.score)[0];
+  const best = [...sources].sort((a, b) => b.score - a.score)[0];
 
   if (best && best.parsed.items.length > 0 && best.score >= 18) {
     return [{ ...best, selected: true, reason: undefined }];
@@ -509,14 +542,18 @@ function buildEmptySummary(): UniversalImportResult['summary'] {
   };
 }
 
-function buildSummaryFromItems(items: UniversalParsedItem[]): UniversalImportResult['summary'] {
+function buildSummaryFromItems(
+  items: UniversalParsedItem[]
+): UniversalImportResult['summary'] {
   return {
     totalRows: items.length,
     parsedRows: items.length,
     skippedRows: 0,
     normalizedPriceRows: items.filter((item) => item.unit_price > 0).length,
     unitDetectedRows: items.filter((item) => item.pricing_basis_unit).length,
-    pendingReferenceRows: items.filter((item) => item.pricing_status === 'needs_reference').length,
+    pendingReferenceRows: items.filter(
+      (item) => item.pricing_status === 'needs_reference'
+    ).length,
   };
 }
 
@@ -540,7 +577,14 @@ function scoreCandidateItem(item: UniversalParsedItem) {
   return score;
 }
 
-function mergeCandidateItems(...candidateSets: UniversalParsedItem[][]): UniversalParsedItem[] {
+function extractItemCode(description: string): string | null {
+  const match = /\(cod\.\s*([^)\s]+)\)\s*$/i.exec(description);
+  return match ? match[1].toUpperCase() : null;
+}
+
+function mergeCandidateItems(
+  ...candidateSets: UniversalParsedItem[][]
+): UniversalParsedItem[] {
   const merged = new Map<string, UniversalParsedItem>();
 
   for (const items of candidateSets) {
@@ -548,11 +592,15 @@ function mergeCandidateItems(...candidateSets: UniversalParsedItem[][]): Univers
       const description = String(item.description || '').trim();
       if (!description) continue;
 
-      const fingerprint = [
-        normalizeCandidateFingerprint(description),
-        normalizeCandidateFingerprint(item.pricing_basis_unit || ''),
-        Number(item.pricing_basis_quantity || 0).toFixed(6),
-      ].join('::');
+      // Same article code = same item, even when parser and AI word the description differently.
+      const code = extractItemCode(description);
+      const fingerprint = code
+        ? `code::${code}`
+        : [
+            normalizeCandidateFingerprint(description),
+            normalizeCandidateFingerprint(item.pricing_basis_unit || ''),
+            Number(item.pricing_basis_quantity || 0).toFixed(6),
+          ].join('::');
 
       const existing = merged.get(fingerprint);
       if (!existing || scoreCandidateItem(item) > scoreCandidateItem(existing)) {
@@ -612,8 +660,10 @@ async function summarizePdfSourceWithAi(params: {
     ],
   });
 
-  return completion.choices[0]?.message?.content?.trim()
-    || 'PDF salvato come sorgente del listino. Ho preparato il contenuto per un secondo passaggio AI con le regole prezzo.';
+  return (
+    completion.choices[0]?.message?.content?.trim() ||
+    'PDF salvato come sorgente del listino. Ho preparato il contenuto per un secondo passaggio AI con le regole prezzo.'
+  );
 }
 
 async function extractPdfCandidatesWithAi(params: {
@@ -637,7 +687,8 @@ async function extractPdfCandidatesWithAi(params: {
           'Usa unit_price solo se il prezzo e chiaramente presente. ' +
           'Se il prezzo non c e ma esistono misure utili, compila pricing_basis_unit e pricing_basis_quantity. ' +
           'Usa inferred_rule_key solo tra: metal_ferrous, metal_nonferrous, electric_cable, piping, paint_chemical, wood_panel, generic. ' +
-          'Le unita ammesse sono: kg, m, l, m2, pcs. Non inventare dati.',
+          'Le unita ammesse sono: kg, m, l, m2, pcs. Non inventare dati. ' +
+          'Se la voce ha un codice articolo, mettilo alla fine della description nel formato "(cod. CODICE)".',
       },
       {
         role: 'user',
@@ -697,10 +748,15 @@ function mapAiCandidateItems(
       unit_price: Number.isFinite(unitPrice) && unitPrice > 0 ? unitPrice : 0,
       markup_percent: 0,
       category,
-      pricing_source: Number.isFinite(unitPrice) && unitPrice > 0 ? 'file' : 'needs_reference',
-      pricing_status: Number.isFinite(unitPrice) && unitPrice > 0 ? 'resolved' : 'needs_reference',
+      pricing_source:
+        Number.isFinite(unitPrice) && unitPrice > 0 ? 'file' : 'needs_reference',
+      pricing_status:
+        Number.isFinite(unitPrice) && unitPrice > 0 ? 'resolved' : 'needs_reference',
       pricing_basis_unit: pricingBasisUnit,
-      pricing_basis_quantity: Number.isFinite(pricingBasisQuantity) && pricingBasisQuantity > 0 ? pricingBasisQuantity : null,
+      pricing_basis_quantity:
+        Number.isFinite(pricingBasisQuantity) && pricingBasisQuantity > 0
+          ? pricingBasisQuantity
+          : null,
       inferred_rule_key: inferredRuleKey,
     });
   }
@@ -728,7 +784,7 @@ async function extractPdfCandidatesFromImagesWithAi(params: {
           `Queste immagini arrivano dal PDF "${params.fileName}" e mostrano un catalogo o listino tecnico.\n` +
           'Estrai solo voci utili all import materiali, anche se il prezzo non e presente.\n' +
           'Per ogni voce cerca di restituire:\n' +
-          '- description\n' +
+          '- description, con il codice articolo alla fine nel formato "(cod. CODICE)" se presente\n' +
           '- category breve in italiano se evidente\n' +
           '- unit_price solo se davvero leggibile\n' +
           '- pricing_basis_unit e pricing_basis_quantity quando trovi misure come kg, m, l, m2 o pezzi\n' +
@@ -789,13 +845,82 @@ async function extractPdfCandidatesFromImagesWithAi(params: {
   return mergeCandidateItems(extractedCandidates);
 }
 
+// Excel cells: use the real numeric value when the cell is a number (SheetJS
+// formats "#,##0" as "1,250" which is ambiguous), but keep the formatted text
+// for strings and percentages ("30%" would otherwise become 0.3).
+function readWorksheetRows(worksheet: XLSX.WorkSheet): unknown[][] {
+  const options = { header: 1 as const, defval: '', blankrows: false };
+  const formatted = XLSX.utils.sheet_to_json(worksheet, {
+    ...options,
+    raw: false,
+  }) as unknown[][];
+  const raw = XLSX.utils.sheet_to_json(worksheet, {
+    ...options,
+    raw: true,
+  }) as unknown[][];
+
+  return formatted.map((row, rowIndex) =>
+    row.map((cell, colIndex) => {
+      const rawCell = raw[rowIndex]?.[colIndex];
+      if (typeof rawCell === 'number' && !String(cell ?? '').includes('%'))
+        {return rawCell;}
+      return cell;
+    })
+  );
+}
+
+// CSV exported by Italian Excel is often Windows-1252, not UTF-8: decoding it as
+// UTF-8 turns "Quantità" / "€" into replacement characters.
+function decodeTextFile(arrayBuffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(arrayBuffer);
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    try {
+      return new TextDecoder('windows-1252').decode(bytes);
+    } catch {
+      return Buffer.from(bytes).toString('latin1');
+    }
+  }
+}
+
+function countPricedItems(items: UniversalParsedItem[]): number {
+  return items.filter((item) => item.unit_price > 0).length;
+}
+
+// The AI fallbacks are only useful when the text parser found little or no
+// priced rows. Running them on a good parse just adds cost and invented duplicates.
+const PDF_AI_FALLBACK_MIN_PRICED_ROWS = 8;
+
+// Amounts alone on a line are table cells the text parser could not attach to an
+// item (tables extracted column by column): many of them mean items were missed.
+function countOrphanAmountLines(text: string): number {
+  return text
+    .split(/\r?\n/)
+    .filter((line) => /^-?(?:\d{1,3}(?:\.\d{3})+|\d+),\d{2}$/.test(line.trim())).length;
+}
+
+function shouldRunPdfAiFallback(
+  items: UniversalParsedItem[],
+  sourceText: string
+): boolean {
+  const priced = countPricedItems(items);
+  if (priced < PDF_AI_FALLBACK_MIN_PRICED_ROWS) return true;
+  const orphans = countOrphanAmountLines(sourceText);
+  return orphans >= 5 && orphans > priced * 0.2;
+}
+
 function inferUploadExtension(params: {
   fileName?: string | null;
   originalFileName?: string | null;
   mimeType?: string | null;
 }): string | null {
   const candidates = [params.originalFileName, params.fileName]
-    .map((value) => String(value || '').trim().toLowerCase())
+    .map((value) =>
+      String(value || '')
+        .trim()
+        .toLowerCase()
+    )
     .filter(Boolean);
 
   for (const candidate of candidates) {
@@ -811,11 +936,14 @@ function inferUploadExtension(params: {
   if (mimeType === 'text/csv') return 'csv';
   if (mimeType === 'text/plain') return 'txt';
   if (mimeType === 'application/vnd.ms-excel') return 'xls';
-  if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') return 'xlsx';
+  if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    {return 'xlsx';}
   return null;
 }
 
-export async function processListinoImport(params: ProcessListinoImportParams): Promise<ProcessListinoImportResult> {
+export async function processListinoImport(
+  params: ProcessListinoImportParams
+): Promise<ProcessListinoImportResult> {
   const runId = params.runId || getActiveDebugRunId('upload');
 
   const profileId = params.profileId;
@@ -867,33 +995,34 @@ export async function processListinoImport(params: ProcessListinoImportParams): 
 
     let parsed: ReturnType<typeof parseUniversalSpreadsheetRows>;
     let sourceDiagnostics: Array<Record<string, unknown>> = [];
-    let storedMetadata: { fileName: string; mimeType: string; uploadedAt: string } | null = null;
+    let storedMetadata: {
+      fileName: string;
+      mimeType: string;
+      uploadedAt: string;
+    } | null = null;
     let aiFeedback: string | null = null;
 
     if (ext === 'xlsx' || ext === 'xls') {
       const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-      const analyses = workbook.SheetNames.map((sheetName) => {
-        const worksheet = workbook.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(worksheet, {
-          header: 1,
-          defval: '',
-          raw: false,
-          blankrows: false,
-        }) as unknown[][];
-        return analyzeRowsForImport(rows, sheetName);
-      });
+      const analyses = workbook.SheetNames.map((sheetName) =>
+        analyzeRowsForImport(readWorksheetRows(workbook.Sheets[sheetName]), sheetName)
+      );
 
       const selectedSources = selectSpreadsheetSources(analyses);
       sourceDiagnostics = analyses.map((analysis) => ({
         sourceName: analysis.sourceName,
-        selected: selectedSources.some((selected) => selected.sourceName === analysis.sourceName),
+        selected: selectedSources.some(
+          (selected) => selected.sourceName === analysis.sourceName
+        ),
         parsedRows: analysis.parsed.summary.parsedRows,
         totalRows: analysis.parsed.summary.totalRows,
         score: analysis.score,
         reason: analysis.reason || null,
       }));
 
-      parsed = mergeUniversalImportResults(selectedSources.map((source) => source.parsed));
+      parsed = mergeUniversalImportResults(
+        selectedSources.map((source) => source.parsed)
+      );
     } else if (ext === 'pdf') {
       await reportDebugEvent({
         runId,
@@ -942,7 +1071,8 @@ export async function processListinoImport(params: ProcessListinoImportParams): 
         await reportDebugEvent({
           runId,
           hypothesisId: 'D',
-          location: 'web/app/api/listini/upload/route.ts:processListinoImport:pdf-text-error',
+          location:
+            'web/app/api/listini/upload/route.ts:processListinoImport:pdf-text-error',
           msg: '[DEBUG] PDF text extraction failed',
           data: {
             error: pdfReadErrorMessage,
@@ -961,7 +1091,10 @@ export async function processListinoImport(params: ProcessListinoImportParams): 
           let rendered: Awaited<ReturnType<typeof renderPdfPages>> | null = null;
           let renderTmpDir: string | null = null;
           try {
-            rendered = await renderPdfPages({ buffer: pdfBuffer, maxPages: PDF_OCR_MAX_PAGES });
+            rendered = await renderPdfPages({
+              buffer: pdfBuffer,
+              maxPages: PDF_OCR_MAX_PAGES,
+            });
           } catch (inlineRenderError) {
             if (!isPdfParserFatalError(inlineRenderError)) {
               throw inlineRenderError;
@@ -986,7 +1119,12 @@ export async function processListinoImport(params: ProcessListinoImportParams): 
                   const parsedSub = JSON.parse(result.stdout) as {
                     totalPages?: number;
                     renderedPages?: number;
-                    pages?: Array<{ pageNumber: number; path: string; width?: number; height?: number }>;
+                    pages?: Array<{
+                      pageNumber: number;
+                      path: string;
+                      width?: number;
+                      height?: number;
+                    }>;
                   };
                   if (parsedSub && Array.isArray(parsedSub.pages)) {
                     const images: Array<{ pageNumber: number; dataUrl: string }> = [];
@@ -997,7 +1135,9 @@ export async function processListinoImport(params: ProcessListinoImportParams): 
                         if (renderTmpDir && !path.isAbsolute(pagePath)) {
                           void renderTmpDir;
                         }
-                        const absPath = path.isAbsolute(pagePath) ? pagePath : path.resolve(renderOutDir, pagePath);
+                        const absPath = path.isAbsolute(pagePath)
+                          ? pagePath
+                          : path.resolve(renderOutDir, pagePath);
                         const pageBuffer = await fs.readFile(absPath);
                         if (pageBuffer && pageBuffer.length > 0) {
                           images.push({
@@ -1005,12 +1145,13 @@ export async function processListinoImport(params: ProcessListinoImportParams): 
                             dataUrl: `data:image/png;base64,${pageBuffer.toString('base64')}`,
                           });
                         }
-                      } catch {
-                      }
+                      } catch {}
                     }
                     if (images.length > 0) {
                       rendered = {
-                        totalPages: Number(parsedSub.totalPages || parsedSub.renderedPages || images.length),
+                        totalPages: Number(
+                          parsedSub.totalPages || parsedSub.renderedPages || images.length
+                        ),
                         renderedPages: images.length,
                         images,
                       };
@@ -1029,7 +1170,8 @@ export async function processListinoImport(params: ProcessListinoImportParams): 
               }
             } catch (subprocessErr) {
               if (!rendered) {
-                ocrFailedReason = (subprocessErr as Error)?.message || 'Rendering PDF non riuscito';
+                ocrFailedReason =
+                  (subprocessErr as Error)?.message || 'Rendering PDF non riuscito';
               }
             }
           } finally {
@@ -1065,21 +1207,23 @@ export async function processListinoImport(params: ProcessListinoImportParams): 
         combinedPdfText = pdfText;
       }
 
-      if ((parsed.items.length === 0 || parsed.summary.pendingReferenceRows < 3) && combinedPdfText.trim()) {
+      const runAiFallback = shouldRunPdfAiFallback(parsed.items, combinedPdfText);
+      if (runAiFallback && combinedPdfText.trim()) {
         const aiCandidates = await extractPdfCandidatesWithAi({
           fileName: uploadedFileName,
           sourceText: combinedPdfText,
         });
 
         if (aiCandidates.length) {
+          const mergedItems = mergeCandidateItems(parsed.items, aiCandidates);
           parsed = {
-            items: mergeCandidateItems(parsed.items, aiCandidates),
-            summary: buildSummaryFromItems(mergeCandidateItems(parsed.items, aiCandidates)),
+            items: mergedItems,
+            summary: buildSummaryFromItems(mergedItems),
           };
         }
       }
 
-      if ((parsed.items.length === 0 || parsed.summary.pendingReferenceRows < 5) && renderedPdfImages.length > 0) {
+      if (runAiFallback && renderedPdfImages.length > 0) {
         const visionCandidates = await extractPdfCandidatesFromImagesWithAi({
           fileName: uploadedFileName,
           images: renderedPdfImages.slice(0, 6),
@@ -1094,7 +1238,12 @@ export async function processListinoImport(params: ProcessListinoImportParams): 
         }
       }
 
-      if (!parsed.items.length && (pdfReadError || pdfReadErrorMessage) && !ocrApplied && !ocrFailedReason) {
+      if (
+        !parsed.items.length &&
+        (pdfReadError || pdfReadErrorMessage) &&
+        !ocrApplied &&
+        !ocrFailedReason
+      ) {
         parsed = {
           items: [],
           summary: buildEmptySummary(),
@@ -1121,11 +1270,12 @@ export async function processListinoImport(params: ProcessListinoImportParams): 
               : `OCR automatico usato su ${ocrRenderedPages} pagine`
             : null;
 
-        const pdfHint = pdfReadMethod === 'subprocess'
-          ? 'PDF estratto tramite estrattore indipendente (backup).'
-          : pdfReadErrorMessage && parsed.items.length > 0
-            ? `PDF letto con errori interni compensati da fallback: ${getReadablePdfError(pdfReadErrorMessage).slice(0, 120)}`
-            : null;
+        const pdfHint =
+          pdfReadMethod === 'subprocess'
+            ? 'PDF estratto tramite estrattore indipendente (backup).'
+            : pdfReadErrorMessage && parsed.items.length > 0
+              ? `PDF letto con errori interni compensati da fallback: ${getReadablePdfError(pdfReadErrorMessage).slice(0, 120)}`
+              : null;
 
         const reasonBase =
           parsed.summary.parsedRows > 0
@@ -1164,12 +1314,17 @@ export async function processListinoImport(params: ProcessListinoImportParams): 
           .eq('id', targetListinoId)
           .eq('profile_id', profileId)
           .maybeSingle();
-        if (existingListinoErr) return { ok: false, status: 500, error: existingListinoErr.message };
-        if (!existingListino) return { ok: false, status: 404, error: 'Listino non trovato' };
+        if (existingListinoErr)
+          {return { ok: false, status: 500, error: existingListinoErr.message };}
+        if (!existingListino)
+          {return { ok: false, status: 404, error: 'Listino non trovato' };}
       } else {
         const { data: listino, error: listinoErr } = await supabase
           .from('listini')
-          .insert({ profile_id: profileId, name: listinoName || `Imported ${new Date().toISOString()}` })
+          .insert({
+            profile_id: profileId,
+            name: listinoName || `Imported ${new Date().toISOString()}`,
+          })
           .select('id')
           .single();
         if (listinoErr) return { ok: false, status: 500, error: listinoErr.message };
@@ -1205,16 +1360,26 @@ export async function processListinoImport(params: ProcessListinoImportParams): 
           requiresPricingRules: !pricingResolution.items.length,
         },
       });
-      storedMetadata = { fileName: stored.fileName, mimeType: stored.mimeType, uploadedAt: stored.uploadedAt };
+      storedMetadata = {
+        fileName: stored.fileName,
+        mimeType: stored.mimeType,
+        uploadedAt: stored.uploadedAt,
+      };
 
       if (sourceOnly || !pricingResolution.items.length) {
+        // The PDF is stored as listino source either way: answer 200 so clients show
+        // the "PDF salvato" flow (rules to set, AI feedback) instead of a generic error.
         return {
           ok: true,
-          status: sourceOnly || pricingResolution.items.length ? 200 : 400,
-          ...(sourceOnly || pricingResolution.items.length ? {} : {
-            error: 'Ho letto il file, ma nessuna voce ha un prezzo utilizzabile. Se il file non contiene prezzi, servono regole di riferimento per categoria oppure almeno alcune righe con prezzo da cui derivarli.',
-          }),
+          status: 200,
+          ...(sourceOnly || pricingResolution.items.length
+            ? {}
+            : {
+                warning:
+                  'Ho letto il file, ma nessuna voce ha un prezzo utilizzabile. Se il file non contiene prezzi, servono regole di riferimento per categoria oppure almeno alcune righe con prezzo da cui derivarli.',
+              }),
           inserted: 0,
+          updated: 0,
           listinoId: targetListinoId,
           summary: pricingResolution.summary,
           sourceDiagnostics,
@@ -1225,30 +1390,11 @@ export async function processListinoImport(params: ProcessListinoImportParams): 
         };
       }
 
-      const itemsToInsert = pricingResolution.items.map((row) => ({
-        listino_id: targetListinoId,
-        profile_id: profileId,
-        description: row.description.trim(),
-        unit_price: row.unit_price,
-        markup_percent: row.markup_percent,
-        category: row.category || null,
-      }));
-
-      const batchSize = 200;
-      for (let i = 0; i < itemsToInsert.length; i += batchSize) {
-        const batch = itemsToInsert.slice(i, i + batchSize);
-        const { error } = await supabase.from('listini_vettoriali').insert(batch.map((item) => ({
-          profile_id: item.profile_id,
-          description: item.description,
-          unit_price: item.unit_price,
-          markup_percent: item.markup_percent,
-          category: item.category,
-          listino_id: item.listino_id,
-          embedding: null,
-          created_at: new Date().toISOString(),
-        })));
-        if (error) return { ok: false, status: 500, error: error.message };
-      }
+      const saved = await saveListinoItems({
+        listinoId: targetListinoId!,
+        profileId,
+        items: pricingResolution.items,
+      });
 
       try {
         await bulkGenerateEmbeddingsForListino({ listinoId: targetListinoId! });
@@ -1259,7 +1405,9 @@ export async function processListinoImport(params: ProcessListinoImportParams): 
       return {
         ok: true,
         status: 200,
-        inserted: itemsToInsert.length,
+        inserted: saved.inserted,
+        updated: saved.updated,
+        duplicatesSkipped: saved.duplicatesSkipped,
         listinoId: targetListinoId,
         summary: pricingResolution.summary,
         sourceDiagnostics,
@@ -1269,7 +1417,7 @@ export async function processListinoImport(params: ProcessListinoImportParams): 
         sourceInfo: storedMetadata,
       };
     } else {
-      parsed = parseUniversalCsvText(Buffer.from(arrayBuffer).toString('utf-8'));
+      parsed = parseUniversalCsvText(decodeTextFile(arrayBuffer));
       sourceDiagnostics = [
         {
           sourceName: uploadedFileName,
@@ -1277,7 +1425,8 @@ export async function processListinoImport(params: ProcessListinoImportParams): 
           parsedRows: parsed.summary.parsedRows,
           totalRows: parsed.summary.totalRows,
           score: parsed.summary.parsedRows > 0 ? 100 : 0,
-          reason: parsed.summary.parsedRows > 0 ? null : 'Nessuna voce valida trovata nel file',
+          reason:
+            parsed.summary.parsedRows > 0 ? null : 'Nessuna voce valida trovata nel file',
         },
       ];
     }
@@ -1286,11 +1435,27 @@ export async function processListinoImport(params: ProcessListinoImportParams): 
       return {
         ok: false,
         status: 400,
-        error: ext === 'pdf'
-          ? 'Nessuna voce valida trovata nel PDF. Ho provato anche il fallback OCR automatico quando disponibile, ma non ho trovato righe con prezzi o misure riconoscibili.'
-          : 'Nessuna riga valida trovata nel file. Verifica che esistano almeno una colonna descrizione e una colonna prezzo o una misura utile come peso/metri.',
+        error:
+          ext === 'pdf'
+            ? 'Nessuna voce valida trovata nel PDF. Ho provato anche il fallback OCR automatico quando disponibile, ma non ho trovato righe con prezzi o misure riconoscibili.'
+            : 'Nessuna riga valida trovata nel file. Verifica che esistano almeno una colonna descrizione e una colonna prezzo o una misura utile come peso/metri.',
         summary: parsed.summary,
         sourceDiagnostics,
+      };
+    }
+
+    // Resolve prices before creating the listino, so a failed import does not leave an empty one behind.
+    const pricingResolution = await resolveImportPricing({ profileId, parsed });
+
+    if (!pricingResolution.items.length) {
+      return {
+        ok: false,
+        status: 400,
+        error:
+          'Ho letto il file, ma nessuna voce ha un prezzo utilizzabile. Se il file non contiene prezzi, servono regole di riferimento per categoria oppure almeno alcune righe con prezzo da cui derivarli.',
+        summary: pricingResolution.summary,
+        sourceDiagnostics,
+        pricingDiagnostics: pricingResolution.diagnostics,
       };
     }
 
@@ -1302,58 +1467,28 @@ export async function processListinoImport(params: ProcessListinoImportParams): 
         .eq('id', targetListinoId)
         .eq('profile_id', profileId)
         .maybeSingle();
-      if (existingListinoErr) return { ok: false, status: 500, error: existingListinoErr.message };
-      if (!existingListino) return { ok: false, status: 404, error: 'Listino non trovato' };
+      if (existingListinoErr)
+        {return { ok: false, status: 500, error: existingListinoErr.message };}
+      if (!existingListino)
+        {return { ok: false, status: 404, error: 'Listino non trovato' };}
     } else {
       const { data: listino, error: listinoErr } = await supabase
         .from('listini')
-        .insert({ profile_id: profileId, name: listinoName || `Imported ${new Date().toISOString()}` })
+        .insert({
+          profile_id: profileId,
+          name: listinoName || `Imported ${new Date().toISOString()}`,
+        })
         .select('id')
         .single();
       if (listinoErr) return { ok: false, status: 500, error: listinoErr.message };
       targetListinoId = listino.id;
     }
 
-    const pricingResolution = await resolveImportPricing({ profileId, parsed });
-
-    if (!pricingResolution.items.length) {
-      return {
-        ok: false,
-        status: 400,
-        error: 'Ho letto il file, ma nessuna voce ha un prezzo utilizzabile. Se il file non contiene prezzi, servono regole di riferimento per categoria oppure almeno alcune righe con prezzo da cui derivarli.',
-        summary: pricingResolution.summary,
-        sourceDiagnostics,
-        pricingDiagnostics: pricingResolution.diagnostics,
-      };
-    }
-
-    const itemsToInsert = [] as any[];
-    for (const row of pricingResolution.items) {
-      itemsToInsert.push({
-        listino_id: targetListinoId,
-        profile_id: profileId,
-        description: row.description.trim(),
-        unit_price: row.unit_price,
-        markup_percent: row.markup_percent,
-        category: row.category || null,
-      });
-    }
-
-    const batchSize = 200;
-    for (let i = 0; i < itemsToInsert.length; i += batchSize) {
-      const batch = itemsToInsert.slice(i, i + batchSize);
-      const { error } = await supabase.from('listini_vettoriali').insert(batch.map((item) => ({
-        profile_id: item.profile_id,
-        description: item.description,
-        unit_price: item.unit_price,
-        markup_percent: item.markup_percent,
-        category: item.category,
-        listino_id: item.listino_id,
-        embedding: null,
-        created_at: new Date().toISOString(),
-      })));
-      if (error) return { ok: false, status: 500, error: error.message };
-    }
+    const saved = await saveListinoItems({
+      listinoId: targetListinoId!,
+      profileId,
+      items: pricingResolution.items,
+    });
 
     try {
       await bulkGenerateEmbeddingsForListino({ listinoId: targetListinoId! });
@@ -1364,7 +1499,9 @@ export async function processListinoImport(params: ProcessListinoImportParams): 
     return {
       ok: true,
       status: 200,
-      inserted: itemsToInsert.length,
+      inserted: saved.inserted,
+      updated: saved.updated,
+      duplicatesSkipped: saved.duplicatesSkipped,
       listinoId: targetListinoId,
       summary: pricingResolution.summary,
       sourceDiagnostics,

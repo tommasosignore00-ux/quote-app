@@ -1,0 +1,181 @@
+import { supabaseAdmin } from './supabase-server';
+
+const supabase = supabaseAdmin;
+
+const PAGE_SIZE = 1000;
+const WRITE_BATCH_SIZE = 200;
+// listini_vettoriali.category is VARCHAR(100): longer values make the whole insert fail.
+const CATEGORY_MAX_LENGTH = 100;
+const PRICE_DECIMALS = 4;
+
+export type ListinoItemInput = {
+  description: string;
+  unit_price: number;
+  markup_percent?: number | null;
+  category?: string | null;
+};
+
+export type ExistingListinoRow = {
+  id: string;
+  description: string;
+  category: string | null;
+};
+
+export type SaveListinoItemsResult = {
+  inserted: number;
+  updated: number;
+  duplicatesSkipped: number;
+};
+
+export function normalizeListinoDescriptionKey(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function cleanCategory(value: unknown): string | null {
+  const text = String(value ?? '')
+    .trim()
+    .replace(/\s+/g, ' ');
+  return text ? text.slice(0, CATEGORY_MAX_LENGTH) : null;
+}
+
+function roundPrice(value: number): number {
+  const factor = 10 ** PRICE_DECIMALS;
+  return Math.round((Number(value) || 0) * factor) / factor;
+}
+
+/** Reads every row of a listino, paging past PostgREST's default 1000-row cap. */
+export async function fetchAllListinoRows(params: {
+  listinoId: string;
+  profileId: string;
+}): Promise<ExistingListinoRow[]> {
+  const rows: ExistingListinoRow[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('listini_vettoriali')
+      .select('id, description, category')
+      .eq('listino_id', params.listinoId)
+      .eq('profile_id', params.profileId)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) throw new Error(error.message);
+    rows.push(...((data || []) as ExistingListinoRow[]));
+    if (!data || data.length < PAGE_SIZE) break;
+  }
+  return rows;
+}
+
+/**
+ * Saves imported items into a listino. Re-uploading an updated price list updates
+ * the price of items already present (same description) instead of duplicating them;
+ * the existing embedding and AI category are kept.
+ */
+export async function saveListinoItems(params: {
+  listinoId: string;
+  profileId: string;
+  items: ListinoItemInput[];
+  existingRows?: ExistingListinoRow[];
+}): Promise<SaveListinoItemsResult> {
+  const existingRows = params.existingRows ?? (await fetchAllListinoRows(params));
+  const existingByKey = new Map<string, ExistingListinoRow>();
+  for (const row of existingRows) {
+    const key = normalizeListinoDescriptionKey(row.description);
+    if (key && !existingByKey.has(key)) existingByKey.set(key, row);
+  }
+
+  const seen = new Set<string>();
+  const toInsert: Array<Record<string, unknown>> = [];
+  const toUpdate: Array<Record<string, unknown>> = [];
+  let duplicatesSkipped = 0;
+  const now = new Date().toISOString();
+
+  for (const item of params.items) {
+    const description = String(item.description || '').trim();
+    const key = normalizeListinoDescriptionKey(description);
+    if (!key) continue;
+    if (seen.has(key)) {
+      duplicatesSkipped++;
+      continue;
+    }
+    seen.add(key);
+
+    const base = {
+      listino_id: params.listinoId,
+      profile_id: params.profileId,
+      description,
+      unit_price: roundPrice(item.unit_price),
+      markup_percent: Number((Number(item.markup_percent) || 0).toFixed(2)),
+    };
+
+    const existing = existingByKey.get(key);
+    if (existing) {
+      toUpdate.push({
+        ...base,
+        id: existing.id,
+        category: cleanCategory(item.category) ?? existing.category ?? null,
+      });
+    } else {
+      toInsert.push({
+        ...base,
+        category: cleanCategory(item.category),
+        embedding: null,
+        created_at: now,
+      });
+    }
+  }
+
+  for (let i = 0; i < toInsert.length; i += WRITE_BATCH_SIZE) {
+    const { error } = await supabase
+      .from('listini_vettoriali')
+      .insert(toInsert.slice(i, i + WRITE_BATCH_SIZE));
+    if (error) throw new Error(error.message);
+  }
+
+  // Upsert on the primary key only touches the columns sent, so embedding and
+  // created_at of existing rows are preserved.
+  for (let i = 0; i < toUpdate.length; i += WRITE_BATCH_SIZE) {
+    const { error } = await supabase
+      .from('listini_vettoriali')
+      .upsert(toUpdate.slice(i, i + WRITE_BATCH_SIZE), { onConflict: 'id' });
+    if (error) throw new Error(error.message);
+  }
+
+  return { inserted: toInsert.length, updated: toUpdate.length, duplicatesSkipped };
+}
+
+/** Applies category changes with one query per category instead of one per row. */
+export async function applyListinoCategories(params: {
+  listinoId: string;
+  profileId: string;
+  updates: Array<{ id: string; category: string }>;
+}): Promise<number> {
+  const idsByCategory = new Map<string, string[]>();
+  for (const update of params.updates) {
+    const category = cleanCategory(update.category);
+    if (!update.id || !category) continue;
+    const ids = idsByCategory.get(category) || [];
+    ids.push(update.id);
+    idsByCategory.set(category, ids);
+  }
+
+  let updated = 0;
+  for (const [category, ids] of idsByCategory) {
+    for (let i = 0; i < ids.length; i += WRITE_BATCH_SIZE) {
+      const chunk = ids.slice(i, i + WRITE_BATCH_SIZE);
+      const { error } = await supabase
+        .from('listini_vettoriali')
+        .update({ category })
+        .in('id', chunk)
+        .eq('listino_id', params.listinoId)
+        .eq('profile_id', params.profileId);
+      if (!error) updated += chunk.length;
+    }
+  }
+  return updated;
+}

@@ -69,7 +69,10 @@ type PricingRule = {
 
 type UploadPayload = {
   error?: string;
+  warning?: string;
   inserted?: number;
+  updated?: number;
+  duplicatesSkipped?: number;
   sourceStored?: boolean;
   aiFeedback?: string | null;
   sourceInfo?: ListinoSourceInfo | null;
@@ -173,7 +176,10 @@ function buildUploadSuccessMessage(payload?: UploadPayload): string {
 
   const lines = [
     summary?.parsedRows !== undefined && summary?.totalRows !== undefined
-      ? `${summary.parsedRows}/${summary.totalRows} voci importate`
+      ? `${summary.parsedRows}/${summary.totalRows} voci lette dal file`
+      : null,
+    payload?.inserted !== undefined || payload?.updated !== undefined
+      ? `Nuove: ${payload?.inserted || 0} · prezzi aggiornati: ${payload?.updated || 0}${payload?.duplicatesSkipped ? ` · doppioni ignorati: ${payload.duplicatesSkipped}` : ''}`
       : null,
     summary?.normalizedPriceRows !== undefined ? `Prezzi normalizzati: ${summary.normalizedPriceRows}` : null,
     summary?.unitDetectedRows !== undefined ? `Unità rilevate: ${summary.unitDetectedRows}` : null,
@@ -693,10 +699,10 @@ export default function ListiniScreen() {
         setSelectedSourceInfo(payload.sourceInfo);
       }
 
-      if (payload?.sourceStored && (!payload?.inserted || payload.inserted === 0)) {
+      if (payload?.sourceStored && !(payload?.inserted || 0) && !(payload?.updated || 0)) {
         const candidateCount = Number(payload?.summary?.parsedRows || payload?.sourceInfo?.parsedSummary?.parsedRows || 0);
         const pendingCount = Number(payload?.summary?.pendingReferenceRows || payload?.sourceInfo?.parsedSummary?.pendingReferenceRows || 0);
-        const aiLine = payload?.aiFeedback ? `\n\n${payload.aiFeedback}` : '';
+        const aiLine = payload?.aiFeedback ? `\n\n${payload.aiFeedback}` : (payload?.warning ? `\n\n${payload.warning}` : '');
         const rules = summarizeRecommendedRules(payload);
         const rulesLine = rules ? `\n\nRegole consigliate: ${rules}` : '';
         const candidateLine = candidateCount > 0

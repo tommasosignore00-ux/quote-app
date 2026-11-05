@@ -1,16 +1,33 @@
 import { NextResponse } from 'next/server';
-import { getRequestUser, unauthorizedResponse, forbiddenResponse, isOwnProfile } from '../../../../lib/apiAuth';
+import {
+  getRequestUser,
+  unauthorizedResponse,
+  forbiddenResponse,
+  isOwnProfile,
+} from '../../../../lib/apiAuth';
 import OpenAI from 'openai';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import { resolveImportPricing } from '../../../../lib/listinoPricing';
-import { LISTINO_SOURCE_BUCKET, getListinoSourceMetadata } from '../../../../lib/listinoSourceStorage';
+import {
+  LISTINO_SOURCE_BUCKET,
+  getListinoSourceMetadata,
+} from '../../../../lib/listinoSourceStorage';
 import type { UniversalImportResult } from '../../../../lib/listinoUniversalImport';
 import {
   processListinoImport,
   type ProcessListinoImportResult,
 } from '../../../../lib/listinoImportShared';
-import { reportDebugEvent, getActiveDebugRunId } from '../../../../lib/listinoDebugShared';
+import {
+  reportDebugEvent,
+  getActiveDebugRunId,
+} from '../../../../lib/listinoDebugShared';
 import { bulkGenerateEmbeddingsForListino } from '../../../../lib/bulkGenerateEmbeddings';
+import {
+  applyListinoCategories,
+  fetchAllListinoRows,
+  normalizeListinoDescriptionKey,
+  saveListinoItems,
+} from '../../../../lib/listinoItemsStore';
 
 const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
@@ -34,38 +51,26 @@ function chunkArray<T>(items: T[], size: number): Array<T[]> {
 }
 
 function normalizeCategory(value: unknown): string | null {
-  const text = String(value ?? '').trim().replace(/\s+/g, ' ');
+  const text = String(value ?? '')
+    .trim()
+    .replace(/\s+/g, ' ');
   if (!text) return null;
   return text.slice(0, 80);
 }
 
-function normalizeDescriptionKey(value: unknown): string {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, ' ');
-}
+const CATEGORIZE_CHUNK_SIZE = 80;
+const CATEGORIZE_CONCURRENCY = 4;
+const MAX_KNOWN_CATEGORIES = 60;
 
 async function fetchListinoRows(params: { listinoId: string; profileId: string }) {
-  const { data, error } = await supabase
-    .from('listini_vettoriali')
-    .select('id, description, category')
-    .eq('listino_id', params.listinoId)
-    .eq('profile_id', params.profileId)
-    .order('created_at', { ascending: true });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data || []).filter((row) => row.description?.trim());
+  const rows = await fetchAllListinoRows(params);
+  return rows.filter((row) => row.description?.trim());
 }
 
 async function categorizeChunk(params: {
   listinoName: string;
   chunk: Array<{ id: string; description: string; category: string | null }>;
+  knownCategories?: string[];
 }): Promise<Array<{ id: string; category: string }>> {
   if (!openai) throw new Error('OPENAI_API_KEY missing');
   const completion = await openai.chat.completions.create({
@@ -89,7 +94,9 @@ async function categorizeChunk(params: {
             'Raggruppa le voci in categorie utili per un utente che deve scegliere materiali durante un lavoro.',
             'Mantieni categorie coerenti tra voci simili.',
             'Se il listino suggerisce un dominio specifico, usalo come contesto.',
+            'Se una delle known_categories va bene, riusala identica (stesse parole e maiuscole) invece di crearne una nuova simile.',
           ],
+          known_categories: params.knownCategories || [],
           items: params.chunk.map((item) => ({
             id: item.id,
             description: item.description,
@@ -108,12 +115,88 @@ async function categorizeChunk(params: {
     throw new Error(`AI ha restituito JSON non valido: ${String(error)}`);
   }
 
+  const allowedIds = new Set(params.chunk.map((item) => item.id));
   return (parsed.items || [])
     .map((item) => ({
       id: String(item.id || ''),
       category: normalizeCategory(item.category) || '',
     }))
-    .filter((item) => item.id && item.category);
+    .filter((item) => item.id && item.category && allowedIds.has(item.id));
+}
+
+function mostUsedCategories(
+  categories: Array<string | null | undefined>,
+  limit: number
+): string[] {
+  const counts = new Map<string, { label: string; count: number }>();
+  for (const value of categories) {
+    const label = normalizeCategory(value);
+    if (!label) continue;
+    const key = label.toLowerCase();
+    const entry = counts.get(key) || { label, count: 0 };
+    entry.count++;
+    counts.set(key, entry);
+  }
+  return Array.from(counts.values())
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit)
+    .map((entry) => entry.label);
+}
+
+// Categorizes every row so that chunks share the same vocabulary: the first chunk
+// seeds the categories, the others run in parallel reusing them.
+async function categorizeAllRows(params: {
+  listinoName: string;
+  rows: Array<{ id: string; description: string; category: string | null }>;
+}) {
+  const chunks = chunkArray(params.rows, CATEGORIZE_CHUNK_SIZE);
+  const updates: Array<{ id: string; category: string }> = [];
+  if (!chunks.length) return { updates, chunkCount: 0 };
+
+  const seedUpdates = await categorizeChunk({
+    listinoName: params.listinoName,
+    chunk: chunks[0],
+    knownCategories: mostUsedCategories(
+      params.rows.map((row) => row.category),
+      MAX_KNOWN_CATEGORIES
+    ),
+  });
+  updates.push(...seedUpdates);
+
+  const knownCategories = mostUsedCategories(
+    [
+      ...seedUpdates.map((item) => item.category),
+      ...params.rows.map((row) => row.category),
+    ],
+    MAX_KNOWN_CATEGORIES
+  );
+
+  const rest = chunks.slice(1);
+  let cursor = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(CATEGORIZE_CONCURRENCY, rest.length) }, async () => {
+      while (cursor < rest.length) {
+        const chunk = rest[cursor++];
+        updates.push(
+          ...(await categorizeChunk({
+            listinoName: params.listinoName,
+            chunk,
+            knownCategories,
+          }))
+        );
+      }
+    })
+  );
+
+  // Collapse case-only variants ("Tubi rame" / "tubi rame") onto the first label seen.
+  const canonicalLabel = new Map<string, string>();
+  for (const update of updates) {
+    const key = update.category.toLowerCase();
+    if (!canonicalLabel.has(key)) canonicalLabel.set(key, update.category);
+    update.category = canonicalLabel.get(key)!;
+  }
+
+  return { updates, chunkCount: chunks.length };
 }
 
 export async function POST(req: Request) {
@@ -132,7 +215,10 @@ export async function POST(req: Request) {
       data: { listinoId, profileId },
     });
     if (!listinoId || !profileId) {
-      return NextResponse.json({ error: 'listinoId e profileId sono obbligatori' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'listinoId e profileId sono obbligatori' },
+        { status: 400 }
+      );
     }
 
     const { data: listino, error: listinoError } = await supabase
@@ -187,7 +273,11 @@ export async function POST(req: Request) {
         },
       });
 
-      let rebuildResult: ProcessListinoImportResult = { ok: false, status: 500, error: 'reprocess not run' };
+      let rebuildResult: ProcessListinoImportResult = {
+        ok: false,
+        status: 500,
+        error: 'reprocess not run',
+      };
       try {
         const sourceDownload = await supabase.storage
           .from(LISTINO_SOURCE_BUCKET)
@@ -202,7 +292,10 @@ export async function POST(req: Request) {
             listinoId,
             listinoName: listino.name,
             originalFileName: sourceMetadata.fileName,
-            uploadedFileName: sourceMetadata.fileName || sourceMetadata.storagePath.split('/').pop() || 'source.pdf',
+            uploadedFileName:
+              sourceMetadata.fileName ||
+              sourceMetadata.storagePath.split('/').pop() ||
+              'source.pdf',
             uploadedFileType: sourceMetadata.mimeType || 'application/pdf',
             arrayBuffer,
             sourceOnly: true,
@@ -210,13 +303,18 @@ export async function POST(req: Request) {
           });
         }
       } catch (downloadErr: any) {
-        rebuildResult = { ok: false, status: 500, error: downloadErr?.message || String(downloadErr) };
+        rebuildResult = {
+          ok: false,
+          status: 500,
+          error: downloadErr?.message || String(downloadErr),
+        };
       }
 
       await reportDebugEvent({
         runId,
         hypothesisId: 'D',
-        location: 'web/app/api/listini/ai-organize/route.ts:POST:stale-source-reprocess-response',
+        location:
+          'web/app/api/listini/ai-organize/route.ts:POST:stale-source-reprocess-response',
         msg: '[DEBUG] Stored PDF source reprocess completed',
         data: {
           ok: rebuildResult.ok,
@@ -238,14 +336,19 @@ export async function POST(req: Request) {
       importedCount += Number(rebuildResult.inserted || 0);
       sourceMetadata = await getListinoSourceMetadata({ profileId, listinoId });
       candidateItems = sourceMetadata?.candidateItems || [];
-      pricingDiagnostics = sourceMetadata?.pricingDiagnostics || rebuildResult.pricingDiagnostics || null;
+      pricingDiagnostics =
+        sourceMetadata?.pricingDiagnostics || rebuildResult.pricingDiagnostics || null;
       usedStoredSource = Boolean(candidateItems.length || importedCount);
       sourceRows = await fetchListinoRows({ listinoId, profileId });
     }
 
     if (candidateItems.length) {
-      const candidatesWithBasis = candidateItems.filter((item) => item.pricing_basis_unit && (item.pricing_basis_quantity || 0) > 0);
-      const candidatesWithRuleKey = candidateItems.filter((item) => item.inferred_rule_key);
+      const candidatesWithBasis = candidateItems.filter(
+        (item) => item.pricing_basis_unit && (item.pricing_basis_quantity || 0) > 0
+      );
+      const candidatesWithRuleKey = candidateItems.filter(
+        (item) => item.inferred_rule_key
+      );
       const candidatesWithPrice = candidateItems.filter((item) => item.unit_price > 0);
       await reportDebugEvent({
         runId,
@@ -272,9 +375,13 @@ export async function POST(req: Request) {
           totalRows: candidateItems.length,
           parsedRows: candidateItems.length,
           skippedRows: 0,
-          normalizedPriceRows: candidateItems.filter((item) => item.unit_price > 0).length,
-          unitDetectedRows: candidateItems.filter((item) => item.pricing_basis_unit).length,
-          pendingReferenceRows: candidateItems.filter((item) => item.pricing_status === 'needs_reference').length,
+          normalizedPriceRows: candidateItems.filter((item) => item.unit_price > 0)
+            .length,
+          unitDetectedRows: candidateItems.filter((item) => item.pricing_basis_unit)
+            .length,
+          pendingReferenceRows: candidateItems.filter(
+            (item) => item.pricing_status === 'needs_reference'
+          ).length,
         },
       };
 
@@ -305,9 +412,11 @@ export async function POST(req: Request) {
         },
       });
 
-      const existingDescriptions = new Set(sourceRows.map((row) => normalizeDescriptionKey(row.description)));
+      const existingDescriptions = new Set(
+        sourceRows.map((row) => normalizeListinoDescriptionKey(row.description))
+      );
       const rowsToImport = pricingResolution.items.filter((row) => {
-        const key = normalizeDescriptionKey(row.description);
+        const key = normalizeListinoDescriptionKey(row.description);
         if (!key || existingDescriptions.has(key)) return false;
         existingDescriptions.add(key);
         return true;
@@ -332,27 +441,16 @@ export async function POST(req: Request) {
       });
 
       if (rowsToImport.length) {
-        const itemsToInsert = rowsToImport.map((row) => ({
-          listino_id: listinoId,
-          profile_id: profileId,
-          description: row.description.trim(),
-          unit_price: row.unit_price,
-          markup_percent: row.markup_percent,
-          category: row.category || null,
-          embedding: null,
-          created_at: new Date().toISOString(),
-        }));
+        // Only new descriptions are added here: prices already in the listino
+        // (possibly edited by the user) are not overwritten by rule-derived ones.
+        const saved = await saveListinoItems({
+          listinoId,
+          profileId,
+          items: rowsToImport,
+          existingRows: sourceRows,
+        });
 
-        const batchSize = 200;
-        for (let i = 0; i < itemsToInsert.length; i += batchSize) {
-          const batch = itemsToInsert.slice(i, i + batchSize);
-          const { error } = await supabase.from('listini_vettoriali').insert(batch);
-          if (error) {
-            return NextResponse.json({ error: error.message }, { status: 500 });
-          }
-        }
-
-        importedCount += itemsToInsert.length;
+        importedCount += saved.inserted;
 
         try {
           await bulkGenerateEmbeddingsForListino({ listinoId });
@@ -388,32 +486,16 @@ export async function POST(req: Request) {
       });
     }
 
-    const updates: Array<{ id: string; category: string }> = [];
-    const chunks = chunkArray(sourceRows, 80);
+    const { updates, chunkCount } = await categorizeAllRows({
+      listinoName: listino.name,
+      rows: sourceRows.map((item) => ({
+        id: item.id,
+        description: item.description,
+        category: item.category || null,
+      })),
+    });
 
-    for (const chunk of chunks) {
-      const aiItems = await categorizeChunk({
-        listinoName: listino.name,
-        chunk: chunk.map((item) => ({
-          id: item.id,
-          description: item.description,
-          category: item.category || null,
-        })),
-      });
-      updates.push(...aiItems);
-    }
-
-    let updatedCount = 0;
-    for (const update of updates) {
-      const { error } = await supabase
-        .from('listini_vettoriali')
-        .update({ category: update.category })
-        .eq('id', update.id)
-        .eq('listino_id', listinoId)
-        .eq('profile_id', profileId);
-
-      if (!error) updatedCount++;
-    }
+    const updatedCount = await applyListinoCategories({ listinoId, profileId, updates });
 
     await reportDebugEvent({
       runId,
@@ -436,7 +518,7 @@ export async function POST(req: Request) {
       usedStoredSource,
       aiFeedback: sourceMetadata?.aiFeedback || null,
       pricingDiagnostics,
-      chunkCount: chunks.length,
+      chunkCount,
     });
   } catch (err) {
     await reportDebugEvent({
@@ -449,6 +531,9 @@ export async function POST(req: Request) {
       },
     });
     console.error('AI organize listino error:', err);
-    return NextResponse.json({ error: (err as Error).message || 'AI organize failed' }, { status: 500 });
+    return NextResponse.json(
+      { error: (err as Error).message || 'AI organize failed' },
+      { status: 500 }
+    );
   }
 }
