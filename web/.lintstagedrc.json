@@ -1,0 +1,7 @@
+{
+  "*.{ts,tsx}": [
+    "npm --prefix web exec --no -- prettier --write",
+    "npm --prefix web exec --no -- eslint --fix --resolve-plugins-relative-to web"
+  ],
+  "*.{json,css,md}": ["npm --prefix web exec --no -- prettier --write"]
+}

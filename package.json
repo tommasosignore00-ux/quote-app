@@ -16,14 +16,5 @@
     "husky": "^9.1.0",
     "lint-staged": "^16.1.0",
     "supabase": "^2.76.15"
-  },
-  "lint-staged": {
-    "web/**/*.{ts,tsx}": [
-      "prettier --write",
-      "eslint --fix --no-warn-ignored"
-    ],
-    "web/**/*.{json,css,md}": [
-      "prettier --write"
-    ]
   }
 }
