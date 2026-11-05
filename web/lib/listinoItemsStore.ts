@@ -3,7 +3,7 @@ import { supabaseAdmin } from './supabase-server';
 const supabase = supabaseAdmin;
 
 const PAGE_SIZE = 1000;
-const WRITE_BATCH_SIZE = 200;
+const WRITE_BATCH_SIZE = 500;
 // listini_vettoriali.category is VARCHAR(100): longer values make the whole insert fail.
 const CATEGORY_MAX_LENGTH = 100;
 const PRICE_DECIMALS = 4;

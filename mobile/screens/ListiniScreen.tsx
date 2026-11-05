@@ -241,6 +241,7 @@ async function uploadPdfToSignedStorage(params: {
   fileName: string;
   profileId: string;
   listinoId: string;
+  contentType?: string;
 }): Promise<string> {
   const signedRes = await fetch(buildWebApiUrl('/api/listini/source-upload-url'), {
     method: 'POST',
@@ -262,7 +263,7 @@ async function uploadPdfToSignedStorage(params: {
   const upload = await FileSystem.uploadAsync(signed.signedUrl, params.uri, {
     httpMethod: 'PUT',
     uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-    headers: { 'Content-Type': 'application/pdf', 'x-upsert': 'true' },
+    headers: { 'Content-Type': params.contentType || 'application/pdf', 'x-upsert': 'true' },
   });
   if (upload.status < 200 || upload.status >= 300) {
     throw new Error(`Storage HTTP ${upload.status}`);
@@ -855,6 +856,29 @@ export default function ListiniScreen() {
         });
         statusCode = response.status;
         payload = parseUploadPayload(await response.text());
+      } else if ('size' in fileInfo && Number(fileInfo.size || 0) > PDF_BASE64_MAX_BYTES) {
+        // Big Excel/CSV/METEL files: same Storage route as PDFs (Vercel's 4.5 MB limit).
+        const storagePath = await uploadPdfToSignedStorage({
+          uri: asset.uri,
+          fileName,
+          profileId,
+          listinoId: selectedListino.id,
+          contentType: mimeType,
+        });
+        const response = await fetch(buildWebApiUrl('/api/listini/upload'), {
+          method: 'POST',
+          headers: await getWebApiAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            storagePath,
+            fileName,
+            mimeType,
+            profileId,
+            listinoId: selectedListino.id,
+            originalFileName: fileName,
+          }),
+        });
+        statusCode = response.status;
+        payload = parseUploadPayload(await response.text());
       } else {
         const response = await FileSystem.uploadAsync(buildWebApiUrl('/api/listini/upload'), asset.uri, {
           fieldName: 'file',
@@ -893,6 +917,13 @@ export default function ListiniScreen() {
           : '';
         await fetchItems(selectedListino.id);
         Alert.alert('PDF salvato', `Il PDF e stato salvato come sorgente del listino.${candidateLine}${aiLine}${rulesLine}`);
+        return;
+      }
+
+      if (Number(payload?.summary?.parsedRows || 0) > 5000) {
+        // Very large lists (METEL): the automatic AI pass would only hit its time budget.
+        await fetchItems(selectedListino.id);
+        Alert.alert('Import completato', buildUploadSuccessMessage(payload));
         return;
       }
 
@@ -1017,7 +1048,7 @@ export default function ListiniScreen() {
               onPress={handleImportFile}
               disabled={uploading || organizingAi}
             >
-              <Text style={styles.actionBtnText}>{uploading ? 'Import in corso...' : 'Carica CSV/Excel/PDF'}</Text>
+              <Text style={styles.actionBtnText}>{uploading ? 'Import in corso...' : 'Carica Excel/CSV/METEL/PDF'}</Text>
             </TouchableOpacity>
 
 

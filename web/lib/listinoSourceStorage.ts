@@ -6,7 +6,16 @@ import type {
 import type { PricingDiagnostics } from './listinoPricing';
 
 export const LISTINO_SOURCE_BUCKET = 'listini-sources';
-const LISTINO_SOURCE_ALLOWED_MIME_TYPES = ['application/pdf', 'application/json'];
+// Large price lists of any format go through Storage (Vercel limits requests to 4.5 MB).
+const LISTINO_SOURCE_ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'application/json',
+  'text/plain',
+  'text/csv',
+  'application/octet-stream',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+];
 const LISTINO_SOURCE_FILE_SIZE_LIMIT = 50 * 1024 * 1024;
 
 export type ListinoSourceMetadata = {

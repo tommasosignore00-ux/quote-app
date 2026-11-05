@@ -261,6 +261,16 @@ function uploadWithXhr(url: string, formData: FormData): Promise<UploadRequestRe
   });
 }
 
+// Vercel rejects request bodies over 4.5 MB: larger files go straight to Storage.
+const DIRECT_UPLOAD_MAX_BYTES = 3 * 1024 * 1024;
+// Above this many items the automatic AI categorization would only hit its time budget.
+const AUTO_ORGANIZE_MAX_ITEMS = 5000;
+
+function storageContentType(file: File): string {
+  if (file.type) return file.type;
+  return file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'text/plain';
+}
+
 async function uploadPdfViaStorageReference(params: {
   file: File;
   profileId: string;
@@ -299,7 +309,7 @@ async function uploadPdfViaStorageReference(params: {
     .from(bucket)
     .uploadToSignedUrl(storagePath, token, params.file, {
       upsert: true,
-      contentType: params.file.type || 'application/pdf',
+      contentType: storageContentType(params.file),
     });
 
   if (storageUpload.error) {
@@ -313,7 +323,7 @@ async function uploadPdfViaStorageReference(params: {
       body: JSON.stringify({
         storagePath,
         fileName: params.file.name,
-        mimeType: params.file.type || 'application/pdf',
+        mimeType: storageContentType(params.file),
         profileId: params.profileId,
         listinoId: params.listinoId,
         originalFileName: params.file.name,
@@ -805,6 +815,12 @@ export default function ListiniPage() {
             }
           }
         }
+      } else if (file.size > DIRECT_UPLOAD_MAX_BYTES) {
+        uploadResult = await uploadPdfViaStorageReference({
+          file,
+          profileId: resolvedProfileId,
+          listinoId: selectedListino.id,
+        });
       } else {
         const formData = new FormData();
         formData.append('file', file);
@@ -918,6 +934,16 @@ export default function ListiniPage() {
         toast(`Aggiornamento listino: ${changesLabel}`, { duration: 12000, icon: '📈' });
       }
       await fetchItems(selectedListino.id);
+      if (Number(payload?.summary?.parsedRows || 0) > AUTO_ORGANIZE_MAX_ITEMS) {
+        toast(
+          'Listino molto grande: categorie AI non avviate in automatico. Puoi lanciarle con "Riorganizza con AI".',
+          {
+            duration: 8000,
+            icon: 'ℹ️',
+          }
+        );
+        return;
+      }
       toast.success('Organizzazione AI avviata automaticamente');
       try {
         await runAiOrganize(selectedListino.id, resolvedProfileId, {
@@ -1087,7 +1113,7 @@ export default function ListiniPage() {
             <input
               id="listini-upload-table"
               type="file"
-              accept=".csv,.txt,.xlsx,.xls"
+              accept=".csv,.txt,.met,.xlsx,.xls"
               onChange={handleUploadCsv}
               className="sr-only"
               disabled={uploading}

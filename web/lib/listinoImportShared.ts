@@ -17,6 +17,7 @@ import { type PricingDiagnostics, resolveImportPricing } from './listinoPricing'
 import { uploadListinoSource, type ListinoSourceMetadata } from './listinoSourceStorage';
 import { scheduleEmbeddingsForListino } from './bulkGenerateEmbeddings';
 import { saveListinoItems, type ListinoChanges } from './listinoItemsStore';
+import { isMetelText, parseMetelText } from './listinoMetel';
 import {
   LISTINO_PARSER_VERSION,
   applyCanonicalGroups,
@@ -1477,7 +1478,9 @@ export async function processListinoImport(
         storedSource: stored,
       };
     } else {
-      parsed = parseUniversalCsvText(decodeTextFile(arrayBuffer));
+      const text = decodeTextFile(arrayBuffer);
+      // METEL (wholesalers' fixed-width format) comes as .txt/.met: detect it by content.
+      parsed = isMetelText(text) ? parseMetelText(text) : parseUniversalCsvText(text);
       sourceDiagnostics = [
         {
           sourceName: uploadedFileName,
