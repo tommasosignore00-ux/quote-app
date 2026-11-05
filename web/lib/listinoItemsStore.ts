@@ -23,13 +23,30 @@ export type ExistingListinoRow = {
   description: string;
   category: string | null;
   pricing_group?: string | null;
+  unit_price?: number | string | null;
+};
+
+export type PriceChange = { description: string; oldPrice: number; newPrice: number };
+
+/** What a new version of the price list changed compared to the saved one. */
+export type ListinoChanges = {
+  increased: number;
+  decreased: number;
+  unchanged: number;
+  /** Saved items that are not in the new file (kept, not deleted). */
+  missing: number;
+  /** Largest variations first, for the summary shown to the user. */
+  examples: PriceChange[];
 };
 
 export type SaveListinoItemsResult = {
   inserted: number;
   updated: number;
   duplicatesSkipped: number;
+  changes: ListinoChanges;
 };
+
+const MAX_CHANGE_EXAMPLES = 5;
 
 export function normalizeListinoDescriptionKey(value: unknown): string {
   return String(value ?? '')
@@ -61,7 +78,7 @@ export async function fetchAllListinoRows(params: {
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await supabase
       .from('listini_vettoriali')
-      .select('id, description, category, pricing_group')
+      .select('id, description, category, pricing_group, unit_price')
       .eq('listino_id', params.listinoId)
       .eq('profile_id', params.profileId)
       .order('created_at', { ascending: true })
@@ -94,6 +111,9 @@ export async function saveListinoItems(params: {
   }
 
   const seen = new Set<string>();
+  const matchedIds = new Set<string>();
+  const priceChanges: Array<PriceChange & { itemId: string }> = [];
+  let unchanged = 0;
   const toInsert: Array<Record<string, unknown>> = [];
   const toUpdate: Array<Record<string, unknown>> = [];
   let duplicatesSkipped = 0;
@@ -125,6 +145,21 @@ export async function saveListinoItems(params: {
       ? { pricing_group: cleanCategory(item.pricing_group) }
       : {};
     if (existing) {
+      matchedIds.add(existing.id);
+      const oldPrice =
+        existing.unit_price === null || existing.unit_price === undefined
+          ? null
+          : roundPrice(Number(existing.unit_price));
+      if (oldPrice !== null && Number.isFinite(oldPrice)) {
+        if (oldPrice === base.unit_price) unchanged++;
+        else
+          {priceChanges.push({
+            itemId: existing.id,
+            description,
+            oldPrice,
+            newPrice: base.unit_price,
+          });}
+      }
       const renamed = normalizeListinoDescriptionKey(existing.description) !== key;
       toUpdate.push({
         ...base,
@@ -172,7 +207,51 @@ export async function saveListinoItems(params: {
     }
   }
 
-  return { inserted: toInsert.length, updated: toUpdate.length, duplicatesSkipped };
+  if (priceChanges.length) {
+    // Price history is informative: never fail the import because of it.
+    const historyRows = priceChanges.map((change) => ({
+      item_id: change.itemId,
+      listino_id: params.listinoId,
+      profile_id: params.profileId,
+      old_price: change.oldPrice,
+      new_price: change.newPrice,
+    }));
+    for (let i = 0; i < historyRows.length; i += WRITE_BATCH_SIZE) {
+      const { error } = await supabase
+        .from('listino_price_history')
+        .insert(historyRows.slice(i, i + WRITE_BATCH_SIZE));
+      if (error) {
+        console.warn('Price history not saved:', error.message);
+        break;
+      }
+    }
+  }
+
+  const changes: ListinoChanges = {
+    increased: priceChanges.filter((change) => change.newPrice > change.oldPrice).length,
+    decreased: priceChanges.filter((change) => change.newPrice < change.oldPrice).length,
+    unchanged,
+    missing: existingRows.filter((row) => !matchedIds.has(row.id)).length,
+    examples: [...priceChanges]
+      .sort(
+        (a, b) =>
+          Math.abs(b.newPrice - b.oldPrice) / (b.oldPrice || 1) -
+          Math.abs(a.newPrice - a.oldPrice) / (a.oldPrice || 1)
+      )
+      .slice(0, MAX_CHANGE_EXAMPLES)
+      .map(({ description, oldPrice, newPrice }) => ({
+        description,
+        oldPrice,
+        newPrice,
+      })),
+  };
+
+  return {
+    inserted: toInsert.length,
+    updated: toUpdate.length,
+    duplicatesSkipped,
+    changes,
+  };
 }
 
 /** Applies category changes with one query per category instead of one per row. */

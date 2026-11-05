@@ -73,6 +73,13 @@ type UploadPayload = {
   inserted?: number;
   updated?: number;
   duplicatesSkipped?: number;
+  changes?: {
+    increased: number;
+    decreased: number;
+    unchanged: number;
+    missing: number;
+    examples: Array<{ description: string; oldPrice: number; newPrice: number }>;
+  };
   sourceStored?: boolean;
   aiFeedback?: string | null;
   sourceInfo?: ListinoSourceInfo | null;
@@ -180,6 +187,10 @@ function buildUploadSuccessMessage(payload?: UploadPayload): string {
       : null,
     payload?.inserted !== undefined || payload?.updated !== undefined
       ? `Nuove: ${payload?.inserted || 0} · prezzi aggiornati: ${payload?.updated || 0}${payload?.duplicatesSkipped ? ` · doppioni ignorati: ${payload.duplicatesSkipped}` : ''}`
+      : null,
+    payload?.changes && (payload.changes.increased || payload.changes.decreased || payload.changes.missing)
+      ? `Aumentati: ${payload.changes.increased} · diminuiti: ${payload.changes.decreased} · invariati: ${payload.changes.unchanged}` +
+        (payload.changes.missing ? ` · non più nel file: ${payload.changes.missing}` : '')
       : null,
     summary?.normalizedPriceRows !== undefined ? `Prezzi normalizzati: ${summary.normalizedPriceRows}` : null,
     summary?.unitDetectedRows !== undefined ? `Unità rilevate: ${summary.unitDetectedRows}` : null,

@@ -155,6 +155,42 @@ async function uploadWithFetch(
   };
 }
 
+type ListinoChangesSummary = {
+  increased: number;
+  decreased: number;
+  unchanged: number;
+  missing: number;
+  examples: Array<{ description: string; oldPrice: number; newPrice: number }>;
+};
+
+function formatEuro(value: number): string {
+  return value.toLocaleString('it-IT', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  });
+}
+
+/** "12 prezzi aumentati, 3 diminuiti ... es. Tubo rame 12: 4,00 → 4,60 € (+15%)". */
+function describeListinoChanges(changes?: ListinoChangesSummary | null): string | null {
+  if (!changes || !(changes.increased || changes.decreased || changes.missing))
+    {return null;}
+  const parts = [
+    changes.increased ? `${changes.increased} prezzi aumentati` : null,
+    changes.decreased ? `${changes.decreased} diminuiti` : null,
+    changes.unchanged ? `${changes.unchanged} invariati` : null,
+    changes.missing
+      ? `${changes.missing} voci non più presenti nel file (mantenute)`
+      : null,
+  ].filter(Boolean);
+  const top = changes.examples?.[0];
+  const example = top
+    ? ` · es. ${top.description}: ${formatEuro(top.oldPrice)} → ${formatEuro(top.newPrice)} € (${
+        top.newPrice >= top.oldPrice ? '+' : ''
+      }${Math.round(((top.newPrice - top.oldPrice) / (top.oldPrice || 1)) * 100)}%)`
+    : '';
+  return `${parts.join(', ')}${example}`;
+}
+
 const JOB_POLL_INTERVAL_MS = 2500;
 const JOB_MAX_WAIT_MS = 6 * 60 * 1000;
 
@@ -777,7 +813,6 @@ export default function ListiniPage() {
         return;
       }
 
-      const summary = payload.summary;
       const pricingDiagnostics = payload?.pricingDiagnostics;
       const selectedSources = Array.isArray(payload?.sourceDiagnostics)
         ? payload.sourceDiagnostics
@@ -786,27 +821,20 @@ export default function ListiniPage() {
             .filter(Boolean)
         : [];
       const sourceLabel = selectedSources.length
-        ? ` · sorgenti: ${selectedSources.join(', ')}`
+        ? ` · fogli usati: ${selectedSources.join(', ')}`
         : '';
-      const pricingLabel = pricingDiagnostics
-        ? ` · file: ${pricingDiagnostics.resolvedFromFile} · derivati: ${pricingDiagnostics.resolvedFromDerived} · regole: ${pricingDiagnostics.resolvedFromRule} · senza prezzo: ${pricingDiagnostics.unresolved}`
+      const savedLabel = `${payload?.inserted || 0} voci nuove, ${payload?.updated || 0} aggiornate${
+        payload?.duplicatesSkipped
+          ? `, ${payload.duplicatesSkipped} doppioni ignorati`
+          : ''
+      }`;
+      const skippedLabel = pricingDiagnostics?.unresolved
+        ? ` · ${pricingDiagnostics.unresolved} righe senza prezzo non importate`
         : '';
-      const savedLabel = ` · nuove: ${payload?.inserted || 0} · prezzi aggiornati: ${payload?.updated || 0}${payload?.duplicatesSkipped ? ` · doppioni ignorati: ${payload.duplicatesSkipped}` : ''}`;
-      toast.success(
-        `${summary.parsedRows}/${summary.totalRows} ${t('listini.itemsAdded')}${savedLabel} · normalize: ${summary.normalizedPriceRows} · unita rilevate: ${summary.unitDetectedRows}${pricingLabel}${sourceLabel}`
-      );
-      if (
-        pricingDiagnostics?.unresolved &&
-        Array.isArray(pricingDiagnostics?.recommendedRules) &&
-        pricingDiagnostics.recommendedRules.length
-      ) {
-        const topRules = pricingDiagnostics.recommendedRules
-          .slice(0, 3)
-          .map((rule: any) => `${rule.label} (${rule.reference_unit})`)
-          .join(', ');
-        toast(`Per completare il resto, imposta le regole prezzo: ${topRules}`, {
-          icon: 'ℹ️',
-        });
+      toast.success(`Listino importato: ${savedLabel}${skippedLabel}${sourceLabel}`);
+      const changesLabel = describeListinoChanges(payload?.changes);
+      if (changesLabel) {
+        toast(`Aggiornamento listino: ${changesLabel}`, { duration: 12000, icon: '📈' });
       }
       await fetchItems(selectedListino.id);
       toast.success('Organizzazione AI avviata automaticamente');

@@ -16,7 +16,7 @@ import {
 import { type PricingDiagnostics, resolveImportPricing } from './listinoPricing';
 import { uploadListinoSource, type ListinoSourceMetadata } from './listinoSourceStorage';
 import { scheduleEmbeddingsForListino } from './bulkGenerateEmbeddings';
-import { saveListinoItems } from './listinoItemsStore';
+import { saveListinoItems, type ListinoChanges } from './listinoItemsStore';
 import {
   LISTINO_PARSER_VERSION,
   applyCanonicalGroups,
@@ -42,6 +42,7 @@ export type ProcessListinoImportResult = {
   inserted?: number;
   updated?: number;
   duplicatesSkipped?: number;
+  changes?: ListinoChanges;
   /** Catalogue without prices: shapes in the "Prezzi per forma" section. */
   pricingGroups?: number;
   pendingPricingGroups?: number;
@@ -1465,6 +1466,7 @@ export async function processListinoImport(
         inserted: saved.inserted,
         updated: saved.updated,
         duplicatesSkipped: saved.duplicatesSkipped,
+        changes: saved.changes,
         listinoId: targetListinoId,
         summary: pricingResolution.summary,
         sourceDiagnostics,
@@ -1558,6 +1560,7 @@ export async function processListinoImport(
       inserted: saved.inserted,
       updated: saved.updated,
       duplicatesSkipped: saved.duplicatesSkipped,
+      changes: saved.changes,
       listinoId: targetListinoId,
       summary: pricingResolution.summary,
       sourceDiagnostics,
