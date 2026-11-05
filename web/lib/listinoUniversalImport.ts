@@ -660,12 +660,17 @@ function scoreHeaderForCanonical(canonical: string, header: string): number {
 
   if (canonical === 'price' || canonical === 'priceUnit') {
     // Net price beats list/gross price when the file has both.
-    if (/(?:^|[^a-z])(nett[oi]?|net|netpreis|neto|liquido)(?:$|[^a-z])/.test(header))
-      {best += 60;}
-    if (/(?:^|[^a-z])(sconto|discount|rabatt|remise|descuento)(?:$|[^a-z])/.test(header))
-      {best -= 60;}
-    if (/(?:^|[^a-z])(totale|total|subtotale|imponibile)(?:$|[^a-z])/.test(header))
-      {best -= 30;}
+    if (/(?:^|[^a-z])(nett[oi]?|net|netpreis|neto|liquido)(?:$|[^a-z])/.test(header)) {
+      best += 60;
+    }
+    if (
+      /(?:^|[^a-z])(sconto|discount|rabatt|remise|descuento)(?:$|[^a-z])/.test(header)
+    ) {
+      best -= 60;
+    }
+    if (/(?:^|[^a-z])(totale|total|subtotale|imponibile)(?:$|[^a-z])/.test(header)) {
+      best -= 30;
+    }
   }
 
   if (canonical === 'description' && scoreHeaderForCanonical('code', header) > 0) {
@@ -701,8 +706,9 @@ function buildHeaderMap(headers: string[]): Record<string, number> {
       taken.some(
         (owner) => !SHAREABLE_HEADER_PAIRS.has(`${owner}|${candidate.canonical}`)
       )
-    )
-      {continue;}
+    ) {
+      continue;
+    }
     map[candidate.canonical] = candidate.index;
     owners.set(candidate.index, [...taken, candidate.canonical]);
   }
@@ -878,8 +884,11 @@ function isLikelyContextLabel(value: string): boolean {
   if (normalized.length < 3) return false;
   if (parseLocalizedNumber(raw) !== null) return false;
   if (isLikelyHeaderText(raw)) return false;
-  if (/^(totale|subtotal|subtotale|pagina|page|pag\.?|codice|cod\.?)$/i.test(normalized))
-    {return false;}
+  if (
+    /^(totale|subtotal|subtotale|pagina|page|pag\.?|codice|cod\.?)$/i.test(normalized)
+  ) {
+    return false;
+  }
   return /[a-z]/i.test(raw) || /[A-ZÀ-ÖØ-Ý]/.test(raw);
 }
 
@@ -918,8 +927,9 @@ function extractContextLabelFromRow(
   if (!isLikelyContextLabel(singleLabel)) return null;
 
   if (cells.length === 1) return singleLabel;
-  if (description && description === cells[0] && isMostlyUppercase(description))
-    {return description;}
+  if (description && description === cells[0] && isMostlyUppercase(description)) {
+    return description;
+  }
   if (combined.length <= 80 && isMostlyUppercase(combined)) return combined;
 
   return null;
@@ -976,8 +986,9 @@ function inferPackFromDescription(
   );
   if (explicitPer) {
     const qty = parseLocalizedNumber(explicitPer[1]);
-    if (qty !== null && qty > 0)
-      {return { qty, unit: normalizeUnit(explicitPer[2] || preferredUnit) };}
+    if (qty !== null && qty > 0) {
+      return { qty, unit: normalizeUnit(explicitPer[2] || preferredUnit) };
+    }
   }
 
   return null;
@@ -1048,12 +1059,19 @@ function inferRuleKey(params: {
   );
   if (!haystack) return null;
 
-  if (/(acciaio|ferro|lamiera|trave|putrella|tondino|profilat)/.test(haystack))
-    {return 'metal_ferrous';}
-  if (/(rame|copper|ottone|brass|bronzo|bronze|alluminio|aluminum)/.test(haystack))
-    {return 'metal_nonferrous';}
-  if (/(cavo|cavi|cable|corrugato|guaina|filo elettric)/.test(haystack))
-    {return 'electric_cable';}
+  if (
+    /(acciaio|acciai|ferro|ferri|lamiera|lamiere|trave|travi|putrella|tondino|tondi|profilat|laminat|trafilat)/.test(
+      haystack
+    )
+  ) {
+    return 'metal_ferrous';
+  }
+  if (/(rame|copper|ottone|brass|bronzo|bronze|alluminio|aluminum)/.test(haystack)) {
+    return 'metal_nonferrous';
+  }
+  if (/(cavo|cavi|cable|corrugato|guaina|filo elettric)/.test(haystack)) {
+    return 'electric_cable';
+  }
   if (/(tubo|tubi|pipe|piping|raccord)/.test(haystack)) return 'piping';
   if (/(vernice|paint|smalto|primer|resina)/.test(haystack)) return 'paint_chemical';
   if (/(legno|wood|trave legno|multistrato|pannello)/.test(haystack)) return 'wood_panel';
@@ -1401,13 +1419,323 @@ export function parseUniversalPdfText(text: string): UniversalImportResult {
       (row) => row.length > 0 && row.some((cell) => String(cell ?? '').trim() !== '')
     );
 
-  const columnBased = parseRows(rows);
-  const lineBased = parseLineBasedPdfText(lines);
+  const boilerplate = findRepeatedBoilerplateLines(lines);
+  const contentLines = lines.filter((line) => !boilerplate.has(normalizeText(line)));
 
-  // PDF text has no reliable columns: keep whichever reading found more priced items.
-  return countPriced(lineBased.items) > countPriced(columnBased.items)
+  const columnBased = filterJunkItems(parseRows(rows));
+  const lineBased = filterJunkItems(
+    mergeImportResults(
+      parseLineBasedPdfText(contentLines),
+      parseTechnicalTablesPdfText(lines, text, boilerplate)
+    )
+  );
+
+  // PDF text has no reliable columns: keep the reading that found more usable items
+  // (priced first, then items with a measurement that a pricing rule can price).
+  return pdfResultScore(lineBased) > pdfResultScore(columnBased)
     ? lineBased
     : columnBased;
+}
+
+function pdfResultScore(result: UniversalImportResult): number {
+  const priced = countPriced(result.items);
+  const priceable = result.items.filter(
+    (item) =>
+      item.unit_price <= 0 &&
+      item.pricing_basis_unit &&
+      (item.pricing_basis_quantity || 0) > 0
+  ).length;
+  return priced * 2 + priceable;
+}
+
+function mergeImportResults(
+  a: UniversalImportResult,
+  b: UniversalImportResult
+): UniversalImportResult {
+  const items = [...a.items, ...b.items];
+  return {
+    items,
+    summary: {
+      totalRows: Math.max(a.summary.totalRows, b.summary.totalRows),
+      parsedRows: items.length,
+      skippedRows: a.summary.skippedRows + b.summary.skippedRows,
+      normalizedPriceRows: a.summary.normalizedPriceRows + b.summary.normalizedPriceRows,
+      unitDetectedRows: a.summary.unitDetectedRows + b.summary.unitDetectedRows,
+      pendingReferenceRows: items.filter(
+        (item) => item.pricing_status === 'needs_reference'
+      ).length,
+    },
+  };
+}
+
+// Contact details and addresses are never price list items ("Tel. 0444 696230").
+const JUNK_DESCRIPTION_RE =
+  /^(tel|telefono|fax|cell|mob|e-?mail|www\.|https?:|p\.?\s?iva|c\.?f\.?|cap|via|viale|piazza|pec|peso|prezzo|dimensioni|spessore|lunghezza|larghezza|altezza|diametro|misura|codice|totale)\b/i;
+
+function filterJunkItems(result: UniversalImportResult): UniversalImportResult {
+  const items = result.items.filter(
+    (item) => !JUNK_DESCRIPTION_RE.test(item.description.trim())
+  );
+  const removed = result.items.length - items.length;
+  if (!removed) return result;
+  return {
+    items,
+    summary: {
+      ...result.summary,
+      parsedRows: items.length,
+      skippedRows: result.summary.skippedRows + removed,
+      pendingReferenceRows: items.filter(
+        (item) => item.pricing_status === 'needs_reference'
+      ).length,
+    },
+  };
+}
+
+// Lines printed on most pages (company address, side menu, "Qualità: S275JR") are
+// layout, not content: they would otherwise become headings or fake items.
+function findRepeatedBoilerplateLines(lines: string[]): Set<string> {
+  const pages = Math.max(
+    1,
+    lines.filter((line) => /^--\s*\d+\s+of\s+\d+\s*--$/i.test(line)).length
+  );
+  const counts = new Map<string, number>();
+  for (const line of lines) {
+    const key = normalizeText(line);
+    if (key.length < 2) continue;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  const threshold = Math.max(5, Math.ceil(pages * 0.25));
+  const repeated = new Set<string>();
+  for (const [key, count] of counts) {
+    // Pure numbers/dimensions repeat legitimately in tables: keep them.
+    if (count >= threshold && /\p{L}{2,}/u.test(key)) repeated.add(key);
+  }
+  return repeated;
+}
+
+const DIMENSION_CELL_RE = /^\d+(?:[.,]\d+)?(?:\s*[x×]\s*\d+(?:[.,]\d+)?)*$/i;
+// Inch sizes used for tubes: 3/8, 1,1/4, 2.1/2
+const INCH_CELL_RE = /^(?:\d+[.,])?\d+\/(?:2|4|8|16|32)$/;
+// Sheet tables: thickness in tenths of mm ("30/10" = 3 mm) by sheet format ("1000 x 2000").
+const SHEET_THICKNESS_RE = /^(\d+(?:[.,]\d+)?)\/10$/;
+const SHEET_FORMAT_RE = /^\d{3,4}\s*[x×]\s*\d{3,4}$/i;
+const MAX_TECHNICAL_CELLS = 8;
+const MAX_WEIGHT_KG_PER_M = 1000;
+const HEADING_LOWERCASE_WORDS = new Set([
+  'a',
+  'e',
+  'i',
+  'o',
+  'di',
+  'da',
+  'in',
+  'con',
+  'per',
+  'su',
+  'la',
+  'il',
+  'le',
+  'lo',
+  'gli',
+  'del',
+  'dei',
+  'al',
+  'ai',
+  'ed',
+]);
+
+function isMostlyUppercaseHeading(line: string): boolean {
+  const letters = line.match(/\p{L}/gu) || [];
+  if (letters.length < 4 || /\d/.test(line)) return false;
+  const upper = line.match(/\p{Lu}/gu) || [];
+  return upper.length / letters.length >= 0.8 && line.length <= 60;
+}
+
+// "TRAVI HEA" -> "Travi HEA", "FERRI A ELLE" -> "Ferri a elle": short non-stopword
+// tokens are profile acronyms (HEA, IPE, NP, UPN) and stay uppercase.
+function toSentenceCase(value: string): string {
+  const words = value.replace(/\s+/g, ' ').trim().split(' ');
+  return words
+    .map((word, index) => {
+      const lower = word.toLowerCase();
+      if (index === 0) return lower.charAt(0).toUpperCase() + lower.slice(1);
+      if (
+        word.length <= 3 &&
+        /^\p{Lu}+$/u.test(word) &&
+        !HEADING_LOWERCASE_WORDS.has(lower)
+      )
+        {return word;}
+      return lower;
+    })
+    .join(' ');
+}
+
+function formatDimensionCell(cell: string): string {
+  return INCH_CELL_RE.test(cell) ? `${cell}"` : cell.replace(/\s*[x×]\s*/gi, ' x ');
+}
+
+/**
+ * Technical catalogues (steel profiles, tubes, sheets) list sizes and weight per metre
+ * without prices: "30 x 20 x 4 <tab> 1,45" under "FERRI A ELLE ... peso (kg/m)".
+ * Each row becomes an item priced later by a €/kg pricing rule (weight x rule price).
+ */
+function parseTechnicalTablesPdfText(
+  lines: string[],
+  fullText: string,
+  boilerplate: Set<string>
+): UniversalImportResult {
+  const items: UniversalParsedItem[] = [];
+  const documentIsFerrous = /(siderurg|acciai|ferro|ferri|s275|s355|laminat)/i.test(
+    fullText
+  );
+  let mainHeading = '';
+  let headingParts: string[] = [];
+  let headingClosed = true;
+  let weightContextLine = -1000;
+  let sheetFormats: string[] = [];
+  let sheetFormatsLine = -1000;
+
+  const isSubheading = (text: string) => {
+    const firstWord = normalizeText(text).split(' ')[0];
+    // "A SPIGOLI VIVI", "PER SERRAMENTI ...", "(COLLABORANTE)" refine the main title above.
+    return (
+      HEADING_LOWERCASE_WORDS.has(firstWord) ||
+      /^[(\-]/.test(text) ||
+      firstWord.length === 1
+    );
+  };
+
+  // "TUBOLARI PER SERRAMENTI" + "PER SERRAMENTI ZINCATI" -> "TUBOLARI PER SERRAMENTI ZINCATI"
+  const joinHeadings = (main: string, sub: string) => {
+    const mainWords = main.split(/\s+/);
+    const subWords = sub.split(/\s+/);
+    for (
+      let overlap = Math.min(mainWords.length, subWords.length);
+      overlap > 0;
+      overlap--
+    ) {
+      const tail = mainWords.slice(-overlap).join(' ').toLowerCase();
+      const head = subWords.slice(0, overlap).join(' ').toLowerCase();
+      if (tail === head) return [...mainWords, ...subWords.slice(overlap)].join(' ');
+    }
+    return `${main} ${sub}`;
+  };
+
+  const currentHeading = () => {
+    const group = headingParts.join(' ');
+    if (!group) return '';
+    return isSubheading(group) && mainHeading ? joinHeadings(mainHeading, group) : group;
+  };
+
+  lines.forEach((line, index) => {
+    const normalized = normalizeText(line);
+    // Table headers repeat on every page, so they are read here even if boilerplate.
+    if (/\bpeso\b/.test(normalized) || /kg\s*\.?\s*\/\s*m/.test(normalized)) {
+      weightContextLine = index;
+    }
+
+    if (isMostlyUppercaseHeading(line) && !boilerplate.has(normalized)) {
+      const text = line.trim();
+      // A subheading always starts its own group, so siblings ("A SPIGOLI TONDI",
+      // "A SPIGOLI VIVI") replace each other instead of piling up.
+      if (headingClosed || isSubheading(text)) headingParts = [];
+      headingParts.push(text);
+      headingParts = headingParts.slice(-2);
+      headingClosed = false;
+      if (!isSubheading(headingParts[0])) mainHeading = headingParts.join(' ');
+      return;
+    }
+    headingClosed = true;
+
+    const cells = line
+      .split(/\t+/)
+      .map((cell) => cell.trim())
+      .filter(Boolean);
+
+    if (cells.length >= 2 && cells.every((cell) => SHEET_FORMAT_RE.test(cell))) {
+      sheetFormats = cells.map((cell) => cell.replace(/\s*[x×]\s*/gi, ' x '));
+      sheetFormatsLine = index;
+      return;
+    }
+
+    const sheetThickness = SHEET_THICKNESS_RE.exec(cells[0] || '');
+    if (sheetThickness) {
+      if (index - sheetFormatsLine > 30 || !sheetFormats.length || !headingParts.length)
+        {return;}
+      const thicknessMm = (parseLocalizedNumber(sheetThickness[1]) || 0) / 10;
+      const heading = toSentenceCase(currentHeading());
+      cells.slice(1, sheetFormats.length + 1).forEach((cell, formatIndex) => {
+        const sheetWeight = parseLocalizedNumber(cell);
+        if (sheetWeight === null || sheetWeight <= 0 || sheetWeight > 5000) return;
+        items.push({
+          description: `${heading} sp. ${String(thicknessMm).replace('.', ',')} mm ${sheetFormats[formatIndex]} - ${String(sheetWeight).replace('.', ',')} kg (prezzo a foglio)`,
+          unit_price: 0,
+          markup_percent: 0,
+          category: heading.slice(0, 100),
+          pricing_source: 'needs_reference',
+          pricing_status: 'needs_reference',
+          pricing_basis_unit: 'kg',
+          pricing_basis_quantity: sheetWeight,
+          inferred_rule_key: documentIsFerrous
+            ? 'metal_ferrous'
+            : inferRuleKey({ description: heading }),
+          extracted_measurements: { kg: sheetWeight },
+        });
+      });
+      return;
+    }
+
+    if (cells.length < 2 || cells.length > MAX_TECHNICAL_CELLS) return;
+    if (!cells.every((cell) => DIMENSION_CELL_RE.test(cell) || INCH_CELL_RE.test(cell)))
+      {return;}
+    if (INCH_CELL_RE.test(cells[cells.length - 1])) return;
+    // Only rows inside a "peso (kg/m)" table: elsewhere numbers could mean anything.
+    if (index - weightContextLine > 40 || !headingParts.length) return;
+
+    const weight = parseLocalizedNumber(cells[cells.length - 1]);
+    if (weight === null || weight <= 0 || weight > MAX_WEIGHT_KG_PER_M) return;
+    const dimensionCells = cells.slice(0, -1).map(formatDimensionCell);
+    // Wide tables (beams, tubes) start with the designation ("HEA 100", "DN 15"):
+    // name the item by it and keep the other sizes in brackets.
+    const dimensions =
+      dimensionCells.length >= 4
+        ? `${dimensionCells[0]} (${dimensionCells.slice(1).join(' x ')})`
+        : `${dimensionCells.join(' x ')} mm`;
+
+    const heading = toSentenceCase(currentHeading());
+    const ruleFromHeading = inferRuleKey({ description: heading });
+    const inferredRuleKey =
+      ruleFromHeading === 'metal_ferrous' || ruleFromHeading === 'metal_nonferrous'
+        ? ruleFromHeading
+        : documentIsFerrous
+          ? 'metal_ferrous'
+          : ruleFromHeading;
+
+    items.push({
+      description: `${heading} ${dimensions} - ${String(weight).replace('.', ',')} kg/m (prezzo al metro)`,
+      unit_price: 0,
+      markup_percent: 0,
+      category: heading.slice(0, 100),
+      pricing_source: 'needs_reference',
+      pricing_status: 'needs_reference',
+      pricing_basis_unit: 'kg',
+      pricing_basis_quantity: weight,
+      inferred_rule_key: inferredRuleKey,
+      extracted_measurements: { kg: weight },
+    });
+  });
+
+  return {
+    items,
+    summary: {
+      totalRows: lines.length,
+      parsedRows: items.length,
+      skippedRows: 0,
+      normalizedPriceRows: 0,
+      unitDetectedRows: items.length,
+      pendingReferenceRows: items.length,
+    },
+  };
 }
 
 function countLetters(value: string): number {
@@ -1528,7 +1856,10 @@ function parseLineBasedPdfText(rawLines: string[]): UniversalImportResult {
         .replace(/^[-–:]\s*/, '')
         .trim();
 
-      if (countLetters(rest) >= 3 && !PDF_UM_ONLY_RE.test(rest)) {
+      const realWords = rest
+        .split(/\s+/)
+        .filter((word) => countLetters(word) >= 2).length;
+      if (realWords >= 2 && !PDF_UM_ONLY_RE.test(rest)) {
         pushItem({ code, text: rest, price, unit: null });
       } else if (pending && (PDF_UM_ONLY_RE.test(rest) || (!rest && pending.code))) {
         // Price row of the item above: it must carry a unit ("Cad", "m") or belong to a coded item,

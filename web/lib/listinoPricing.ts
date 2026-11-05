@@ -1,13 +1,46 @@
 import { supabaseAdmin } from './supabase-server';
-import type { UniversalImportResult, UniversalParsedItem } from './listinoUniversalImport';
+import type {
+  UniversalImportResult,
+  UniversalParsedItem,
+} from './listinoUniversalImport';
 
 export const PRICING_RULE_PRESETS = [
-  { rule_key: 'metal_ferrous', label: 'Ferro / acciaio', reference_unit: 'kg', keywords: ['ferro', 'acciaio', 'lamiera', 'trave'] },
-  { rule_key: 'metal_nonferrous', label: 'Rame / metalli non ferrosi', reference_unit: 'kg', keywords: ['rame', 'ottone', 'alluminio'] },
-  { rule_key: 'electric_cable', label: 'Cavi elettrici', reference_unit: 'm', keywords: ['cavo', 'guaina', 'corrugato'] },
-  { rule_key: 'piping', label: 'Tubazioni / raccordi', reference_unit: 'm', keywords: ['tubo', 'raccordo', 'tubazioni'] },
-  { rule_key: 'paint_chemical', label: 'Vernici / chimici', reference_unit: 'l', keywords: ['vernice', 'resina', 'smalto'] },
-  { rule_key: 'wood_panel', label: 'Legno / pannelli', reference_unit: 'm2', keywords: ['legno', 'pannello', 'multistrato'] },
+  {
+    rule_key: 'metal_ferrous',
+    label: 'Ferro / acciaio',
+    reference_unit: 'kg',
+    keywords: ['ferro', 'acciaio', 'lamiera', 'trave'],
+  },
+  {
+    rule_key: 'metal_nonferrous',
+    label: 'Rame / metalli non ferrosi',
+    reference_unit: 'kg',
+    keywords: ['rame', 'ottone', 'alluminio'],
+  },
+  {
+    rule_key: 'electric_cable',
+    label: 'Cavi elettrici',
+    reference_unit: 'm',
+    keywords: ['cavo', 'guaina', 'corrugato'],
+  },
+  {
+    rule_key: 'piping',
+    label: 'Tubazioni / raccordi',
+    reference_unit: 'm',
+    keywords: ['tubo', 'raccordo', 'tubazioni'],
+  },
+  {
+    rule_key: 'paint_chemical',
+    label: 'Vernici / chimici',
+    reference_unit: 'l',
+    keywords: ['vernice', 'resina', 'smalto'],
+  },
+  {
+    rule_key: 'wood_panel',
+    label: 'Legno / pannelli',
+    reference_unit: 'm2',
+    keywords: ['legno', 'pannello', 'multistrato'],
+  },
 ];
 
 type ResolvedItem = UniversalParsedItem & {
@@ -59,7 +92,9 @@ function roundMoney(value: number): number {
   return Number(value.toFixed(6));
 }
 
-function splitReferenceKey(key: string): { ruleKey: string; referenceUnit: string } | null {
+function splitReferenceKey(
+  key: string
+): { ruleKey: string; referenceUnit: string } | null {
   const separatorIndex = key.lastIndexOf('::');
   if (separatorIndex <= 0) return null;
 
@@ -70,11 +105,15 @@ function splitReferenceKey(key: string): { ruleKey: string; referenceUnit: strin
 }
 
 function inferPresetRuleKey(item: UniversalParsedItem): string | null {
-  const haystack = normalizePricingText([item.description, item.category].filter(Boolean).join(' '));
+  const haystack = normalizePricingText(
+    [item.description, item.category].filter(Boolean).join(' ')
+  );
   if (!haystack) return null;
 
   for (const preset of PRICING_RULE_PRESETS) {
-    if (preset.keywords.some((keyword) => haystack.includes(normalizePricingText(keyword)))) {
+    if (
+      preset.keywords.some((keyword) => haystack.includes(normalizePricingText(keyword)))
+    ) {
       return preset.rule_key;
     }
   }
@@ -165,7 +204,10 @@ async function loadStoredReferenceRules(profileId: string): Promise<Map<string, 
     return new Map(
       [...(globalRules || []), ...(profileRules || [])]
         .filter((row) => Number(row.reference_price) > 0)
-        .map((row) => [`${row.rule_key}::${row.reference_unit}`, Number(row.reference_price)])
+        .map((row) => [
+          `${row.rule_key}::${row.reference_unit}`,
+          Number(row.reference_price),
+        ])
     );
   } catch {
     return new Map();
@@ -179,7 +221,8 @@ function resolveWithReference(
 ): ResolvedItem | UnresolvedItem {
   if (item.pricing_status === 'resolved' && item.unit_price > 0) {
     const source =
-      item.pricing_source === 'derived_reference' || item.pricing_source === 'reference_rule'
+      item.pricing_source === 'derived_reference' ||
+      item.pricing_source === 'reference_rule'
         ? item.pricing_source
         : 'file';
     return {
@@ -190,7 +233,11 @@ function resolveWithReference(
     };
   }
 
-  if (!item.pricing_basis_unit || !item.pricing_basis_quantity || item.pricing_basis_quantity <= 0) {
+  if (
+    !item.pricing_basis_unit ||
+    !item.pricing_basis_quantity ||
+    item.pricing_basis_quantity <= 0
+  ) {
     return {
       ...item,
       pricing_source: 'needs_reference',
@@ -224,7 +271,8 @@ function resolveWithReference(
     if (storedReference && storedReference > 0) {
       return {
         ...item,
-        inferred_rule_key: item.inferred_rule_key || inferredPresetRuleKey || lookupKey || null,
+        inferred_rule_key:
+          item.inferred_rule_key || inferredPresetRuleKey || lookupKey || null,
         unit_price: roundMoney(storedReference * item.pricing_basis_quantity),
         pricing_source: 'reference_rule',
         pricing_status: 'resolved',
@@ -233,10 +281,19 @@ function resolveWithReference(
   }
 
   const uniqueStoredRule = findUniqueRuleForUnit(storedRules, item.pricing_basis_unit);
-  if (uniqueStoredRule && uniqueStoredRule.price > 0) {
+  // The "only rule for this unit" fallback must not price aluminium with the steel
+  // €/kg rule: skip it when the item clearly belongs to a different preset.
+  const explicitPresetKey = presetForRuleKey(item.inferred_rule_key)?.rule_key || null;
+  const conflictsWithItemFamily = Boolean(
+    explicitPresetKey &&
+    uniqueStoredRule &&
+    explicitPresetKey !== uniqueStoredRule.ruleKey
+  );
+  if (uniqueStoredRule && uniqueStoredRule.price > 0 && !conflictsWithItemFamily) {
     return {
       ...item,
-      inferred_rule_key: item.inferred_rule_key || inferredPresetRuleKey || uniqueStoredRule.ruleKey,
+      inferred_rule_key:
+        item.inferred_rule_key || inferredPresetRuleKey || uniqueStoredRule.ruleKey,
       unit_price: roundMoney(uniqueStoredRule.price * item.pricing_basis_quantity),
       pricing_source: 'reference_rule',
       pricing_status: 'resolved',
@@ -273,9 +330,14 @@ export async function resolveImportPricing(params: {
     items: resolvedItems,
     unresolvedItems,
     diagnostics: {
-      resolvedFromFile: resolvedItems.filter((item) => item.pricing_source === 'file').length,
-      resolvedFromDerived: resolvedItems.filter((item) => item.pricing_source === 'derived_reference').length,
-      resolvedFromRule: resolvedItems.filter((item) => item.pricing_source === 'reference_rule').length,
+      resolvedFromFile: resolvedItems.filter((item) => item.pricing_source === 'file')
+        .length,
+      resolvedFromDerived: resolvedItems.filter(
+        (item) => item.pricing_source === 'derived_reference'
+      ).length,
+      resolvedFromRule: resolvedItems.filter(
+        (item) => item.pricing_source === 'reference_rule'
+      ).length,
       unresolved: unresolvedItems.length,
       unresolvedExamples: unresolvedItems.slice(0, 5).map((item) => item.description),
       recommendedRules: Array.from(
@@ -283,7 +345,8 @@ export async function resolveImportPricing(params: {
           const ruleKey = item.inferred_rule_key || 'generic';
           const preset = presetForRuleKey(ruleKey);
           const label = preset?.label || item.category || 'Regola personalizzata';
-          const referenceUnit = item.pricing_basis_unit || preset?.reference_unit || 'pcs';
+          const referenceUnit =
+            item.pricing_basis_unit || preset?.reference_unit || 'pcs';
           const key = `${ruleKey}::${referenceUnit}`;
           acc.set(key, {
             rule_key: ruleKey,

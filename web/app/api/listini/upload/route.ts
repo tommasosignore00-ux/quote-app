@@ -1,12 +1,23 @@
 import { NextResponse } from 'next/server';
-import { getRequestUser, unauthorizedResponse, forbiddenResponse, isOwnProfile } from '../../../../lib/apiAuth';
+import {
+  getRequestUser,
+  unauthorizedResponse,
+  forbiddenResponse,
+  isOwnProfile,
+} from '../../../../lib/apiAuth';
 import path from 'path';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import { LISTINO_SOURCE_BUCKET } from '../../../../lib/listinoSourceStorage';
-import { getActiveDebugRunId, reportDebugEvent } from '../../../../lib/listinoDebugShared';
+import {
+  getActiveDebugRunId,
+  reportDebugEvent,
+} from '../../../../lib/listinoDebugShared';
 import { processListinoImport } from '../../../../lib/listinoImportShared';
 
 const supabase = supabaseAdmin;
+
+// PDF extraction, OCR and AI fallbacks on large files exceed the default timeout on Vercel.
+export const maxDuration = 300;
 
 export async function POST(req: Request) {
   try {
@@ -23,7 +34,7 @@ export async function POST(req: Request) {
     let sourceOnly = false;
 
     if (requestContentType.includes('application/json')) {
-      const payload = await req.json() as {
+      const payload = (await req.json()) as {
         fileBase64?: string;
         storagePath?: string;
         fileName?: string;
@@ -59,7 +70,10 @@ export async function POST(req: Request) {
           .download(storagePath);
 
         if (sourceDownload.error) {
-          return NextResponse.json({ error: sourceDownload.error.message }, { status: 500 });
+          return NextResponse.json(
+            { error: sourceDownload.error.message },
+            { status: 500 }
+          );
         }
 
         arrayBuffer = await sourceDownload.data.arrayBuffer();

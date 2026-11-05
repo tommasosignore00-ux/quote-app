@@ -199,6 +199,10 @@ async function categorizeAllRows(params: {
   return { updates, chunkCount: chunks.length };
 }
 
+// Reprocessing a large PDF, saving hundreds of rows and categorizing them can take
+// well over the default function timeout on Vercel.
+export const maxDuration = 300;
+
 export async function POST(req: Request) {
   const runId = getActiveDebugRunId('ai-organize');
   try {
@@ -486,16 +490,33 @@ export async function POST(req: Request) {
       });
     }
 
-    const { updates, chunkCount } = await categorizeAllRows({
-      listinoName: listino.name,
-      rows: sourceRows.map((item) => ({
-        id: item.id,
-        description: item.description,
-        category: item.category || null,
-      })),
-    });
-
-    const updatedCount = await applyListinoCategories({ listinoId, profileId, updates });
+    // Categories are a nicety: if OpenAI fails the imported items must still be reported.
+    let warning: string | null = null;
+    let updatedCount = 0;
+    let chunkCount = 0;
+    try {
+      const categorized = await categorizeAllRows({
+        listinoName: listino.name,
+        rows: sourceRows.map((item) => ({
+          id: item.id,
+          description: item.description,
+          category: item.category || null,
+        })),
+      });
+      chunkCount = categorized.chunkCount;
+      updatedCount = await applyListinoCategories({
+        listinoId,
+        profileId,
+        updates: categorized.updates,
+      });
+    } catch (categorizeError) {
+      console.warn('AI categorization failed:', categorizeError);
+      warning =
+        `Categorie AI non aggiornate: ${(categorizeError as Error).message || 'errore AI'}`.slice(
+          0,
+          300
+        );
+    }
 
     await reportDebugEvent({
       runId,
@@ -519,6 +540,7 @@ export async function POST(req: Request) {
       aiFeedback: sourceMetadata?.aiFeedback || null,
       pricingDiagnostics,
       chunkCount,
+      warning,
     });
   } catch (err) {
     await reportDebugEvent({

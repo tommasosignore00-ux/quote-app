@@ -91,6 +91,49 @@ describe('resolveImportPricing', () => {
     expect(result.diagnostics.resolvedFromRule).toBe(1);
   });
 
+  it('does not price aluminium with the only (steel) €/kg rule', async () => {
+    mockStoredRules({
+      profileRules: [
+        {
+          rule_key: 'metal_ferrous',
+          reference_unit: 'kg',
+          reference_price: 1.2,
+          active: true,
+        },
+      ],
+    });
+
+    const result = await resolveImportPricing({
+      profileId: 'profile-1',
+      parsed: {
+        items: [
+          {
+            description: 'Barre quadre in alluminio 20 mm - 1,08 kg/m',
+            unit_price: 0,
+            markup_percent: 0,
+            category: 'Barre quadre in alluminio',
+            pricing_source: 'needs_reference',
+            pricing_status: 'needs_reference',
+            pricing_basis_unit: 'kg',
+            pricing_basis_quantity: 1.08,
+            inferred_rule_key: 'metal_nonferrous',
+          },
+        ],
+        summary: {
+          totalRows: 1,
+          parsedRows: 1,
+          skippedRows: 0,
+          normalizedPriceRows: 0,
+          unitDetectedRows: 1,
+          pendingReferenceRows: 1,
+        },
+      },
+    });
+
+    expect(result.items).toHaveLength(0);
+    expect(result.diagnostics.unresolved).toBe(1);
+  });
+
   it('does not guess when multiple active rules share the same unit', async () => {
     mockStoredRules({
       profileRules: [

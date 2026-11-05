@@ -175,3 +175,94 @@ describe('parseUniversalPdfText on real-world PDF layouts', () => {
     ]);
   });
 });
+
+describe('parseUniversalPdfText on technical catalogues without prices', () => {
+  const page = (n: number, body: string[]) => [
+    `-- ${n} of 9 --`,
+    ...body,
+    'Tel. 0444 000000',
+    'Fax 0444 000001',
+    'LAMINATI',
+    'TRAVI E ROTAIE',
+  ];
+
+  it('turns weight tables and sheet matrices into items priced by €/kg rules', () => {
+    const text = [
+      ...page(1, [
+        'FERRI A ELLE',
+        'A SPIGOLI VIVI',
+        'dimensioni',
+        'peso',
+        '(kg/m)',
+        '30 x 20 x 4 \t1,45',
+        '40 x 20 x 5 \t2,17',
+      ]),
+      ...page(2, [
+        'TRAVI HEA',
+        'profilo \tpeso',
+        '(kg/m)',
+        '100 \t96 \t100 \t5,0 \t8,0 \t12,0 \t16,7',
+      ]),
+      ...page(3, [
+        'LAMIERE STRIATE',
+        'spessore',
+        'dimensioni (mm)',
+        '1000 x 2000 \t1250 x 2500',
+        'mm / 10 \tpeso / kg',
+        '30/10 \t57,2 \t89,4',
+      ]),
+      ...page(4, [
+        'TUBI ZINCATI',
+        'ø esterno \tspessore \tkg/m',
+        '15 \t1/2 \t21,3 \t2,6 \t1,28',
+      ]),
+      ...page(5, ['acciaio S275JR']),
+      ...page(6, []),
+      ...page(7, []),
+    ].join('\n');
+
+    const result = parseUniversalPdfText(text);
+    expect(
+      result.items.map((i) => [
+        i.description,
+        i.pricing_basis_quantity,
+        i.inferred_rule_key,
+      ])
+    ).toEqual([
+      [
+        'Ferri a elle a spigoli vivi 30 x 20 x 4 mm - 1,45 kg/m (prezzo al metro)',
+        1.45,
+        'metal_ferrous',
+      ],
+      [
+        'Ferri a elle a spigoli vivi 40 x 20 x 5 mm - 2,17 kg/m (prezzo al metro)',
+        2.17,
+        'metal_ferrous',
+      ],
+      [
+        'Travi HEA 100 (96 x 100 x 5,0 x 8,0 x 12,0) - 16,7 kg/m (prezzo al metro)',
+        16.7,
+        'metal_ferrous',
+      ],
+      [
+        'Lamiere striate sp. 3 mm 1000 x 2000 - 57,2 kg (prezzo a foglio)',
+        57.2,
+        'metal_ferrous',
+      ],
+      [
+        'Lamiere striate sp. 3 mm 1250 x 2500 - 89,4 kg (prezzo a foglio)',
+        89.4,
+        'metal_ferrous',
+      ],
+      [
+        'Tubi zincati 15 (1/2" x 21,3 x 2,6) - 1,28 kg/m (prezzo al metro)',
+        1.28,
+        'metal_ferrous',
+      ],
+    ]);
+    expect(
+      result.items.every((i) => i.pricing_basis_unit === 'kg' && i.unit_price === 0)
+    ).toBe(true);
+    expect(result.items.some((i) => /tel|fax/i.test(i.description))).toBe(false);
+  });
+});

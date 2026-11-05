@@ -1039,8 +1039,28 @@ export default function ListiniPage() {
         if (payload?.aiFeedback) {
           toast(payload.aiFeedback, { duration: 8000, icon: 'ℹ️' });
         }
+        const missingRules = Array.isArray(payload?.pricingDiagnostics?.recommendedRules)
+          ? payload.pricingDiagnostics.recommendedRules
+              .slice(0, 3)
+              .map(
+                (rule: any) =>
+                  `${rule.label} (€/${rule.reference_unit}) per ${rule.missingCount} voci`
+              )
+          : [];
+        if (missingRules.length) {
+          toast(
+            `Imposta in "Regole prezzo": ${missingRules.join(', ')}. Poi rilancia "Riorganizza con AI".`,
+            {
+              duration: 12000,
+              icon: '🧠',
+            }
+          );
+        }
       } else {
         toast.success(`AI completata: ${payload.updatedCount} voci aggiornate`);
+      }
+      if (payload?.warning) {
+        toast(payload.warning, { duration: 8000, icon: '⚠️' });
       }
       await fetchItems(listinoId);
       await fetchSourceInfo(listinoId, profileId);

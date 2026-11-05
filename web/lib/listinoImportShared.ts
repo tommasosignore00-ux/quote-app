@@ -894,6 +894,15 @@ function shouldRunPdfAiFallback(
   sourceText: string
 ): boolean {
   const priced = countPricedItems(items);
+  // Technical catalogues without prices: rows with a weight/length are already
+  // usable through pricing rules, so the AI would only add noise and latency.
+  const priceable = items.filter(
+    (item) =>
+      item.unit_price <= 0 &&
+      item.pricing_basis_unit &&
+      (item.pricing_basis_quantity || 0) > 0
+  ).length;
+  if (priceable >= PDF_AI_FALLBACK_MIN_PRICED_ROWS * 4) return false;
   if (priced < PDF_AI_FALLBACK_MIN_PRICED_ROWS) return true;
   const orphans = countOrphanAmountLines(sourceText);
   return orphans >= 5 && orphans > priced * 0.2;
