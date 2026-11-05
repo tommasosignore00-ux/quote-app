@@ -81,18 +81,6 @@ async function extractPdfText(buffer: Buffer) {
   }
 }
 
-function isPdfParserFatalError(error: unknown): boolean {
-  const message = String((error as Error)?.message || error || '').toLowerCase();
-  return (
-    /expected pattern/.test(message) ||
-    /invalid pdf/.test(message) ||
-    /pdf parse/.test(message) ||
-    /parser/.test(message) ||
-    /defineproperty/.test(message) ||
-    /non-object/.test(message)
-  );
-}
-
 function runPdfSubprocess(
   scriptName: 'extract-pdf-text.cjs' | 'render-pdf-pages.cjs',
   args: string[],
@@ -198,9 +186,8 @@ async function extractPdfTextWithFallback(buffer: Buffer): Promise<{
     }
     inlineProducedEmpty = true;
   } catch (inlineError) {
-    if (!isPdfParserFatalError(inlineError)) {
-      throw inlineError;
-    }
+    // Any in-process failure (worker setup, bundler/runtime quirks, malformed PDF)
+    // falls back to the standalone extractor instead of giving up on the file.
     inlineFailureError = inlineError;
   }
 
@@ -862,8 +849,9 @@ function readWorksheetRows(worksheet: XLSX.WorkSheet): unknown[][] {
   return formatted.map((row, rowIndex) =>
     row.map((cell, colIndex) => {
       const rawCell = raw[rowIndex]?.[colIndex];
-      if (typeof rawCell === 'number' && !String(cell ?? '').includes('%'))
-        {return rawCell;}
+      if (typeof rawCell === 'number' && !String(cell ?? '').includes('%')) {
+        return rawCell;
+      }
       return cell;
     })
   );
@@ -910,6 +898,24 @@ function shouldRunPdfAiFallback(
   return orphans >= 5 && orphans > priced * 0.2;
 }
 
+// AI steps only improve a PDF import: if OpenAI fails (bad key, quota, timeout)
+// the items read by the parser must still be saved instead of failing with 500.
+async function bestEffortAi<T>(
+  label: string,
+  run: () => Promise<T>,
+  fallback: T,
+  errors: string[]
+): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    const message = (error as Error)?.message || String(error);
+    console.warn(`Listino PDF AI step "${label}" failed:`, message);
+    errors.push(`${label}: ${message.slice(0, 200)}`);
+    return fallback;
+  }
+}
+
 function inferUploadExtension(params: {
   fileName?: string | null;
   originalFileName?: string | null;
@@ -936,8 +942,9 @@ function inferUploadExtension(params: {
   if (mimeType === 'text/csv') return 'csv';
   if (mimeType === 'text/plain') return 'txt';
   if (mimeType === 'application/vnd.ms-excel') return 'xls';
-  if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    {return 'xlsx';}
+  if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+    return 'xlsx';
+  }
   return null;
 }
 
@@ -1095,10 +1102,8 @@ export async function processListinoImport(
               buffer: pdfBuffer,
               maxPages: PDF_OCR_MAX_PAGES,
             });
-          } catch (inlineRenderError) {
-            if (!isPdfParserFatalError(inlineRenderError)) {
-              throw inlineRenderError;
-            }
+          } catch {
+            // Same as text extraction: retry rendering in a separate process on any error.
             try {
               renderTmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pdf-render-'));
               const tmpFile = path.join(renderTmpDir, 'source.pdf');
@@ -1207,12 +1212,19 @@ export async function processListinoImport(
         combinedPdfText = pdfText;
       }
 
+      const aiErrors: string[] = [];
       const runAiFallback = shouldRunPdfAiFallback(parsed.items, combinedPdfText);
       if (runAiFallback && combinedPdfText.trim()) {
-        const aiCandidates = await extractPdfCandidatesWithAi({
-          fileName: uploadedFileName,
-          sourceText: combinedPdfText,
-        });
+        const aiCandidates = await bestEffortAi(
+          'text candidates',
+          () =>
+            extractPdfCandidatesWithAi({
+              fileName: uploadedFileName,
+              sourceText: combinedPdfText,
+            }),
+          [] as UniversalParsedItem[],
+          aiErrors
+        );
 
         if (aiCandidates.length) {
           const mergedItems = mergeCandidateItems(parsed.items, aiCandidates);
@@ -1224,10 +1236,16 @@ export async function processListinoImport(
       }
 
       if (runAiFallback && renderedPdfImages.length > 0) {
-        const visionCandidates = await extractPdfCandidatesFromImagesWithAi({
-          fileName: uploadedFileName,
-          images: renderedPdfImages.slice(0, 6),
-        });
+        const visionCandidates = await bestEffortAi(
+          'vision candidates',
+          () =>
+            extractPdfCandidatesFromImagesWithAi({
+              fileName: uploadedFileName,
+              images: renderedPdfImages.slice(0, 6),
+            }),
+          [] as UniversalParsedItem[],
+          aiErrors
+        );
 
         if (visionCandidates.length) {
           const mergedItems = mergeCandidateItems(parsed.items, visionCandidates);
@@ -1314,10 +1332,12 @@ export async function processListinoImport(
           .eq('id', targetListinoId)
           .eq('profile_id', profileId)
           .maybeSingle();
-        if (existingListinoErr)
-          {return { ok: false, status: 500, error: existingListinoErr.message };}
-        if (!existingListino)
-          {return { ok: false, status: 404, error: 'Listino non trovato' };}
+        if (existingListinoErr) {
+          return { ok: false, status: 500, error: existingListinoErr.message };
+        }
+        if (!existingListino) {
+          return { ok: false, status: 404, error: 'Listino non trovato' };
+        }
       } else {
         const { data: listino, error: listinoErr } = await supabase
           .from('listini')
@@ -1332,11 +1352,22 @@ export async function processListinoImport(
       }
 
       const pricingResolution = await resolveImportPricing({ profileId, parsed });
-      aiFeedback = await summarizePdfSourceWithAi({
-        fileName: uploadedFileName,
-        sourceText: combinedPdfText,
-        parsed,
-      });
+      aiFeedback = await bestEffortAi(
+        'summary',
+        () =>
+          summarizePdfSourceWithAi({
+            fileName: uploadedFileName,
+            sourceText: combinedPdfText,
+            parsed,
+          }),
+        parsed.items.length
+          ? `PDF salvato come sorgente del listino. Ho trovato ${parsed.items.length} voci.`
+          : 'PDF salvato come sorgente del listino. Non ho trovato voci con prezzi riconoscibili.',
+        aiErrors
+      );
+      if (aiErrors.length && sourceDiagnostics[0]) {
+        sourceDiagnostics[0] = { ...sourceDiagnostics[0], aiErrors };
+      }
 
       const stored = await uploadListinoSource({
         profileId,
@@ -1467,10 +1498,12 @@ export async function processListinoImport(
         .eq('id', targetListinoId)
         .eq('profile_id', profileId)
         .maybeSingle();
-      if (existingListinoErr)
-        {return { ok: false, status: 500, error: existingListinoErr.message };}
-      if (!existingListino)
-        {return { ok: false, status: 404, error: 'Listino non trovato' };}
+      if (existingListinoErr) {
+        return { ok: false, status: 500, error: existingListinoErr.message };
+      }
+      if (!existingListino) {
+        return { ok: false, status: 404, error: 'Listino non trovato' };
+      }
     } else {
       const { data: listino, error: listinoErr } = await supabase
         .from('listini')
