@@ -117,7 +117,8 @@ export async function POST(req: Request) {
       sourceOnly,
     });
 
-    const { status, ok, ...rest } = result;
+    // storedSource holds the full PDF text and candidates: internal only, not for the client.
+    const { status, ok, storedSource: _storedSource, ...rest } = result;
     return NextResponse.json({ ok: ok || undefined, ...rest }, { status });
   } catch (err: any) {
     const runId = getActiveDebugRunId('upload-post');

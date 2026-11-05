@@ -1,5 +1,8 @@
 import { supabaseAdmin } from './supabase-server';
-import type { UniversalImportSummary, UniversalParsedItem } from './listinoUniversalImport';
+import type {
+  UniversalImportSummary,
+  UniversalParsedItem,
+} from './listinoUniversalImport';
 import type { PricingDiagnostics } from './listinoPricing';
 
 export const LISTINO_SOURCE_BUCKET = 'listini-sources';
@@ -49,12 +52,18 @@ export function buildListinoSourcePaths(params: {
 export async function ensureListinoSourceBucket() {
   const { data: buckets, error: listError } = await supabaseAdmin.storage.listBuckets();
   if (!listError) {
-    const existingBucket = (buckets || []).find((bucket) => bucket.name === LISTINO_SOURCE_BUCKET) as
-      | ({ allowed_mime_types?: string[] | null; allowedMimeTypes?: string[] | null } & Record<string, unknown>)
+    const existingBucket = (buckets || []).find(
+      (bucket) => bucket.name === LISTINO_SOURCE_BUCKET
+    ) as
+      | ({
+          allowed_mime_types?: string[] | null;
+          allowedMimeTypes?: string[] | null;
+        } & Record<string, unknown>)
       | undefined;
 
     if (existingBucket) {
-      const currentAllowedMimeTypes = existingBucket.allowed_mime_types || existingBucket.allowedMimeTypes || [];
+      const currentAllowedMimeTypes =
+        existingBucket.allowed_mime_types || existingBucket.allowedMimeTypes || [];
       const needsMimeTypeUpdate = LISTINO_SOURCE_ALLOWED_MIME_TYPES.some(
         (mimeType) => !currentAllowedMimeTypes.includes(mimeType)
       );
@@ -63,11 +72,14 @@ export async function ensureListinoSourceBucket() {
         return;
       }
 
-      const { error: updateError } = await supabaseAdmin.storage.updateBucket(LISTINO_SOURCE_BUCKET, {
-        public: false,
-        fileSizeLimit: LISTINO_SOURCE_FILE_SIZE_LIMIT,
-        allowedMimeTypes: LISTINO_SOURCE_ALLOWED_MIME_TYPES,
-      });
+      const { error: updateError } = await supabaseAdmin.storage.updateBucket(
+        LISTINO_SOURCE_BUCKET,
+        {
+          public: false,
+          fileSizeLimit: LISTINO_SOURCE_FILE_SIZE_LIMIT,
+          allowedMimeTypes: LISTINO_SOURCE_ALLOWED_MIME_TYPES,
+        }
+      );
 
       if (updateError) throw updateError;
       return;
@@ -133,16 +145,33 @@ export async function getListinoSourceMetadata(params: {
   await ensureListinoSourceBucket();
 
   const metadataPath = `${params.profileId}/${params.listinoId}/metadata.json`;
-  const result = await supabaseAdmin.storage
-    .from(LISTINO_SOURCE_BUCKET)
-    .download(metadataPath);
 
-  if (result.error) {
-    if (/not found/i.test(result.error.message)) return null;
-    throw result.error;
+  // metadata.json is overwritten in place: a plain download can be answered by the
+  // Storage CDN with the previous version. A freshly signed URL (new token each
+  // time) fetched with no-store always reads the current object.
+  let raw: string | null = null;
+  const signed = await supabaseAdmin.storage
+    .from(LISTINO_SOURCE_BUCKET)
+    .createSignedUrl(metadataPath, 60);
+  if (signed.error) {
+    if (/not found/i.test(signed.error.message)) return null;
+  } else {
+    const response = await fetch(signed.data.signedUrl, { cache: 'no-store' });
+    if (response.status === 404 || response.status === 400) return null;
+    if (response.ok) raw = await response.text();
   }
 
-  const raw = await result.data.text();
+  if (raw === null) {
+    const result = await supabaseAdmin.storage
+      .from(LISTINO_SOURCE_BUCKET)
+      .download(metadataPath);
+    if (result.error) {
+      if (/not found/i.test(result.error.message)) return null;
+      throw result.error;
+    }
+    raw = await result.data.text();
+  }
+
   if (!raw.trim()) return null;
   return JSON.parse(raw) as ListinoSourceMetadata;
 }

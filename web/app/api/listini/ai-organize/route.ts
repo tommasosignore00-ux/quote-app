@@ -338,7 +338,11 @@ export async function POST(req: Request) {
       }
 
       importedCount += Number(rebuildResult.inserted || 0);
-      sourceMetadata = await getListinoSourceMetadata({ profileId, listinoId });
+      // Use the metadata returned by the rebuild: reading metadata.json back right after
+      // writing it can return the old cached copy (0 candidates -> "0 voci aggiornate").
+      sourceMetadata =
+        rebuildResult.storedSource ||
+        (await getListinoSourceMetadata({ profileId, listinoId }));
       candidateItems = sourceMetadata?.candidateItems || [];
       pricingDiagnostics =
         sourceMetadata?.pricingDiagnostics || rebuildResult.pricingDiagnostics || null;

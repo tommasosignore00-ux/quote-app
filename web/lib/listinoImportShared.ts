@@ -19,7 +19,11 @@ import {
   type PricingResolutionResult,
   resolveImportPricing,
 } from './listinoPricing';
-import { LISTINO_SOURCE_BUCKET, uploadListinoSource } from './listinoSourceStorage';
+import {
+  LISTINO_SOURCE_BUCKET,
+  uploadListinoSource,
+  type ListinoSourceMetadata,
+} from './listinoSourceStorage';
 import { bulkGenerateEmbeddingsForListino } from './bulkGenerateEmbeddings';
 import { saveListinoItems } from './listinoItemsStore';
 import {
@@ -52,6 +56,9 @@ export type ProcessListinoImportResult = {
   sourceStored?: boolean;
   aiFeedback?: string | null;
   sourceInfo?: { fileName: string; mimeType: string; uploadedAt: string } | null;
+  /** Server-side only: the metadata just written, so callers don't re-read it from
+   *  Storage (its CDN can serve the previous version for a while). */
+  storedSource?: ListinoSourceMetadata;
 };
 
 export type ProcessListinoImportParams = {
@@ -1428,6 +1435,7 @@ export async function processListinoImport(
           sourceStored: true,
           aiFeedback,
           sourceInfo: storedMetadata,
+          storedSource: stored,
         };
       }
 
@@ -1456,6 +1464,7 @@ export async function processListinoImport(
         sourceStored: true,
         aiFeedback,
         sourceInfo: storedMetadata,
+        storedSource: stored,
       };
     } else {
       parsed = parseUniversalCsvText(decodeTextFile(arrayBuffer));
