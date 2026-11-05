@@ -337,6 +337,7 @@ export async function applyGroupPricesToListino(params: {
     listinoId: params.listinoId,
     profileId: params.profileId,
     items: priced,
+    skipSupplierDiscount: true,
   });
   if (saved.inserted || saved.updated) scheduleEmbeddingsForListino(params.listinoId);
 

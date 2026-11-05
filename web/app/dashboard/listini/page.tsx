@@ -172,8 +172,9 @@ function formatEuro(value: number): string {
 
 /** "12 prezzi aumentati, 3 diminuiti ... es. Tubo rame 12: 4,00 → 4,60 € (+15%)". */
 function describeListinoChanges(changes?: ListinoChangesSummary | null): string | null {
-  if (!changes || !(changes.increased || changes.decreased || changes.missing))
-    {return null;}
+  if (!changes || !(changes.increased || changes.decreased || changes.missing)) {
+    return null;
+  }
   const parts = [
     changes.increased ? `${changes.increased} prezzi aumentati` : null,
     changes.decreased ? `${changes.decreased} diminuiti` : null,
@@ -357,6 +358,16 @@ export default function ListiniPage() {
   const [pricingGroups, setPricingGroups] = useState<PricingGroupRow[]>([]);
   const [groupPriceDrafts, setGroupPriceDrafts] = useState<Record<string, string>>({});
   const [savingGroupPrices, setSavingGroupPrices] = useState(false);
+  // Supplier discount and markup per category (any listino).
+  const [showPricingSettings, setShowPricingSettings] = useState(false);
+  const [discountDraft, setDiscountDraft] = useState('');
+  const [categoryMarkupRows, setCategoryMarkupRows] = useState<
+    Array<{ category: string; itemCount: number; markupPercent: number | null }>
+  >([]);
+  const [categoryMarkupDrafts, setCategoryMarkupDrafts] = useState<
+    Record<string, string>
+  >({});
+  const [savingPricingSettings, setSavingPricingSettings] = useState(false);
 
   const fetchListini = async () => {
     const {
@@ -417,6 +428,76 @@ export default function ListiniPage() {
     } catch {
       setPricingGroups([]);
       setGroupPriceDrafts({});
+    }
+  };
+
+  const loadPricingSettings = async () => {
+    if (!selectedListino) return;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    try {
+      const res = await fetch(
+        `/api/listini/settings?listinoId=${encodeURIComponent(selectedListino.id)}&profileId=${encodeURIComponent(user.id)}`
+      );
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.error || 'Lettura impostazioni non riuscita');
+      setDiscountDraft(formatGroupPrice(payload.supplierDiscountPercent || null));
+      setCategoryMarkupRows(payload.categories || []);
+      setCategoryMarkupDrafts(
+        Object.fromEntries(
+          (payload.categories || []).map(
+            (row: { category: string; markupPercent: number | null }) => [
+              row.category,
+              formatGroupPrice(row.markupPercent),
+            ]
+          )
+        )
+      );
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  };
+
+  const togglePricingSettings = async () => {
+    const next = !showPricingSettings;
+    setShowPricingSettings(next);
+    if (next) await loadPricingSettings();
+  };
+
+  const handleSavePricingSettings = async () => {
+    if (!selectedListino) return;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    setSavingPricingSettings(true);
+    try {
+      const res = await fetch('/api/listini/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          listinoId: selectedListino.id,
+          profileId: user.id,
+          supplierDiscountPercent: discountDraft,
+          categoryMarkups: categoryMarkupRows.map((row) => ({
+            category: row.category,
+            markupPercent: categoryMarkupDrafts[row.category] ?? '',
+          })),
+        }),
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.error || 'Salvataggio non riuscito');
+      toast.success(
+        `Impostazioni salvate${payload.repricedItems ? `: ${payload.repricedItems} prezzi netti ricalcolati` : ''}`
+      );
+      await fetchItems(selectedListino.id);
+      await loadPricingSettings();
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setSavingPricingSettings(false);
     }
   };
 
@@ -1052,7 +1133,10 @@ export default function ListiniPage() {
                 className={`p-2 rounded flex items-center justify-between group ${selectedListino?.id === l.id ? 'bg-primary text-white' : 'hover:bg-slate-100'}`}
               >
                 <span
-                  onClick={() => setSelectedListino(l)}
+                  onClick={() => {
+                    setShowPricingSettings(false);
+                    setSelectedListino(l);
+                  }}
                   className="cursor-pointer flex-1"
                 >
                   {l.name}
@@ -1113,6 +1197,92 @@ export default function ListiniPage() {
                   ) : null}
                 </div>
               )}
+              <div className="mb-4 rounded-lg border border-slate-200 p-3 text-sm">
+                <button
+                  type="button"
+                  onClick={togglePricingSettings}
+                  className="flex w-full items-center justify-between font-medium text-slate-800"
+                  aria-expanded={showPricingSettings}
+                >
+                  <span>Sconto fornitore e ricarichi</span>
+                  <span className="text-slate-500">
+                    {showPricingSettings ? '▲' : '▼'}
+                  </span>
+                </button>
+                {showPricingSettings && (
+                  <div className="mt-3 space-y-3">
+                    <label className="flex items-center justify-between gap-3">
+                      <span className="text-slate-700">
+                        Sconto fornitore sul prezzo di listino
+                        <span className="block text-xs text-slate-500">
+                          Il prezzo netto delle voci diventa listino × (1 − sconto).
+                        </span>
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={discountDraft}
+                          onChange={(e) => setDiscountDraft(e.target.value)}
+                          placeholder="0"
+                          aria-label="Sconto fornitore in percentuale"
+                          className="w-20 rounded border border-slate-300 px-2 py-1 text-right"
+                        />
+                        <span className="text-slate-500">%</span>
+                      </span>
+                    </label>
+                    {categoryMarkupRows.length > 0 && (
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b text-slate-600">
+                            <th className="text-left py-1">Categoria</th>
+                            <th className="text-right py-1">Voci</th>
+                            <th className="text-right py-1">Ricarico</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {categoryMarkupRows.map((row) => (
+                            <tr key={row.category} className="border-b border-slate-100">
+                              <td className="py-1 pr-2">{row.category}</td>
+                              <td className="py-1 text-right text-slate-500">
+                                {row.itemCount}
+                              </td>
+                              <td className="py-1 text-right">
+                                <span className="inline-flex items-center gap-1">
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={categoryMarkupDrafts[row.category] ?? ''}
+                                    onChange={(e) =>
+                                      setCategoryMarkupDrafts((drafts) => ({
+                                        ...drafts,
+                                        [row.category]: e.target.value,
+                                      }))
+                                    }
+                                    placeholder="—"
+                                    aria-label={`Ricarico ${row.category} in percentuale`}
+                                    className="w-20 rounded border border-slate-300 px-2 py-1 text-right"
+                                  />
+                                  <span className="text-slate-500">%</span>
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                    <div className="flex justify-end">
+                      <button
+                        onClick={handleSavePricingSettings}
+                        className="btn-primary"
+                        disabled={savingPricingSettings}
+                      >
+                        {savingPricingSettings ? 'Salvo...' : 'Salva e ricalcola'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
               {pricingGroups.length > 0 && (
                 <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
                   <div className="flex items-start justify-between gap-3">

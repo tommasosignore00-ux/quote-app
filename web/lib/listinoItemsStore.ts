@@ -92,6 +92,46 @@ export async function fetchAllListinoRows(params: {
   return rows;
 }
 
+type ListinoPricingSettings = {
+  supplierDiscountPercent: number;
+  categoryMarkups: Map<string, number>;
+} | null;
+
+/**
+ * Supplier discount and category markups of a listino. Null when the columns do not
+ * exist yet (migration 00029 not applied): items are then saved as before.
+ */
+async function loadPricingSettings(listinoId: string): Promise<ListinoPricingSettings> {
+  try {
+    const [
+      { data: listino, error: listinoError },
+      { data: markups, error: markupsError },
+    ] = await Promise.all([
+      supabase
+        .from('listini')
+        .select('supplier_discount_percent')
+        .eq('id', listinoId)
+        .maybeSingle(),
+      supabase
+        .from('listino_category_markups')
+        .select('category, markup_percent')
+        .eq('listino_id', listinoId),
+    ]);
+    if (listinoError || markupsError) return null;
+    return {
+      supplierDiscountPercent: Number(listino?.supplier_discount_percent) || 0,
+      categoryMarkups: new Map(
+        (markups || []).map((row) => [
+          String(row.category),
+          Number(row.markup_percent) || 0,
+        ])
+      ),
+    };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Saves imported items into a listino. Re-uploading an updated price list updates
  * the price of items already present (same description) instead of duplicating them;
@@ -102,7 +142,10 @@ export async function saveListinoItems(params: {
   profileId: string;
   items: ListinoItemInput[];
   existingRows?: ExistingListinoRow[];
+  /** Prices already net for the user (e.g. "Prezzi per forma"): no supplier discount. */
+  skipSupplierDiscount?: boolean;
 }): Promise<SaveListinoItemsResult> {
+  const settings = await loadPricingSettings(params.listinoId);
   const existingRows = params.existingRows ?? (await fetchAllListinoRows(params));
   const existingByKey = new Map<string, ExistingListinoRow>();
   for (const row of existingRows) {
@@ -129,12 +172,23 @@ export async function saveListinoItems(params: {
     }
     seen.add(key);
 
+    // File price = list price; the saved unit_price is the net cost after the
+    // supplier discount, and the category markup (if set) wins over the file's.
+    const listPrice = roundPrice(item.unit_price);
+    const discount =
+      settings && !params.skipSupplierDiscount ? settings.supplierDiscountPercent : 0;
+    const categoryMarkup = settings?.categoryMarkups.get(
+      cleanCategory(item.category) || ''
+    );
     const base = {
       listino_id: params.listinoId,
       profile_id: params.profileId,
       description,
-      unit_price: roundPrice(item.unit_price),
-      markup_percent: Number((Number(item.markup_percent) || 0).toFixed(2)),
+      unit_price: roundPrice(listPrice * (1 - discount / 100)),
+      markup_percent: Number(
+        (categoryMarkup ?? (Number(item.markup_percent) || 0)).toFixed(2)
+      ),
+      ...(settings && !params.skipSupplierDiscount ? { list_price: listPrice } : {}),
     };
 
     const previousKey = normalizeListinoDescriptionKey(item.source_description);
@@ -152,13 +206,14 @@ export async function saveListinoItems(params: {
           : roundPrice(Number(existing.unit_price));
       if (oldPrice !== null && Number.isFinite(oldPrice)) {
         if (oldPrice === base.unit_price) unchanged++;
-        else
-          {priceChanges.push({
+        else {
+          priceChanges.push({
             itemId: existing.id,
             description,
             oldPrice,
             newPrice: base.unit_price,
-          });}
+          });
+        }
       }
       const renamed = normalizeListinoDescriptionKey(existing.description) !== key;
       toUpdate.push({

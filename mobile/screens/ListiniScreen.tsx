@@ -297,6 +297,12 @@ export default function ListiniScreen() {
   const [pricingGroups, setPricingGroups] = useState<PricingGroupRow[]>([]);
   const [groupPriceDrafts, setGroupPriceDrafts] = useState<Record<string, string>>({});
   const [savingGroupPrices, setSavingGroupPrices] = useState(false);
+  // Supplier discount and markup per category.
+  const [showPricingSettings, setShowPricingSettings] = useState(false);
+  const [discountDraft, setDiscountDraft] = useState('');
+  const [categoryMarkupRows, setCategoryMarkupRows] = useState<Array<{ category: string; itemCount: number; markupPercent: number | null }>>([]);
+  const [categoryMarkupDrafts, setCategoryMarkupDrafts] = useState<Record<string, string>>({});
+  const [savingPricingSettings, setSavingPricingSettings] = useState(false);
 
   const [showListinoModal, setShowListinoModal] = useState(false);
   const [newListinoName, setNewListinoName] = useState('');
@@ -419,6 +425,57 @@ export default function ListiniScreen() {
       setGroupPriceDrafts({});
     }
   }, []);
+
+  const loadPricingSettings = async () => {
+    if (!selectedListino || !profileId) return;
+    try {
+      const res = await fetch(
+        buildWebApiUrl(`/api/listini/settings?listinoId=${encodeURIComponent(selectedListino.id)}&profileId=${encodeURIComponent(profileId)}`),
+        { headers: await getWebApiAuthHeaders() }
+      );
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.error || 'Lettura impostazioni non riuscita');
+      setDiscountDraft(formatGroupPrice(payload.supplierDiscountPercent || null));
+      setCategoryMarkupRows(payload.categories || []);
+      setCategoryMarkupDrafts(
+        Object.fromEntries((payload.categories || []).map((row: { category: string; markupPercent: number | null }) => [row.category, formatGroupPrice(row.markupPercent)]))
+      );
+    } catch (err) {
+      Alert.alert(t('messages.error'), (err as Error).message);
+    }
+  };
+
+  const togglePricingSettings = async () => {
+    const next = !showPricingSettings;
+    setShowPricingSettings(next);
+    if (next) await loadPricingSettings();
+  };
+
+  const handleSavePricingSettings = async () => {
+    if (!selectedListino || !profileId) return;
+    setSavingPricingSettings(true);
+    try {
+      const res = await fetch(buildWebApiUrl('/api/listini/settings'), {
+        method: 'POST',
+        headers: await getWebApiAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          listinoId: selectedListino.id,
+          profileId,
+          supplierDiscountPercent: discountDraft,
+          categoryMarkups: categoryMarkupRows.map((row) => ({ category: row.category, markupPercent: categoryMarkupDrafts[row.category] ?? '' })),
+        }),
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.error || 'Salvataggio non riuscito');
+      await fetchItems(selectedListino.id);
+      await loadPricingSettings();
+      Alert.alert('Impostazioni salvate', payload.repricedItems ? `${payload.repricedItems} prezzi netti ricalcolati` : 'Ricarichi applicati');
+    } catch (err) {
+      Alert.alert(t('messages.error'), (err as Error).message);
+    } finally {
+      setSavingPricingSettings(false);
+    }
+  };
 
   const handleSaveGroupPrices = async () => {
     if (!selectedListino || !profileId) return;
@@ -1024,7 +1081,13 @@ export default function ListiniScreen() {
                     { backgroundColor: selected ? colors.primary : 'transparent' },
                   ]}
                 >
-                  <TouchableOpacity style={styles.listinoNameWrap} onPress={() => setSelectedListino(item)}>
+                  <TouchableOpacity
+                    style={styles.listinoNameWrap}
+                    onPress={() => {
+                      setShowPricingSettings(false);
+                      setSelectedListino(item);
+                    }}
+                  >
                     <Text style={selected ? styles.listinoSelectedText : [styles.listinoText, { color: colors.text }]}>
                       {item.name}
                     </Text>
@@ -1075,6 +1138,55 @@ export default function ListiniScreen() {
                   ) : null}
                 </View>
               ) : null}
+
+              <View style={[styles.noticeCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 12 }]}>
+                <TouchableOpacity onPress={togglePricingSettings} accessibilityRole="button" accessibilityState={{ expanded: showPricingSettings }}>
+                  <Text style={[styles.noticeTitle, { color: colors.text }]}>
+                    Sconto fornitore e ricarichi {showPricingSettings ? '▲' : '▼'}
+                  </Text>
+                </TouchableOpacity>
+                {showPricingSettings ? (
+                  <>
+                    <View style={styles.groupRow}>
+                      <Text style={[styles.groupName, { color: colors.text }]}>Sconto fornitore sul listino</Text>
+                      <TextInput
+                        value={discountDraft}
+                        onChangeText={setDiscountDraft}
+                        keyboardType="decimal-pad"
+                        placeholder="0"
+                        placeholderTextColor={colors.textTertiary}
+                        accessibilityLabel="Sconto fornitore in percentuale"
+                        style={[styles.groupInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
+                      />
+                      <Text style={[styles.noticeText, { color: colors.textSecondary }]}>%</Text>
+                    </View>
+                    {categoryMarkupRows.map((row) => (
+                      <View key={row.category} style={styles.groupRow}>
+                        <Text style={[styles.groupName, { color: colors.text }]} numberOfLines={2}>
+                          Ricarico {row.category} <Text style={{ color: colors.textTertiary }}>({row.itemCount})</Text>
+                        </Text>
+                        <TextInput
+                          value={categoryMarkupDrafts[row.category] ?? ''}
+                          onChangeText={(value) => setCategoryMarkupDrafts((drafts) => ({ ...drafts, [row.category]: value }))}
+                          keyboardType="decimal-pad"
+                          placeholder="—"
+                          placeholderTextColor={colors.textTertiary}
+                          accessibilityLabel={`Ricarico ${row.category} in percentuale`}
+                          style={[styles.groupInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
+                        />
+                        <Text style={[styles.noticeText, { color: colors.textSecondary }]}>%</Text>
+                      </View>
+                    ))}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, { backgroundColor: colors.primary, marginTop: 10, opacity: savingPricingSettings ? 0.7 : 1 }]}
+                      onPress={handleSavePricingSettings}
+                      disabled={savingPricingSettings}
+                    >
+                      <Text style={styles.actionBtnText}>{savingPricingSettings ? 'Salvo...' : 'Salva e ricalcola'}</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : null}
+              </View>
 
               {pricingGroups.length > 0 ? (
                 <View style={[styles.noticeCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 12 }]}>
