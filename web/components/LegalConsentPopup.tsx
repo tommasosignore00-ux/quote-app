@@ -11,7 +11,9 @@ type LegalDocumentType = (typeof LEGAL_DOCUMENT_TYPES)[number];
 export default function LegalConsentPopup() {
   const [showPopup, setShowPopup] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [documents, setDocuments] = useState<Array<{ id: string; type: string; version: string; content: string }>>([]);
+  const [documents, setDocuments] = useState<
+    Array<{ id: string; type: string; version: string; content: string }>
+  >([]);
   const [consent, setConsent] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -20,7 +22,9 @@ export default function LegalConsentPopup() {
 
   const checkForNewDocuments = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
 
       const { data: profile } = await supabase
@@ -45,7 +49,12 @@ export default function LegalConsentPopup() {
         })
       );
 
-      const validDocs = latestDocs.filter(Boolean) as Array<{ id: string; type: string; version: string; content: string }>;
+      const validDocs = latestDocs.filter(Boolean) as Array<{
+        id: string;
+        type: string;
+        version: string;
+        content: string;
+      }>;
 
       if (validDocs.length === 0) {
         console.log('No legal documents found');
@@ -66,11 +75,16 @@ export default function LegalConsentPopup() {
         })
       );
 
-      const hasOutdatedConsent = validDocs.some((doc, idx) => acceptedVersions[idx] !== doc.version);
+      const hasOutdatedConsent = validDocs.some(
+        (doc, idx) => acceptedVersions[idx] !== doc.version
+      );
 
       if (hasOutdatedConsent) {
         setDocuments(validDocs);
-        const initialConsent = validDocs.reduce((acc, doc) => ({ ...acc, [doc.type]: false }), {});
+        const initialConsent = validDocs.reduce(
+          (acc, doc) => ({ ...acc, [doc.type]: false }),
+          {}
+        );
         setConsent(initialConsent);
         setShowPopup(true);
       }
@@ -82,7 +96,9 @@ export default function LegalConsentPopup() {
   const handleAccept = async () => {
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
 
       const acceptances = documents.map((doc) => ({
@@ -111,7 +127,8 @@ export default function LegalConsentPopup() {
         <div className="p-6">
           <h2 className="text-xl font-bold mb-4">Aggiornamento Documenti Legali</h2>
           <p className="text-gray-600 mb-6">
-            Abbiamo aggiornato i nostri documenti legali. Per continuare, devi accettare le nuove versioni.
+            Abbiamo aggiornato i nostri documenti legali. Per continuare, devi accettare
+            le nuove versioni.
           </p>
 
           <div className="space-y-4 mb-6">
@@ -120,19 +137,24 @@ export default function LegalConsentPopup() {
                 <input
                   type="checkbox"
                   checked={consent[doc.type]}
-                  onChange={(e) => setConsent({ ...consent, [doc.type]: e.target.checked })}
+                  onChange={(e) =>
+                    setConsent({ ...consent, [doc.type]: e.target.checked })
+                  }
                   className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
                 <span className="text-sm">
                   Ho letto e accetto la nuova versione del{' '}
                   <span className="font-medium">
-                    {doc.type === 'privacy_policy' ? 'Informativa sulla Privacy' : 'Termini di Servizio'}
+                    {doc.type === 'privacy_policy'
+                      ? 'Informativa sulla Privacy'
+                      : 'Termini di Servizio'}
                   </span>{' '}
                   (v{doc.version})
                   <br />
                   <a
                     href={`/${doc.type === 'privacy_policy' ? 'privacy' : 'terms'}`}
                     target="_blank"
+                    rel="noopener noreferrer"
                     className="text-blue-600 underline text-xs"
                   >
                     Leggi il documento

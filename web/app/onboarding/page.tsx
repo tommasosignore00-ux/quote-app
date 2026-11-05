@@ -12,9 +12,24 @@ import { DEFAULT_COUNTRY_CODE, DEFAULT_LANGUAGE } from '@/lib/constants';
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_KEY!);
 
 const TUTORIAL_STEPS = [
-  { key: 'voice', icon: '🎤', title_key: 'onboarding.voice', desc_key: 'onboarding.voiceDesc' },
-  { key: 'listini', icon: '📋', title_key: 'onboarding.listini', desc_key: 'onboarding.listiniDesc' },
-  { key: 'preventivo', icon: '📄', title_key: 'onboarding.preventivo', desc_key: 'onboarding.preventivoDesc' },
+  {
+    key: 'voice',
+    icon: '🎤',
+    title_key: 'onboarding.voice',
+    desc_key: 'onboarding.voiceDesc',
+  },
+  {
+    key: 'listini',
+    icon: '📋',
+    title_key: 'onboarding.listini',
+    desc_key: 'onboarding.listiniDesc',
+  },
+  {
+    key: 'preventivo',
+    icon: '📄',
+    title_key: 'onboarding.preventivo',
+    desc_key: 'onboarding.preventivoDesc',
+  },
 ];
 
 const LEGAL_DOCUMENT_TYPES = ['privacy_policy', 'terms_of_service'] as const;
@@ -28,7 +43,9 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
-  const [selectedPlan, setSelectedPlan] = useState<'price_monthly' | 'price_yearly'>('price_monthly');
+  const [selectedPlan, setSelectedPlan] = useState<'price_monthly' | 'price_yearly'>(
+    'price_monthly'
+  );
   const [formData, setFormData] = useState({
     company_name: '',
     vat_number: '',
@@ -73,7 +90,9 @@ export default function OnboardingPage() {
     checkAuth();
   }, []);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value,
@@ -156,7 +175,9 @@ export default function OnboardingPage() {
         return;
       }
 
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      const {
+        data: { user: currentUser },
+      } = await supabase.auth.getUser();
       if (!currentUser) return;
 
       const acceptances = validDocs.map((doc) => ({
@@ -210,16 +231,20 @@ export default function OnboardingPage() {
           </p>
           <ul className="text-left space-y-3 mb-8 text-slate-300">
             <li className="flex items-center">
-              <span className="text-green-400 mr-3 text-xl">✓</span> Voice-powered quote creation
+              <span className="text-green-400 mr-3 text-xl">✓</span> Voice-powered quote
+              creation
             </li>
             <li className="flex items-center">
-              <span className="text-green-400 mr-3 text-xl">✓</span> Pensato per il mercato italiano (IVA, fatturazione elettronica)
+              <span className="text-green-400 mr-3 text-xl">✓</span> Pensato per il
+              mercato italiano (IVA, fatturazione elettronica)
             </li>
             <li className="flex items-center">
-              <span className="text-green-400 mr-3 text-xl">✓</span> Professional templates for 32 countries
+              <span className="text-green-400 mr-3 text-xl">✓</span> Professional
+              templates for 32 countries
             </li>
             <li className="flex items-center">
-              <span className="text-green-400 mr-3 text-xl">✓</span> Secure client & quote management
+              <span className="text-green-400 mr-3 text-xl">✓</span> Secure client & quote
+              management
             </li>
           </ul>
           <button
@@ -259,22 +284,22 @@ export default function OnboardingPage() {
           </div>
           <div className="flex gap-4">
             {tutorialStep > 0 && (
-              <button 
-                onClick={() => setTutorialStep(tutorialStep - 1)} 
+              <button
+                onClick={() => setTutorialStep(tutorialStep - 1)}
                 className="flex-1 py-3 px-4 rounded-lg bg-white/20 hover:bg-white/30"
               >
                 Back
               </button>
             )}
             {tutorialStep < TUTORIAL_STEPS.length - 1 ? (
-              <button 
-                onClick={() => setTutorialStep(tutorialStep + 1)} 
+              <button
+                onClick={() => setTutorialStep(tutorialStep + 1)}
                 className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition"
               >
                 Next
               </button>
             ) : (
-              <button 
+              <button
                 onClick={() => setMainStep(3)}
                 className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition"
               >
@@ -293,19 +318,27 @@ export default function OnboardingPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-6">
         <div className="max-w-lg w-full bg-white/10 backdrop-blur rounded-2xl p-8 text-white">
           <h2 className="text-2xl font-bold mb-2">Accordi Legali</h2>
-          <p className="text-slate-300 mb-6">Prima di continuare, devi accettare i nostri termini</p>
+          <p className="text-slate-300 mb-6">
+            Prima di continuare, devi accettare i nostri termini
+          </p>
 
           <div className="space-y-4">
             <label className="flex items-start gap-3">
               <input
                 type="checkbox"
                 checked={legalConsent.privacy_policy}
-                onChange={(e) => setLegalConsent({ ...legalConsent, privacy_policy: e.target.checked })}
+                onChange={(e) =>
+                  setLegalConsent({ ...legalConsent, privacy_policy: e.target.checked })
+                }
                 className="mt-1 w-5 h-5 text-blue-600 bg-white/10 border-white/20 rounded focus:ring-blue-500"
               />
               <span className="text-sm">
                 Ho letto e accetto la{' '}
-                <a href="/privacy" target="_blank" className="text-blue-400 hover:text-blue-300 underline">
+                <a
+                  href="/privacy"
+                  target="_blank"
+                  className="text-blue-400 hover:text-blue-300 underline"
+                >
                   Informativa sulla Privacy
                 </a>
               </span>
@@ -315,12 +348,18 @@ export default function OnboardingPage() {
               <input
                 type="checkbox"
                 checked={legalConsent.terms_of_service}
-                onChange={(e) => setLegalConsent({ ...legalConsent, terms_of_service: e.target.checked })}
+                onChange={(e) =>
+                  setLegalConsent({ ...legalConsent, terms_of_service: e.target.checked })
+                }
                 className="mt-1 w-5 h-5 text-blue-600 bg-white/10 border-white/20 rounded focus:ring-blue-500"
               />
               <span className="text-sm">
                 Ho letto e accetto i{' '}
-                <a href="/terms" target="_blank" className="text-blue-400 hover:text-blue-300 underline">
+                <a
+                  href="/terms"
+                  target="_blank"
+                  className="text-blue-400 hover:text-blue-300 underline"
+                >
                   Termini di Servizio
                 </a>
               </span>
@@ -375,7 +414,9 @@ export default function OnboardingPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">VAT Number (optional)</label>
+              <label className="block text-sm font-medium mb-1">
+                VAT Number (optional)
+              </label>
               <input
                 type="text"
                 name="vat_number"
@@ -388,8 +429,12 @@ export default function OnboardingPage() {
 
             <div>
               <label className="block text-sm font-medium mb-1">Country</label>
-              <div className="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-slate-300">🇮🇹 Italia</div>
-              <p className="mt-1 text-xs text-slate-400">Al momento il servizio è disponibile solo in Italia.</p>
+              <div className="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-slate-300">
+                🇮🇹 Italia
+              </div>
+              <p className="mt-1 text-xs text-slate-400">
+                Al momento il servizio è disponibile solo in Italia.
+              </p>
             </div>
           </form>
 
@@ -417,21 +462,29 @@ export default function OnboardingPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-6">
         <div className="max-w-2xl w-full">
-          <h2 className="text-3xl font-bold text-white mb-4 text-center">Choose Your Plan</h2>
-          <p className="text-slate-300 text-center mb-8">Get started with our flexible pricing</p>
+          <h2 className="text-3xl font-bold text-white mb-4 text-center">
+            Choose Your Plan
+          </h2>
+          <p className="text-slate-300 text-center mb-8">
+            Get started with our flexible pricing
+          </p>
 
           <div className="grid md:grid-cols-2 gap-6 mb-8">
             {/* Monthly */}
             <div className="bg-white/10 border border-white/20 rounded-lg p-6 hover:border-blue-500 transition">
               <h3 className="text-xl font-bold text-white mb-2">Monthly</h3>
               <p className="text-4xl font-bold text-blue-400 mb-2">€29</p>
-              <p className="text-slate-300 text-sm mb-6">/month, cancel anytime + 7 day trial</p>
+              <p className="text-slate-300 text-sm mb-6">
+                /month, cancel anytime + 7 day trial
+              </p>
               <button
                 onClick={() => handleCheckout('price_monthly')}
                 disabled={loading}
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-semibold py-2 rounded-lg transition"
               >
-                {loading && selectedPlan === 'price_monthly' ? 'Processing...' : 'Choose Monthly'}
+                {loading && selectedPlan === 'price_monthly'
+                  ? 'Processing...'
+                  : 'Choose Monthly'}
               </button>
             </div>
 
@@ -442,20 +495,26 @@ export default function OnboardingPage() {
               </div>
               <h3 className="text-xl font-bold text-white mb-2">Yearly</h3>
               <p className="text-4xl font-bold text-white mb-2">€290</p>
-              <p className="text-blue-100 text-sm mb-6">/year (€24.17/month) + 7 day trial</p>
+              <p className="text-blue-100 text-sm mb-6">
+                /year (€24.17/month) + 7 day trial
+              </p>
               <button
                 onClick={() => handleCheckout('price_yearly')}
                 disabled={loading}
                 className="w-full bg-white hover:bg-slate-100 text-blue-600 font-semibold py-2 rounded-lg transition"
               >
-                {loading && selectedPlan === 'price_yearly' ? 'Processing...' : 'Choose Yearly'}
+                {loading && selectedPlan === 'price_yearly'
+                  ? 'Processing...'
+                  : 'Choose Yearly'}
               </button>
             </div>
           </div>
 
           <div className="bg-white/10 border border-white/20 rounded-lg p-4 mb-8">
             <p className="text-sm text-slate-300">
-              <strong className="text-white">What's included:</strong> Unlimited quotes, clients, price lists, voice transcription in Italian, professional templates, and more.
+              <strong className="text-white">What&apos;s included:</strong> Unlimited
+              quotes, clients, price lists, voice transcription in Italian, professional
+              templates, and more.
             </p>
           </div>
 
@@ -486,7 +545,7 @@ export default function OnboardingPage() {
           <div className="text-6xl mb-6">✅</div>
           <h1 className="text-3xl font-bold mb-4">All Set!</h1>
           <p className="text-slate-200 mb-8">
-            Your account is ready. Let's start creating amazing quotes.
+            Your account is ready. Let&apos;s start creating amazing quotes.
           </p>
           <button
             onClick={() => router.push('/dashboard')}

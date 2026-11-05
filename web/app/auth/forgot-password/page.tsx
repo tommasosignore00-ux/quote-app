@@ -53,15 +53,21 @@ export default function ForgotPasswordPage() {
               stroke="currentColor"
               viewBox="0 0 24 24"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M5 13l4 4L19 7"
+              />
             </svg>
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Check Your Email</h2>
           <p className="text-gray-600 mb-4">
-            We've sent a password reset link to <strong>{email}</strong>
+            We&apos;ve sent a password reset link to <strong>{email}</strong>
           </p>
           <p className="text-sm text-gray-500 mb-6">
-            The link expires in 1 hour. If you don't see the email, check your spam folder.
+            The link expires in 1 hour. If you don&apos;t see the email, check your spam
+            folder.
           </p>
           <button
             onClick={() => setSubmitted(false)}
@@ -79,7 +85,8 @@ export default function ForgotPasswordPage() {
       <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Forgot Password?</h1>
         <p className="text-gray-600 mb-8">
-          No worries! Enter your email and we'll send you a link to reset your password.
+          No worries! Enter your email and we&apos;ll send you a link to reset your
+          password.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">

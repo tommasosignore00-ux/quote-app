@@ -3,7 +3,12 @@ export interface QuoteData {
   clienteName: string;
   clienteEmail?: string;
   revision: number;
-  items: { description: string; quantity: number; unit_price: number; material_markup?: number }[];
+  items: {
+    description: string;
+    quantity: number;
+    unit_price: number;
+    material_markup?: number;
+  }[];
   vat_percent: number;
   companyName?: string;
   vatNumber?: string;
@@ -51,7 +56,7 @@ const TAX_LABELS: Record<string, string> = {
   JP: '税',
   KR: '세금',
   CN: '税',
-  default: 'Tax'
+  default: 'Tax',
 };
 
 const PAYMENT_TERMS: Record<string, string> = {
@@ -86,7 +91,7 @@ const PAYMENT_TERMS: Record<string, string> = {
   JP: '請求日から30日以内のお支払いをお願いします。銀行振込。',
   KR: '청구일로부터 30일 이내에 결제하기 바랍니다. 은행 이체.',
   CN: '请在发票日期后30天内付款。银行转账。',
-  default: 'Payment due within 30 days. Bank transfer.'
+  default: 'Payment due within 30 days. Bank transfer.',
 };
 
 const CURRENCIES: Record<string, string> = {
@@ -121,7 +126,7 @@ const CURRENCIES: Record<string, string> = {
   JP: '¥',
   KR: '₩',
   CN: '¥',
-  default: '€'
+  default: '€',
 };
 
 const QUOTE_LABEL: Record<string, string> = {
@@ -156,7 +161,7 @@ const QUOTE_LABEL: Record<string, string> = {
   JP: '見積書',
   KR: '견적서',
   CN: '报价单',
-  default: 'QUOTE'
+  default: 'QUOTE',
 };
 
 const CLIENT_LABEL: Record<string, string> = {
@@ -191,7 +196,7 @@ const CLIENT_LABEL: Record<string, string> = {
   JP: 'クライアント:',
   KR: '고객:',
   CN: '客户:',
-  default: 'CLIENT:'
+  default: 'CLIENT:',
 };
 
 const SUBTOTAL_LABEL: Record<string, string> = {
@@ -226,7 +231,7 @@ const SUBTOTAL_LABEL: Record<string, string> = {
   JP: '小計:',
   KR: '소계:',
   CN: '小计:',
-  default: 'Subtotal:'
+  default: 'Subtotal:',
 };
 
 const TAX_LABEL_FULL: Record<string, string> = {
@@ -261,7 +266,7 @@ const TAX_LABEL_FULL: Record<string, string> = {
   JP: '税金:',
   KR: '세금:',
   CN: '税款:',
-  default: 'Taxes:'
+  default: 'Taxes:',
 };
 
 const TOTAL_LABEL: Record<string, string> = {
@@ -296,7 +301,7 @@ const TOTAL_LABEL: Record<string, string> = {
   JP: '合計:',
   KR: '합계:',
   CN: '总计:',
-  default: 'TOTAL:'
+  default: 'TOTAL:',
 };
 
 const DESCRIPTION_LABEL: Record<string, string> = {
@@ -331,7 +336,7 @@ const DESCRIPTION_LABEL: Record<string, string> = {
   JP: '説明',
   KR: '설명',
   CN: '描述',
-  default: 'Description'
+  default: 'Description',
 };
 
 const QUANTITY_LABEL: Record<string, string> = {
@@ -366,7 +371,7 @@ const QUANTITY_LABEL: Record<string, string> = {
   JP: '数量',
   KR: '수량',
   CN: '数量',
-  default: 'Qty'
+  default: 'Qty',
 };
 
 const PRICE_LABEL: Record<string, string> = {
@@ -401,7 +406,7 @@ const PRICE_LABEL: Record<string, string> = {
   JP: '単価',
   KR: '단가',
   CN: '单价',
-  default: 'Unit Price'
+  default: 'Unit Price',
 };
 
 const SUBTOTAL_COL_LABEL: Record<string, string> = {
@@ -436,7 +441,7 @@ const SUBTOTAL_COL_LABEL: Record<string, string> = {
   JP: '小計',
   KR: '소계',
   CN: '小计',
-  default: 'Subtotal'
+  default: 'Subtotal',
 };
 
 const SIGNATURE_LABEL: Record<string, string> = {
@@ -471,7 +476,7 @@ const SIGNATURE_LABEL: Record<string, string> = {
   JP: '署名',
   KR: '서명',
   CN: '签名',
-  default: 'Signature'
+  default: 'Signature',
 };
 
 const APPROVED_LABEL: Record<string, string> = {
@@ -506,7 +511,7 @@ const APPROVED_LABEL: Record<string, string> = {
   JP: '承認済み',
   KR: '승인됨',
   CN: '已批准',
-  default: 'Approved'
+  default: 'Approved',
 };
 
 const FORBIDDEN_CUSTOMER_LABELS = [
@@ -534,7 +539,10 @@ function sanitizeCustomTemplate(template: string): string {
   let sanitized = template;
 
   sanitized = sanitized
-    .replace(/\{\{\s*(materialMarkup|markup|purchasePrice|basePrice|costPrice|internalPrice)\s*\}\}/gi, '')
+    .replace(
+      /\{\{\s*(materialMarkup|markup|purchasePrice|basePrice|costPrice|internalPrice)\s*\}\}/gi,
+      ''
+    )
     .replace(/<(th|td)([^>]*)>\s*([^<]*)\s*<\/\1>/gi, (full, tag, attrs, content) => {
       const text = String(content || '').trim();
       if (!text) return full;
@@ -556,7 +564,7 @@ function processCustomTemplate(template: string, data: QuoteData): string {
   const priceLabel = PRICE_LABEL[cc] || PRICE_LABEL.default;
   const subtotalColLabel = SUBTOTAL_COL_LABEL[cc] || SUBTOTAL_COL_LABEL.default;
   const totalLabel = TOTAL_LABEL[cc] || TOTAL_LABEL.default;
-  
+
   const subtotal = data.items.reduce((sum, item) => sum + getRowSubtotal(item), 0);
   const taxes = subtotal * (Number(data.vat_percent) / 100);
   const total = subtotal + taxes;
@@ -572,9 +580,10 @@ function processCustomTemplate(template: string, data: QuoteData): string {
         </tr>
       </thead>
       <tbody>
-        ${data.items.map((item) => {
-          const rowSubtotal = getRowSubtotal(item);
-          return `
+        ${data.items
+          .map((item) => {
+            const rowSubtotal = getRowSubtotal(item);
+            return `
             <tr>
               <td>${item.description}</td>
               <td>${item.quantity}</td>
@@ -582,14 +591,16 @@ function processCustomTemplate(template: string, data: QuoteData): string {
               <td>${currency}${rowSubtotal.toFixed(2)}</td>
             </tr>
           `.trim();
-        }).join('\n')}
+          })
+          .join('\n')}
       </tbody>
     </table>
   `.trim();
 
-  const itemsHtml = data.items.map((item) => {
-    const rowSubtotal = getRowSubtotal(item);
-    return `
+  const itemsHtml = data.items
+    .map((item) => {
+      const rowSubtotal = getRowSubtotal(item);
+      return `
       <tr>
         <td>${item.description}</td>
         <td>${item.quantity}</td>
@@ -597,10 +608,11 @@ function processCustomTemplate(template: string, data: QuoteData): string {
         <td>${currency}${rowSubtotal.toFixed(2)}</td>
       </tr>
     `.trim();
-  }).join('\n');
+    })
+    .join('\n');
 
   // Replace all placeholders
-  let html = sanitizeCustomTemplate(template)
+  const html = sanitizeCustomTemplate(template)
     .replace(/\{\{lavoroTitle\}\}/g, data.lavoroTitle || '')
     .replace(/\{\{clienteName\}\}/g, data.clienteName || '')
     .replace(/\{\{clienteEmail\}\}/g, data.clienteEmail || '')
@@ -654,14 +666,15 @@ export function generateQuoteHTML(data: QuoteData): string {
   const subtotalColLabel = SUBTOTAL_COL_LABEL[cc] || SUBTOTAL_COL_LABEL.default;
   const signatureLabel = SIGNATURE_LABEL[cc] || SIGNATURE_LABEL.default;
   const approvedLabel = APPROVED_LABEL[cc] || APPROVED_LABEL.default;
-  
+
   const subtotal = data.items.reduce((sum, item) => sum + getRowSubtotal(item), 0);
   const taxes = subtotal * (Number(data.vat_percent) / 100);
   const total = subtotal + taxes;
 
-  const itemsHtml = data.items.map((item) => {
-    const rowSubtotal = getRowSubtotal(item);
-    return `
+  const itemsHtml = data.items
+    .map((item) => {
+      const rowSubtotal = getRowSubtotal(item);
+      return `
       <tr style="border-bottom: 1px solid #ddd;">
         <td style="padding: 10px; text-align: left;">${item.description}</td>
         <td style="padding: 10px; text-align: center;">${item.quantity}</td>
@@ -669,7 +682,8 @@ export function generateQuoteHTML(data: QuoteData): string {
         <td style="padding: 10px; text-align: right;">${currency}${rowSubtotal.toFixed(2)}</td>
       </tr>
     `;
-  }).join('');
+    })
+    .join('');
 
   // Generate styles based on template type
   const getStyles = (): string => {
@@ -700,7 +714,9 @@ export function generateQuoteHTML(data: QuoteData): string {
     `;
 
     if (templateType === 'minimal') {
-      return baseStyles + `
+      return (
+        baseStyles +
+        `
         .container { padding: 20px; }
         .header { margin-bottom: 15px; border-bottom: 1px solid #e5e7eb; }
         th { background: transparent; padding: 8px; border-bottom: 1px solid #e5e7eb; }
@@ -709,9 +725,12 @@ export function generateQuoteHTML(data: QuoteData): string {
         .notes { border-top: none; padding-top: 10px; }
         .signature-area { margin-top: 20px; }
         .signature-line { margin-top: 20px; }
-      `;
+      `
+      );
     } else if (templateType === 'professional') {
-      return baseStyles + `
+      return (
+        baseStyles +
+        `
         .container { padding: 60px; }
         .header { margin-bottom: 50px; border-bottom: 3px solid #dc2626; padding-bottom: 30px; }
         .logo-area { font-size: 32px; }
@@ -723,17 +742,21 @@ export function generateQuoteHTML(data: QuoteData): string {
         .summary-section { background: #f9fafb; padding: 30px; border-radius: 8px; border-left: 4px solid #dc2626; margin: 40px 0; }
         .notes { border-top: 2px solid #e5e7eb; padding-top: 30px; margin-top: 50px; }
         .signature-area { margin-top: 60px; }
-      `;
+      `
+      );
     } else {
       // classic template
-      return baseStyles + `
+      return (
+        baseStyles +
+        `
         .container { padding: 40px; }
         .header { margin-bottom: 30px; border-bottom: 3px solid #dc2626; }
         th { background: #f3f4f6; padding: 12px; border-bottom: 2px solid #dc2626; }
         td { border-bottom: 1px solid #ddd; }
         .summary-section { background: #f9fafb; }
         .notes { border-top: 1px solid #e5e7eb; }
-      `;
+      `
+      );
     }
   };
 
