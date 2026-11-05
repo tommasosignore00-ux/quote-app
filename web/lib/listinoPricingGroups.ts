@@ -1,7 +1,6 @@
 import OpenAI from 'openai';
 import { supabaseAdmin } from './supabase-server';
 import type { UniversalParsedItem } from './listinoUniversalImport';
-import { loadStoredReferenceRules } from './listinoPricing';
 import { saveListinoItems } from './listinoItemsStore';
 import { scheduleEmbeddingsForListino } from './bulkGenerateEmbeddings';
 
@@ -180,22 +179,31 @@ export function applyCanonicalGroups(
   items: UniversalParsedItem[],
   mapping: Map<string, string>
 ): UniversalParsedItem[] {
-  return items.map((item) => {
-    if (!item.pricing_group) return item;
-    const raw = cleanGroupName(item.pricing_group);
-    const canonical = mapping.get(raw) || raw;
-    const sourceDescription = item.source_description || item.description;
-    const description = sourceDescription.startsWith(item.pricing_group)
-      ? `${canonical}${sourceDescription.slice(item.pricing_group.length)}`
-      : sourceDescription;
-    return {
-      ...item,
-      description,
-      source_description: sourceDescription,
-      category: canonical,
-      pricing_group: canonical,
-    };
-  });
+  // The same row printed twice in the PDF is one item: keep the section counts honest.
+  const seen = new Set<string>();
+  return items
+    .map((item) => {
+      if (!item.pricing_group) return item;
+      const raw = cleanGroupName(item.pricing_group);
+      const canonical = mapping.get(raw) || raw;
+      const sourceDescription = item.source_description || item.description;
+      const description = sourceDescription.startsWith(item.pricing_group)
+        ? `${canonical}${sourceDescription.slice(item.pricing_group.length)}`
+        : sourceDescription;
+      return {
+        ...item,
+        description,
+        source_description: sourceDescription,
+        category: canonical,
+        pricing_group: canonical,
+      };
+    })
+    .filter((item) => {
+      const key = item.description.toLowerCase().replace(/\s+/g, ' ').trim();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }
 
 export async function loadPricingGroups(params: {
@@ -217,8 +225,8 @@ export async function loadPricingGroups(params: {
 
 /**
  * Creates/updates the "Prezzi per forma" rows for the shapes found in the catalogue.
- * Prices already set by the user are kept; a new shape starts from the user's general
- * rule for that material (e.g. Ferro / acciaio €/kg) when one exists, else empty.
+ * Every shape is listed, also the ones without a price (aluminium, tubes...): each user
+ * sets their own prices; prices already set are kept when the catalogue is re-read.
  */
 export async function syncPricingGroups(params: {
   listinoId: string;
@@ -227,7 +235,6 @@ export async function syncPricingGroups(params: {
 }): Promise<ListinoPricingGroup[]> {
   const existing = await loadPricingGroups(params);
   const existingByName = new Map(existing.map((group) => [group.name, group]));
-  const storedRules = await loadStoredReferenceRules(params.profileId);
 
   const order: string[] = [];
   const stats = new Map<
@@ -258,22 +265,12 @@ export async function syncPricingGroups(params: {
   const rows = order.map((name, index) => {
     const entry = stats.get(name)!;
     const previous = existingByName.get(name);
-    const mainRuleKey = Array.from(entry.ruleKeys.entries()).sort(
-      (a, b) => b[1] - a[1]
-    )[0]?.[0];
-    const fromGeneralRule = mainRuleKey
-      ? storedRules.get(`${mainRuleKey}::${entry.unit}`)
-      : undefined;
     return {
       listino_id: params.listinoId,
       profile_id: params.profileId,
       name,
       reference_unit: entry.unit,
-      unit_price: previous
-        ? previous.unit_price
-        : fromGeneralRule && fromGeneralRule > 0
-          ? fromGeneralRule
-          : null,
+      unit_price: previous ? previous.unit_price : null,
       item_count: entry.count,
       sort_order: index,
     };
@@ -312,8 +309,12 @@ export function priceGroupedItems(
     const groupPrice = item.pricing_group
       ? priceByGroup.get(item.pricing_group)
       : undefined;
-    if (!groupPrice || !(item.pricing_basis_quantity && item.pricing_basis_quantity > 0))
-      {continue;}
+    if (
+      !groupPrice ||
+      !(item.pricing_basis_quantity && item.pricing_basis_quantity > 0)
+    ) {
+      continue;
+    }
     priced.push({
       ...item,
       unit_price: Math.round(groupPrice * item.pricing_basis_quantity * 10000) / 10000,
