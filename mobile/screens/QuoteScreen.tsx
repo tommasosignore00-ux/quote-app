@@ -10,7 +10,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import { WebView } from 'react-native-webview';
-import { ACCEPTANCE_LINK_MARKER, ACCEPTANCE_URL_MARKER, generateQuoteHTML, QuoteData } from '../lib/QuoteTemplate';
+import { ACCEPTANCE_LINK_MARKER, ACCEPTANCE_URL_MARKER, generateQuoteHTML, QuoteData, quoteLineExtras } from '../lib/QuoteTemplate';
 import { validateQuote, formatValidationMessage } from '../lib/quoteValidation';
 import { injectWatermark, shouldShowWatermark } from '../lib/watermark';
 import { exportAsJSON, exportAsXML, exportAsCSV } from '../lib/exportFormats';
@@ -152,6 +152,7 @@ export default function QuoteScreen() {
           quantity: Number(d.quantity),
           unit_price: roundForCountry(Number(d.unit_price), countryCode),
           material_markup: Number(d.tax_rate || profile?.material_markup || 0),
+          ...quoteLineExtras(d),
         })),
         vat_percent: resolveVatPercent(profile?.vat_percent),
         companyName: profile?.company_name,

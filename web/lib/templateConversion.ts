@@ -1,17 +1,9 @@
 import mammoth from 'mammoth';
 import { openai } from './openaiServer';
-import fs from 'fs/promises';
-import os from 'os';
-import path from 'path';
-import {
-  extractPdfTextWithFallback,
-  renderPdfPages,
-  runPdfSubprocess,
-} from './listinoImportShared';
 import { generateQuoteHTML, type QuoteData } from './QuoteTemplate';
 
 /**
- * Turns the quote a company already uses (Word, PDF or HTML) into a quote template:
+ * Turns the quote a company already uses (Word or HTML) into a quote template:
  * same look, with placeholders where the app puts client, items and totals.
  */
 
@@ -20,13 +12,11 @@ const MAX_KEPT_IMAGE_CHARS = 700_000;
 const IMAGE_TOKEN = (index: number) => `__TEMPLATE_IMAGE_${index}__`;
 
 export type TemplateSource = {
-  kind: 'docx' | 'pdf' | 'html';
-  /** Document content as HTML (docx/html) or plain text (pdf). */
+  kind: 'docx' | 'html';
+  /** Document content as HTML. */
   content: string;
   /** Embedded images, replaced in `content` by tokens so the AI never sees base64. */
   images: string[];
-  /** PDF first page as PNG data URL, so the AI sees colours and layout. */
-  pageImage: string | null;
 };
 
 export type TemplateConversion = {
@@ -38,8 +28,9 @@ export type TemplateConversion = {
 /** Placeholders a quote template cannot do without. */
 const REQUIRED_PLACEHOLDERS: Array<{ label: string; test: (html: string) => boolean }> = [
   {
-    label: 'voci del preventivo ({{items}} o {{itemsTable}})',
-    test: (h) => /\{\{\s*(items|itemsTable)\s*\}\}/.test(h),
+    label: 'voci del preventivo ({{#items}}…{{/items}}, {{items}} o {{itemsTable}})',
+    test: (h) =>
+      /\{\{#items\}\}[\s\S]*\{\{\/items\}\}|\{\{\s*(items|itemsTable)\s*\}\}/.test(h),
   },
   { label: 'totale ({{total}})', test: (h) => /\{\{\s*total\s*\}\}/.test(h) },
   {
@@ -70,44 +61,6 @@ function tokenizeImages(html: string): { html: string; images: string[] } {
   return { html: out, images };
 }
 
-/** First PDF page as PNG data URL: in process, else with the standalone renderer. */
-async function renderFirstPage(buffer: Buffer): Promise<string | null> {
-  try {
-    const rendered = await renderPdfPages({ buffer, maxPages: 1 });
-    if (rendered.images[0]?.dataUrl) return rendered.images[0].dataUrl;
-  } catch (error) {
-    console.warn(
-      'Template PDF inline render failed, trying subprocess:',
-      (error as Error).message
-    );
-  }
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'template-pdf-'));
-  try {
-    const file = path.join(dir, 'source.pdf');
-    await fs.writeFile(file, buffer);
-    const result = await runPdfSubprocess('render-pdf-pages.cjs', [
-      file,
-      dir,
-      '1',
-      '1400',
-    ]);
-    if (!result.ok || !result.stdout) return null;
-    const page = (JSON.parse(result.stdout) as { pages?: Array<{ path?: string }> })
-      .pages?.[0];
-    if (!page?.path) return null;
-    const png = await fs.readFile(page.path);
-    return `data:image/png;base64,${png.toString('base64')}`;
-  } catch (error) {
-    console.warn(
-      'Template PDF page render failed, using text only:',
-      (error as Error).message
-    );
-    return null;
-  } finally {
-    void fs.rm(dir, { recursive: true, force: true }).catch(() => {});
-  }
-}
-
 export async function readTemplateSource(params: {
   buffer: Buffer;
   fileName: string;
@@ -121,23 +74,6 @@ export async function readTemplateSource(params: {
       kind: 'docx',
       content: html.slice(0, MAX_SOURCE_CHARS),
       images,
-      pageImage: null,
-    };
-  }
-
-  if (name.endsWith('.pdf')) {
-    const extracted = await extractPdfTextWithFallback(params.buffer);
-    const pageImage = await renderFirstPage(params.buffer);
-    if (!extracted.text.trim() && !pageImage) {
-      throw new Error(
-        'Non riesco a leggere questo PDF: prova con il file Word o HTML del preventivo.'
-      );
-    }
-    return {
-      kind: 'pdf',
-      content: extracted.text.slice(0, MAX_SOURCE_CHARS),
-      images: [],
-      pageImage,
     };
   }
 
@@ -150,11 +86,10 @@ export async function readTemplateSource(params: {
       kind: 'html',
       content: html.slice(0, MAX_SOURCE_CHARS),
       images,
-      pageImage: null,
     };
   }
 
-  throw new Error('Formato non supportato: carica un file Word (.docx), PDF o HTML.');
+  throw new Error('Formato non supportato: carica il preventivo in Word (.docx) o HTML.');
 }
 
 const SYSTEM_PROMPT = `Sei un esperto di impaginazione di preventivi per artigiani e imprese italiane.
@@ -172,10 +107,14 @@ Regole:
   {{subtotal}} imponibile, {{taxLabel}} nome dell'imposta (es. IVA), {{taxes}} importo IVA, {{total}} totale.
   Questi importi includono già il simbolo della valuta: non scrivere € accanto ai segnaposto.
   Indirizzo e dati extra del cliente che non hanno un segnaposto: toglili.
-- Tabella delle voci: mantieni lo stile della tabella originale ma con ESATTAMENTE 4 colonne nell'intestazione:
-  <th>{{descriptionLabel}}</th><th>{{quantityLabel}}</th><th>{{priceLabel}}</th><th>{{subtotalColLabel}}</th>
-  e come corpo <tbody>{{items}}</tbody> (il programma inserisce le righe, ognuna con 4 celle).
-  Non lasciare nessuna riga di voci dell'esempio. Colonne extra dell'originale (codice, unità di misura, sconto) vanno tolte.
+- Tabella delle voci: mantieni la tabella originale con TUTTE le sue colonne, nello stesso ordine e con le stesse
+  intestazioni e lo stesso stile. Il corpo della tabella deve contenere UNA sola riga modello racchiusa così:
+  <tbody>{{#items}}<tr>...una cella per colonna...</tr>{{/items}}</tbody>
+  e in ogni cella metti il campo corrispondente alla colonna:
+  {{item.index}} numero riga, {{item.code}} codice/articolo, {{item.description}} descrizione,
+  {{item.unit}} unità di misura (U.M.), {{item.quantity}} quantità, {{item.price}} prezzo unitario,
+  {{item.discount}} sconto %, {{item.vat}} aliquota IVA, {{item.total}} importo/totale riga.
+  Se una colonna non corrisponde a nessun campo lascia la cella vuota. Non lasciare nessuna riga dell'esempio.
 - Gli importi del documento originale non devono comparire da nessuna parte.
 - Metti {{acceptanceLink}} nella zona della firma/accettazione (o in fondo se non c'è): lì il cliente troverà il
   pulsante per accettare online. Lascia comunque lo spazio per timbro e firma se l'originale lo prevede.
@@ -188,8 +127,9 @@ const PAPER_HEAD =
 
 function forcePaperColors(html: string): string {
   if (html.includes('name="color-scheme"')) return html;
-  if (/<head[^>]*>/i.test(html))
-    {return html.replace(/<head[^>]*>/i, (head) => `${head}${PAPER_HEAD}`);}
+  if (/<head[^>]*>/i.test(html)) {
+    return html.replace(/<head[^>]*>/i, (head) => `${head}${PAPER_HEAD}`);
+  }
   return `${PAPER_HEAD}${html}`;
 }
 
@@ -221,16 +161,6 @@ export async function convertToTemplate(params: {
           ? `\n\nIndicazioni dell'utente: ${params.instructions}`
           : ''),
     });
-    if (params.source.pageImage) {
-      userContent.push({
-        type: 'text',
-        text: 'Ecco come appare la prima pagina (riproducine aspetto e disposizione):',
-      });
-      userContent.push({
-        type: 'image_url',
-        image_url: { url: params.source.pageImage, detail: 'high' },
-      });
-    }
   } else {
     throw new Error('Niente da convertire');
   }
@@ -264,8 +194,9 @@ export async function convertToTemplate(params: {
   // Images the AI made up (no real picture behind them) would show as broken icons.
   template = template.replace(/<img\b(?![^>]*\ssrc=(["'])data:image\/)[^>]*>/gi, '');
 
-  if (!template.trim())
-    {throw new Error('La conversione non ha prodotto un template: riprova.');}
+  if (!template.trim()) {
+    throw new Error('La conversione non ha prodotto un template: riprova.');
+  }
   // Amount placeholders already carry the currency symbol ("€ 1.930,00").
   template = template
     .replace(/(?:€|EUR|&euro;)\s*(\{\{\s*(?:subtotal|taxes|total)\s*\}\})/gi, '$1')
@@ -285,14 +216,29 @@ export function previewTemplate(template: string, companyName?: string | null): 
     clienteName: 'Mario Rossi',
     clienteEmail: 'mario.rossi@example.com',
     revision: 1,
+    // Code, unit and discount filled in, so extra columns show up in the preview.
     items: [
       {
         description: 'Fornitura e posa piatto doccia 80x120',
         quantity: 1,
         unit_price: 420,
+        code: 'PD8012',
+        unit: 'pz',
       },
-      { description: 'Rifacimento impianto idrico', quantity: 1, unit_price: 950 },
-      { description: 'Manodopera', quantity: 16, unit_price: 35 },
+      {
+        description: 'Rifacimento impianto idrico',
+        quantity: 1,
+        unit_price: 950,
+        code: 'IMP-ID',
+        unit: 'a corpo',
+      },
+      {
+        description: 'Manodopera',
+        quantity: 16,
+        unit_price: 35,
+        unit: 'h',
+        discount_percent: 10,
+      },
     ],
     vat_percent: 10,
     companyName: companyName || 'La tua azienda',

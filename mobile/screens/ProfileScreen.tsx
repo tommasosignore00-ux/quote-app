@@ -157,7 +157,6 @@ export default function ProfileScreen() {
       const result = await DocumentPicker.getDocumentAsync({
         type: [
           'text/html',
-          'application/pdf',
           'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         ],
         copyToCacheDirectory: true,
@@ -170,7 +169,8 @@ export default function ProfileScreen() {
       // HTML already prepared with the app's placeholders: use it as it is.
       if (name.endsWith('.html') || name.endsWith('.htm')) {
         const content = await FileSystem.readAsStringAsync(asset.uri);
-        if (/\{\{\s*(items|itemsTable)\s*\}\}/.test(content) && /\{\{\s*total\s*\}\}/.test(content)) {
+        const hasItems = /\{\{#items\}\}[\s\S]*\{\{\/items\}\}|\{\{\s*(items|itemsTable)\s*\}\}/.test(content);
+        if (hasItems && /\{\{\s*total\s*\}\}/.test(content)) {
           setProfile({ ...profile, custom_template_html: content });
           Alert.alert(t('messages.success'), 'Template caricato. Ricorda di salvare le modifiche.');
           return;
@@ -178,11 +178,11 @@ export default function ProfileScreen() {
       }
 
       if (!isWebApiConfigured()) {
-        Alert.alert(t('messages.error'), 'Per convertire Word o PDF serve il collegamento al sito (EXPO_PUBLIC_WEB_URL).');
+        Alert.alert(t('messages.error'), 'Per convertire un file Word serve il collegamento al sito (EXPO_PUBLIC_WEB_URL).');
         return;
       }
 
-      // Word, PDF or plain HTML: the AI turns the company's quote into a template.
+      // Word or plain HTML: the AI turns the company's quote into a template.
       setConvertingTemplate(true);
       const response = await FileSystem.uploadAsync(buildWebApiUrl('/api/templates/convert'), asset.uri, {
         fieldName: 'file',
@@ -483,7 +483,7 @@ export default function ProfileScreen() {
           </View>
         ) : (
           <TouchableOpacity style={[styles.btn, styles.btnOutline]} onPress={handleUploadTemplate} disabled={convertingTemplate}>
-            <Text style={styles.btnOutlineText}>{convertingTemplate ? 'Leggo il preventivo...' : '📄 Carica il tuo preventivo (Word, PDF o HTML)'}</Text>
+            <Text style={styles.btnOutlineText}>{convertingTemplate ? 'Leggo il preventivo...' : '📄 Carica il tuo preventivo (Word o HTML)'}</Text>
           </TouchableOpacity>
         )}
         <Text style={styles.templateHint}>Carica il preventivo che usi già, anche uno vecchio compilato: l'app lo trasforma nel tuo modello, con cliente, voci e totali al posto giusto.</Text>

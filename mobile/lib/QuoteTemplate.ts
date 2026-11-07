@@ -5,7 +5,7 @@ export interface QuoteData {
   clienteName: string;
   clienteEmail?: string;
   revision: number;
-  items: { description: string; quantity: number; unit_price: number; material_markup: number }[];
+  items: ({ description: string; quantity: number; unit_price: number; material_markup: number } & QuoteLineExtras)[];
   vat_percent: number;
   companyName?: string;
   vatNumber?: string;
@@ -123,6 +123,82 @@ function formatQuoteDate(cc: string, withTime = false): string {
     ? { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }
     : { day: '2-digit', month: '2-digit', year: 'numeric' };
   return new Date().toLocaleString(quoteLocale(cc), { timeZone: 'Europe/Rome', ...options });
+}
+
+/** Optional per-line data for templates with their own columns (code, unit, discount). */
+export type QuoteLineExtras = {
+  code?: string | null;
+  unit?: string | null;
+  discount_percent?: number | null;
+};
+
+const CODE_SUFFIX_RE = /\s*\(cod\.\s*([^)]+)\)\s*$/i;
+
+/** Unit of measure read from the description (the quote line does not store one). */
+function inferUnit(description: string): string {
+  const text = description.toLowerCase();
+  if (/prezzo al metro|\bal m\b|\bml\b|\bmetri lineari\b/.test(text)) return 'm';
+  if (/prezzo a foglio/.test(text)) return 'pz';
+  if (/\b(mq|m2|m²)\b/.test(text)) return 'm²';
+  if (/manodopera|\bore\b/.test(text)) return 'h';
+  return '';
+}
+
+/** Code, unit and discount of a preventivi_dettaglio row, for the template columns. */
+export function quoteLineExtras(line: { description?: string | null; discount_percent?: unknown }): QuoteLineExtras {
+  const description = String(line.description || '');
+  return {
+    code: CODE_SUFFIX_RE.exec(description)?.[1]?.trim() || null,
+    unit: inferUnit(description) || null,
+    discount_percent: Number(line.discount_percent) || 0,
+  };
+}
+
+function lineDiscountFactor(item: { discount_percent?: number | null }): number {
+  return 1 - (Number(item.discount_percent) || 0) / 100;
+}
+
+function escapeTemplateValue(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/**
+ * {{#items}}<tr>...{{/items}}: the template's own item row, repeated for every line.
+ * Fields: {{item.index}} {{item.code}} {{item.description}} {{item.unit}} {{item.quantity}}
+ * {{item.price}} {{item.discount}} {{item.vat}} {{item.total}}.
+ */
+function renderItemRows(
+  template: string,
+  items: Array<{ description: string; quantity: number; unit_price: number } & QuoteLineExtras>,
+  currency: string,
+  cc: string,
+  vatPercent: number
+): string {
+  return template.replace(/\{\{#items\}\}([\s\S]*?)\{\{\/items\}\}/g, (_block, row: string) => {
+    const usesCode = /\{\{\s*item\.code\s*\}\}/.test(row);
+    return items
+      .map((item, index) => {
+        const quantity = Number(item.quantity) || 0;
+        const price = Number(item.unit_price) || 0;
+        const discount = Number(item.discount_percent) || 0;
+        const fields: Record<string, string> = {
+          index: String(index + 1),
+          code: item.code || '',
+          // With a code column the "(cod. ...)" suffix would be shown twice.
+          description: usesCode ? item.description.replace(CODE_SUFFIX_RE, '') : item.description,
+          unit: item.unit || '',
+          quantity: quantity.toLocaleString(quoteLocale(cc), { maximumFractionDigits: 2 }),
+          price: formatMoney(currency, price, cc),
+          discount: discount ? `${discount.toLocaleString(quoteLocale(cc))}%` : '',
+          vat: `${vatPercent}%`,
+          total: formatMoney(currency, quantity * price * lineDiscountFactor(item), cc),
+        };
+        return row.replace(/\{\{\s*item\.(\w+)\s*\}\}/g, (_m, field: string) =>
+          escapeTemplateValue(fields[field] ?? '')
+        );
+      })
+      .join('\n');
+  });
 }
 
 const CURRENCIES: Record<string, string> = {
@@ -559,14 +635,14 @@ function processCustomTemplate(template: string, data: QuoteData): string {
   const currency = CURRENCIES[cc] || CURRENCIES.default;
   const taxLabel = TAX_LABELS[cc] || TAX_LABELS.default;
   
-  const subtotal = data.items.reduce((s, d) => s + Number(d.quantity) * Number(d.unit_price), 0);
-  const totalWithMarkup = data.items.reduce((s, d) => s + Number(d.quantity) * Number(d.unit_price) * (1 + Number(d.material_markup) / 100), 0);
+  const subtotal = data.items.reduce((s, d) => s + Number(d.quantity) * Number(d.unit_price) * lineDiscountFactor(d), 0);
+  const totalWithMarkup = data.items.reduce((s, d) => s + Number(d.quantity) * Number(d.unit_price) * lineDiscountFactor(d) * (1 + Number(d.material_markup) / 100), 0);
   const taxes = totalWithMarkup * (Number(data.vat_percent) / 100);
   const total = totalWithMarkup + taxes;
 
   // Generate items table rows
   const itemsHtml = data.items.map((item) => {
-    const rowSubtotal = Number(item.quantity) * Number(item.unit_price);
+    const rowSubtotal = Number(item.quantity) * Number(item.unit_price) * lineDiscountFactor(item);
     const rowWithMarkup = rowSubtotal * (1 + Number(item.material_markup) / 100);
     return `
       <tr>
@@ -580,7 +656,7 @@ function processCustomTemplate(template: string, data: QuoteData): string {
   }).join('\n');
 
   // Replace all placeholders
-  let html = template
+  let html = renderItemRows(template, data.items, currency, cc, Number(data.vat_percent) || 0)
     .replace(/\{\{lavoroTitle\}\}/g, data.lavoroTitle || '')
     .replace(/\{\{clienteName\}\}/g, data.clienteName || '')
     .replace(/\{\{clienteEmail\}\}/g, data.clienteEmail || '')
@@ -642,13 +718,13 @@ export function generateQuoteHTML(data: QuoteData): string {
     : { applicable: false, reason: '' };
   const isRC = rcCheck.applicable;
 
-  const subtotal = data.items.reduce((s, d) => s + Number(d.quantity) * Number(d.unit_price), 0);
-  const totalWithMarkup = data.items.reduce((s, d) => s + Number(d.quantity) * Number(d.unit_price) * (1 + Number(d.material_markup) / 100), 0);
+  const subtotal = data.items.reduce((s, d) => s + Number(d.quantity) * Number(d.unit_price) * lineDiscountFactor(d), 0);
+  const totalWithMarkup = data.items.reduce((s, d) => s + Number(d.quantity) * Number(d.unit_price) * lineDiscountFactor(d) * (1 + Number(d.material_markup) / 100), 0);
   const taxes = isRC ? 0 : totalWithMarkup * (Number(data.vat_percent) / 100);
   const total = totalWithMarkup + taxes;
 
   const itemsHtml = data.items.map((item) => {
-    const rowSubtotal = Number(item.quantity) * Number(item.unit_price);
+    const rowSubtotal = Number(item.quantity) * Number(item.unit_price) * lineDiscountFactor(item);
     const rowWithMarkup = rowSubtotal * (1 + Number(item.material_markup) / 100);
     const rowTax = isRC ? 0 : rowWithMarkup * (Number(data.vat_percent) / 100);
     return `

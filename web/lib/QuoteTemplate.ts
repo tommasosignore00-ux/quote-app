@@ -3,12 +3,12 @@ export interface QuoteData {
   clienteName: string;
   clienteEmail?: string;
   revision: number;
-  items: {
+  items: ({
     description: string;
     quantity: number;
     unit_price: number;
     material_markup?: number;
-  }[];
+  } & QuoteLineExtras)[];
   vat_percent: number;
   companyName?: string;
   vatNumber?: string;
@@ -141,6 +141,98 @@ function formatQuoteDate(cc: string, withTime = false): string {
     timeZone: 'Europe/Rome',
     ...options,
   });
+}
+
+/** Optional per-line data for templates with their own columns (code, unit, discount). */
+export type QuoteLineExtras = {
+  code?: string | null;
+  unit?: string | null;
+  discount_percent?: number | null;
+};
+
+const CODE_SUFFIX_RE = /\s*\(cod\.\s*([^)]+)\)\s*$/i;
+
+/** Unit of measure read from the description (the quote line does not store one). */
+function inferUnit(description: string): string {
+  const text = description.toLowerCase();
+  if (/prezzo al metro|\bal m\b|\bml\b|\bmetri lineari\b/.test(text)) return 'm';
+  if (/prezzo a foglio/.test(text)) return 'pz';
+  if (/\b(mq|m2|m²)\b/.test(text)) return 'm²';
+  if (/manodopera|\bore\b/.test(text)) return 'h';
+  return '';
+}
+
+/** Code, unit and discount of a preventivi_dettaglio row, for the template columns. */
+export function quoteLineExtras(line: {
+  description?: string | null;
+  discount_percent?: unknown;
+}): QuoteLineExtras {
+  const description = String(line.description || '');
+  return {
+    code: CODE_SUFFIX_RE.exec(description)?.[1]?.trim() || null,
+    unit: inferUnit(description) || null,
+    discount_percent: Number(line.discount_percent) || 0,
+  };
+}
+
+function lineDiscountFactor(item: { discount_percent?: number | null }): number {
+  return 1 - (Number(item.discount_percent) || 0) / 100;
+}
+
+function escapeTemplateValue(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * {{#items}}<tr>...{{/items}}: the template's own item row, repeated for every line.
+ * Fields: {{item.index}} {{item.code}} {{item.description}} {{item.unit}} {{item.quantity}}
+ * {{item.price}} {{item.discount}} {{item.vat}} {{item.total}}.
+ */
+function renderItemRows(
+  template: string,
+  items: Array<
+    { description: string; quantity: number; unit_price: number } & QuoteLineExtras
+  >,
+  currency: string,
+  cc: string,
+  vatPercent: number
+): string {
+  return template.replace(
+    /\{\{#items\}\}([\s\S]*?)\{\{\/items\}\}/g,
+    (_block, row: string) => {
+      const usesCode = /\{\{\s*item\.code\s*\}\}/.test(row);
+      return items
+        .map((item, index) => {
+          const quantity = Number(item.quantity) || 0;
+          const price = Number(item.unit_price) || 0;
+          const discount = Number(item.discount_percent) || 0;
+          const fields: Record<string, string> = {
+            index: String(index + 1),
+            code: item.code || '',
+            // With a code column the "(cod. ...)" suffix would be shown twice.
+            description: usesCode
+              ? item.description.replace(CODE_SUFFIX_RE, '')
+              : item.description,
+            unit: item.unit || '',
+            quantity: quantity.toLocaleString(quoteLocale(cc), {
+              maximumFractionDigits: 2,
+            }),
+            price: formatMoney(currency, price, cc),
+            discount: discount ? `${discount.toLocaleString(quoteLocale(cc))}%` : '',
+            vat: `${vatPercent}%`,
+            total: formatMoney(currency, quantity * price * lineDiscountFactor(item), cc),
+          };
+          return row.replace(/\{\{\s*item\.(\w+)\s*\}\}/g, (_m, field: string) =>
+            escapeTemplateValue(fields[field] ?? '')
+          );
+        })
+        .join('\n');
+    }
+  );
 }
 
 const CURRENCIES: Record<string, string> = {
@@ -581,7 +673,9 @@ function getCustomerUnitPrice(item: QuoteData['items'][number]): number {
 }
 
 function getRowSubtotal(item: QuoteData['items'][number]): number {
-  return (Number(item.quantity) || 0) * getCustomerUnitPrice(item);
+  return (
+    (Number(item.quantity) || 0) * getCustomerUnitPrice(item) * lineDiscountFactor(item)
+  );
 }
 
 function sanitizeCustomTemplate(template: string): string {
@@ -670,7 +764,9 @@ function processCustomTemplate(template: string, data: QuoteData): string {
     .join('\n');
 
   // Replace all placeholders
-  const html = sanitizeCustomTemplate(template)
+  const html = sanitizeCustomTemplate(
+    renderItemRows(template, data.items, currency, cc, Number(data.vat_percent) || 0)
+  )
     .replace(/\{\{lavoroTitle\}\}/g, data.lavoroTitle || '')
     .replace(/\{\{clienteName\}\}/g, data.clienteName || '')
     .replace(/\{\{clienteEmail\}\}/g, data.clienteEmail || '')

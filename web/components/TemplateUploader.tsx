@@ -11,12 +11,13 @@ type TemplateDraft = {
   missing: string[];
 };
 
-const ACCEPTED_EXTENSIONS = ['.docx', '.pdf', '.html', '.htm'];
+const ACCEPTED_EXTENSIONS = ['.docx', '.html', '.htm'];
 
 /** An HTML file written for the app already has the item and total placeholders. */
 function isReadyTemplate(html: string): boolean {
   return (
-    /\{\{\s*(items|itemsTable)\s*\}\}/.test(html) && /\{\{\s*total\s*\}\}/.test(html)
+    /\{\{#items\}\}[\s\S]*\{\{\/items\}\}|\{\{\s*(items|itemsTable)\s*\}\}/.test(html) &&
+    /\{\{\s*total\s*\}\}/.test(html)
   );
 }
 
@@ -90,7 +91,7 @@ export default function TemplateUploader() {
 
     const name = file.name.toLowerCase();
     if (!ACCEPTED_EXTENSIONS.some((ext) => name.endsWith(ext))) {
-      toast.error('Carica il preventivo in formato Word (.docx), PDF o HTML');
+      toast.error('Carica il preventivo in formato Word (.docx) o HTML');
       return;
     }
 
@@ -193,9 +194,9 @@ export default function TemplateUploader() {
     <div className="bg-white rounded-xl shadow p-6 mb-6">
       <h2 className="text-xl font-bold mb-2">Template Preventivo Personalizzato</h2>
       <p className="text-sm text-slate-600 mb-4">
-        Carica il preventivo che usi già (Word, PDF o HTML, anche uno vecchio già
-        compilato): l&apos;app lo trasforma nel tuo modello, con cliente, voci e totali al
-        posto giusto.
+        Carica il preventivo che usi già (Word o HTML, anche uno vecchio già compilato):
+        l&apos;app lo trasforma nel tuo modello, con cliente, voci e totali al posto
+        giusto.
       </p>
 
       {draft ? (
@@ -288,7 +289,7 @@ export default function TemplateUploader() {
                 ? 'Leggo il preventivo e preparo il modello...'
                 : uploading
                   ? 'Caricamento...'
-                  : 'Clicca per caricare il tuo preventivo (Word, PDF o HTML)'}
+                  : 'Clicca per caricare il tuo preventivo (Word o HTML)'}
             </p>
           </div>
         </label>

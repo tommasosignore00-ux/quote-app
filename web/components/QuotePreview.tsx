@@ -9,6 +9,7 @@ import {
   ACCEPTANCE_URL_MARKER,
   generateQuoteHTML,
   QuoteData,
+  quoteLineExtras,
 } from '@/lib/QuoteTemplate';
 import toast from 'react-hot-toast';
 import { jsPDF } from 'jspdf';
@@ -129,6 +130,7 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
           description: d.description,
           quantity: Number(d.quantity),
           unit_price: Number(d.unit_price),
+          ...quoteLineExtras(d),
         })),
         vat_percent: resolveVatPercent(profile?.vat_percent),
         companyName: profile?.company_name,

@@ -23,9 +23,14 @@ describe('quote template conversion', () => {
 
   it('lists what a template cannot do without', () => {
     expect(missingTemplatePlaceholders('<p>{{clienteName}}</p>')).toEqual([
-      'voci del preventivo ({{items}} o {{itemsTable}})',
+      'voci del preventivo ({{#items}}…{{/items}}, {{items}} o {{itemsTable}})',
       'totale ({{total}})',
     ]);
+    expect(
+      missingTemplatePlaceholders(
+        '{{clienteName}} <tbody>{{#items}}<tr><td>{{item.description}}</td></tr>{{/items}}</tbody> {{total}}'
+      )
+    ).toEqual([]);
     expect(
       missingTemplatePlaceholders('{{clienteName}} <tbody>{{items}}</tbody> {{total}}')
     ).toEqual([]);
@@ -67,12 +72,12 @@ describe('quote template conversion', () => {
 
     const preview = previewTemplate(result.template, 'Rossi Impianti');
     expect(preview).toContain('Mario Rossi');
-    expect(preview).toMatch(/Totale € 2\.123,00/);
+    expect(preview).toMatch(/Totale € 2\.061,40/);
   });
 
   it('refuses formats it cannot read', async () => {
     await expect(
       readTemplateSource({ buffer: Buffer.from('x'), fileName: 'preventivo.doc' })
-    ).rejects.toThrow(/Word \(\.docx\), PDF o HTML/);
+    ).rejects.toThrow(/Word \(\.docx\) o HTML/);
   });
 });
