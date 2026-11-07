@@ -231,7 +231,18 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
       );
       if (sendError || sent?.error) {
         await supabase.from('preventivi_versioni').delete().eq('id', version.id);
-        throw new Error(sent?.error || 'Invio email non riuscito');
+        // On a non-2xx answer supabase-js keeps the function's body in error.context.
+        let reason: string | undefined = sent?.error;
+        const context = (sendError as { context?: Response } | null)?.context;
+        if (!reason && context && typeof context.json === 'function') {
+          reason = await context
+            .json()
+            .then((body: { error?: string }) => body?.error)
+            .catch(() => undefined);
+        }
+        throw new Error(
+          reason ? `Invio email non riuscito: ${reason}` : 'Invio email non riuscito'
+        );
       }
 
       await supabase

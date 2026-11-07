@@ -1,12 +1,12 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { getRequestUser, jsonResponse } from '../_shared/auth.ts'
+import { corsHeaders, getRequestUser, jsonResponse } from '../_shared/auth.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 const EMAIL_FROM = Deno.env.get('EMAIL_FROM') || 'noreply@quoteapp.it'
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' } })
+    return new Response('ok', { headers: corsHeaders })
   }
 
   try {
@@ -17,7 +17,7 @@ serve(async (req) => {
     const { to, subject, html, pdfBase64, pdfFilename } = await req.json()
 
     if (!to || !subject || !html) {
-      return new Response(JSON.stringify({ error: 'Missing to, subject, or html' }), { status: 400 })
+      return jsonResponse({ error: 'Missing to, subject, or html' }, 400)
     }
 
     // Build form data for email with optional PDF attachment
@@ -50,16 +50,13 @@ serve(async (req) => {
     const emailData = await emailRes.json()
 
     if (!emailRes.ok) {
-      return new Response(JSON.stringify({ error: emailData.message || 'Failed to send email' }), { status: 400 })
+      // Every response carries CORS headers: without them the browser hides the reason.
+      console.error('Resend rejected the email:', emailRes.status, emailData)
+      return jsonResponse({ error: emailData.message || 'Failed to send email' }, 400)
     }
 
-    return new Response(JSON.stringify({ id: emailData.id, success: true }), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-    })
+    return jsonResponse({ id: emailData.id, success: true })
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-    })
+    return jsonResponse({ error: (err as Error).message }, 500)
   }
 })
