@@ -158,6 +158,7 @@ export default function ProfileScreen() {
         type: [
           'text/html',
           'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/msword',
         ],
         copyToCacheDirectory: true,
       });

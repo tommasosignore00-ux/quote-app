@@ -1,5 +1,6 @@
 import mammoth from 'mammoth';
 import JSZip from 'jszip';
+import WordExtractor from 'word-extractor';
 import { openai } from './openaiServer';
 import {
   generateQuoteHTML,
@@ -17,7 +18,7 @@ const MAX_KEPT_IMAGE_CHARS = 700_000;
 const IMAGE_TOKEN = (index: number) => `__TEMPLATE_IMAGE_${index}__`;
 
 export type TemplateSource = {
-  kind: 'docx' | 'html';
+  kind: 'docx' | 'doc' | 'html';
   /** Document content as HTML. */
   content: string;
   /** Embedded images, replaced in `content` by tokens so the AI never sees base64. */
@@ -330,6 +331,29 @@ export async function readTemplateSource(params: {
     };
   }
 
+  if (name.endsWith('.doc')) {
+    // Old Word format: text only (no colours/pictures), tables come as tab-separated
+    // lines; page header and footer are read too.
+    const document = await new WordExtractor().extract(params.buffer).catch(() => {
+      throw new Error(
+        'Non riesco a leggere questo file .doc: aprilo in Word e salvalo come .docx.'
+      );
+    });
+    const header = document.getHeaders({ includeFooters: false }).trim();
+    const footer = document.getFooters().trim();
+    const content = [
+      'Testo estratto da un file Word .doc (le colonne delle tabelle sono separate da tabulazioni).',
+      header ? `INTESTAZIONE DI PAGINA:\n${header}` : '',
+      `CORPO:\n${document.getBody().trim()}`,
+      footer ? `PIÈ DI PAGINA:\n${footer}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+    if (!document.getBody().trim())
+      {throw new Error('Il file .doc sembra vuoto: prova a salvarlo come .docx.');}
+    return { kind: 'doc', content: content.slice(0, MAX_SOURCE_CHARS), images: [] };
+  }
+
   if (name.endsWith('.html') || name.endsWith('.htm')) {
     const raw = params.buffer
       .toString('utf-8')
@@ -342,7 +366,9 @@ export async function readTemplateSource(params: {
     };
   }
 
-  throw new Error('Formato non supportato: carica il preventivo in Word (.docx) o HTML.');
+  throw new Error(
+    'Formato non supportato: carica il preventivo in Word (.docx o .doc) o HTML.'
+  );
 }
 
 const SYSTEM_PROMPT = `Sei un esperto di impaginazione di preventivi per artigiani e imprese italiane.

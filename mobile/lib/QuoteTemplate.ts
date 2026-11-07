@@ -151,11 +151,16 @@ function inferUnit(description: string): string {
 }
 
 /** Code, unit and discount of a preventivi_dettaglio row, for the template columns. */
-export function quoteLineExtras(line: { description?: string | null; discount_percent?: unknown }): QuoteLineExtras {
+export function quoteLineExtras(line: {
+  description?: string | null;
+  discount_percent?: unknown;
+  unit?: string | null;
+}): QuoteLineExtras {
   const description = String(line.description || '');
   return {
     code: CODE_SUFFIX_RE.exec(description)?.[1]?.trim() || null,
-    unit: inferUnit(description) || null,
+    // Unit saved on the line (from the price list or typed in); else read from the description.
+    unit: String(line.unit || '').trim() || inferUnit(description) || null,
     discount_percent: Number(line.discount_percent) || 0,
   };
 }

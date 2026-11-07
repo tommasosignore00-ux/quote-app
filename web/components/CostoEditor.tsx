@@ -4,7 +4,14 @@ import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 
-type Costo = { id: string; description: string; quantity: number; unit_price: number; tax_rate?: number };
+type Costo = {
+  id: string;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  tax_rate?: number;
+  unit?: string | null;
+};
 
 type Props = {
   costi: Costo[];
@@ -13,9 +20,15 @@ type Props = {
   defaultVatPercent?: number;
 };
 
-export default function CostoEditor({ costi, lavoroId, onUpdate, defaultVatPercent = 22 }: Props) {
+export default function CostoEditor({
+  costi,
+  lavoroId,
+  onUpdate,
+  defaultVatPercent = 22,
+}: Props) {
   const [editing, setEditing] = useState<string | null>(null);
   const [editQty, setEditQty] = useState(1);
+  const [editUnit, setEditUnit] = useState('');
   const [editPrice, setEditPrice] = useState(0);
   const [editTaxRate, setEditTaxRate] = useState(defaultVatPercent);
 
@@ -26,13 +39,17 @@ export default function CostoEditor({ costi, lavoroId, onUpdate, defaultVatPerce
   };
 
   const handleUpdate = async (id: string) => {
-    const c = costi.find(x => x.id === id);
+    const c = costi.find((x) => x.id === id);
     if (!c) return;
-    await supabase.from('preventivi_dettaglio').update({
-      quantity: editQty,
-      unit_price: editPrice,
-      tax_rate: editTaxRate,
-    }).eq('id', id);
+    await supabase
+      .from('preventivi_dettaglio')
+      .update({
+        quantity: editQty,
+        unit: editUnit.trim() || null,
+        unit_price: editPrice,
+        tax_rate: editTaxRate,
+      })
+      .eq('id', id);
     setEditing(null);
     toast.success('Voce aggiornata');
     onUpdate();
@@ -41,6 +58,7 @@ export default function CostoEditor({ costi, lavoroId, onUpdate, defaultVatPerce
   const startEdit = (c: Costo) => {
     setEditing(c.id);
     setEditQty(c.quantity);
+    setEditUnit(c.unit || '');
     setEditPrice(c.unit_price);
     setEditTaxRate(c.tax_rate ?? defaultVatPercent);
   };
@@ -51,10 +69,11 @@ export default function CostoEditor({ costi, lavoroId, onUpdate, defaultVatPerce
         <tr className="border-b">
           <th className="text-left py-2">Descrizione</th>
           <th className="text-right py-2">Qty</th>
+          <th className="text-left py-2 pl-2">U.M.</th>
           <th className="text-right py-2">Prezzo</th>
           <th className="text-right py-2">IVA %</th>
           <th className="text-right py-2">Totale</th>
-          <th className="w-24"></th>
+          <th className="w-24" />
         </tr>
       </thead>
       <tbody>
@@ -71,6 +90,21 @@ export default function CostoEditor({ costi, lavoroId, onUpdate, defaultVatPerce
                 />
               ) : (
                 c.quantity
+              )}
+            </td>
+            <td className="py-2 pl-2">
+              {editing === c.id ? (
+                <input
+                  type="text"
+                  value={editUnit}
+                  onChange={(e) => setEditUnit(e.target.value)}
+                  maxLength={20}
+                  placeholder="pz"
+                  aria-label="Unità di misura"
+                  className="w-16 border rounded px-2 py-1"
+                />
+              ) : (
+                c.unit || ''
               )}
             </td>
             <td className="text-right py-2">
@@ -107,13 +141,33 @@ export default function CostoEditor({ costi, lavoroId, onUpdate, defaultVatPerce
             <td className="py-2">
               {editing === c.id ? (
                 <div className="flex gap-1">
-                  <button onClick={() => handleUpdate(c.id)} className="text-xs text-green-600 hover:underline">Salva</button>
-                  <button onClick={() => setEditing(null)} className="text-xs text-slate-500 hover:underline">Annulla</button>
+                  <button
+                    onClick={() => handleUpdate(c.id)}
+                    className="text-xs text-green-600 hover:underline"
+                  >
+                    Salva
+                  </button>
+                  <button
+                    onClick={() => setEditing(null)}
+                    className="text-xs text-slate-500 hover:underline"
+                  >
+                    Annulla
+                  </button>
                 </div>
               ) : (
                 <div className="flex gap-2">
-                  <button onClick={() => startEdit(c)} className="text-xs text-primary hover:underline">Modifica</button>
-                  <button onClick={() => handleDelete(c.id)} className="text-xs text-red-600 hover:underline">Elimina</button>
+                  <button
+                    onClick={() => startEdit(c)}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Modifica
+                  </button>
+                  <button
+                    onClick={() => handleDelete(c.id)}
+                    className="text-xs text-red-600 hover:underline"
+                  >
+                    Elimina
+                  </button>
                 </div>
               )}
             </td>

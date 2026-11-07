@@ -77,7 +77,7 @@ describe('quote template conversion', () => {
 
   it('refuses formats it cannot read', async () => {
     await expect(
-      readTemplateSource({ buffer: Buffer.from('x'), fileName: 'preventivo.doc' })
-    ).rejects.toThrow(/Word \(\.docx\) o HTML/);
+      readTemplateSource({ buffer: Buffer.from('x'), fileName: 'preventivo.odt' })
+    ).rejects.toThrow(/Word \(\.docx o \.doc\) o HTML/);
   });
 });

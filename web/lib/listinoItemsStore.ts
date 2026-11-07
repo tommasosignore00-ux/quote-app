@@ -16,6 +16,8 @@ export type ListinoItemInput = {
   pricing_group?: string | null;
   /** Previous wording of the same item: the existing row is updated (and renamed). */
   source_description?: string | null;
+  /** Unit of measure shown on quotes; copied to quote lines that use the item. */
+  unit?: string | null;
 };
 
 export type ExistingListinoRow = {
@@ -189,6 +191,7 @@ export async function saveListinoItems(params: {
         (categoryMarkup ?? (Number(item.markup_percent) || 0)).toFixed(2)
       ),
       ...(settings && !params.skipSupplierDiscount ? { list_price: listPrice } : {}),
+      ...(item.unit ? { unit: String(item.unit).slice(0, 20) } : {}),
     };
 
     const previousKey = normalizeListinoDescriptionKey(item.source_description);

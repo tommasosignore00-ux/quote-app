@@ -52,30 +52,6 @@ type ListinoSourceInfo = {
   requiresPricingRules?: boolean;
   downloadUrl?: string;
 };
-type PricingRule = {
-  id: string;
-  rule_key: string;
-  label: string;
-  reference_unit: string;
-  reference_price: number;
-  source_label?: string | null;
-  source_url?: string | null;
-  active: boolean;
-};
-
-const RULE_PRESETS = [
-  { rule_key: 'metal_ferrous', label: 'Ferro / acciaio', reference_unit: 'kg' },
-  {
-    rule_key: 'metal_nonferrous',
-    label: 'Rame / metalli non ferrosi',
-    reference_unit: 'kg',
-  },
-  { rule_key: 'electric_cable', label: 'Cavi elettrici', reference_unit: 'm' },
-  { rule_key: 'piping', label: 'Tubazioni / raccordi', reference_unit: 'm' },
-  { rule_key: 'paint_chemical', label: 'Vernici / chimici', reference_unit: 'l' },
-  { rule_key: 'wood_panel', label: 'Legno / pannelli', reference_unit: 'm2' },
-];
-
 const PDF_SOURCE_BUCKET = 'listini-sources';
 
 type UploadRequestResult = {
@@ -344,20 +320,9 @@ export default function ListiniPage() {
   const [profileMarkupPercent, setProfileMarkupPercent] = useState<number>(0);
 
   const [showManualModal, setShowManualModal] = useState(false);
-  const [showPricingRulesModal, setShowPricingRulesModal] = useState(false);
   const [newDescription, setNewDescription] = useState('');
   const [newUnitPrice, setNewUnitPrice] = useState('0');
   const [newMarkupPercent, setNewMarkupPercent] = useState('0');
-  const [pricingRules, setPricingRules] = useState<PricingRule[]>([]);
-  const [pricingRuleLabel, setPricingRuleLabel] = useState('');
-  const [pricingRuleKey, setPricingRuleKey] = useState('custom');
-  const [pricingRuleUnit, setPricingRuleUnit] = useState('kg');
-  const [pricingRulePrice, setPricingRulePrice] = useState('0');
-  const [pricingRuleSourceLabel, setPricingRuleSourceLabel] = useState('');
-  const [pricingRuleSourceUrl, setPricingRuleSourceUrl] = useState('');
-  const [editingPricingRuleId, setEditingPricingRuleId] = useState<string | null>(null);
-  const [pricingRulesLoading, setPricingRulesLoading] = useState(false);
-  const [savingPricingRule, setSavingPricingRule] = useState(false);
   const [editingItem, setEditingItem] = useState<ListinoItem | null>(null);
   const [editingListino, setEditingListino] = useState<Listino | null>(null);
   const [editingListinoName, setEditingListinoName] = useState('');
@@ -378,6 +343,17 @@ export default function ListiniPage() {
     Record<string, string>
   >({});
   const [savingPricingSettings, setSavingPricingSettings] = useState(false);
+  // Price history: changes recorded when a new price list or shape prices are applied.
+  const [showPriceHistory, setShowPriceHistory] = useState(false);
+  const [priceHistory, setPriceHistory] = useState<
+    Array<{
+      id: string;
+      old_price: number;
+      new_price: number;
+      changed_at: string;
+      description: string;
+    }>
+  >([]);
 
   const fetchListini = async () => {
     const {
@@ -470,6 +446,31 @@ export default function ListiniPage() {
     }
   };
 
+  const togglePriceHistory = async () => {
+    const next = !showPriceHistory;
+    setShowPriceHistory(next);
+    if (!next || !selectedListino) return;
+    const { data, error } = await supabase
+      .from('listino_price_history')
+      .select('id, old_price, new_price, changed_at, listini_vettoriali(description)')
+      .eq('listino_id', selectedListino.id)
+      .order('changed_at', { ascending: false })
+      .limit(30);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setPriceHistory(
+      (data || []).map((row: any) => ({
+        id: row.id,
+        old_price: Number(row.old_price),
+        new_price: Number(row.new_price),
+        changed_at: row.changed_at,
+        description: row.listini_vettoriali?.description || 'Voce eliminata',
+      }))
+    );
+  };
+
   const togglePricingSettings = async () => {
     const next = !showPricingSettings;
     setShowPricingSettings(next);
@@ -548,31 +549,6 @@ export default function ListiniPage() {
     }
   };
 
-  const fetchPricingRules = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-
-    setPricingRulesLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('pricing_reference_rules')
-        .select(
-          'id, rule_key, label, reference_unit, reference_price, source_label, source_url, active'
-        )
-        .eq('profile_id', user.id)
-        .order('label', { ascending: true });
-
-      if (error) throw error;
-      setPricingRules(data || []);
-    } catch (err) {
-      toast.error(`Regole prezzo: ${(err as Error).message}`);
-    } finally {
-      setPricingRulesLoading(false);
-    }
-  };
-
   useEffect(() => {
     fetchListini();
   }, []);
@@ -586,103 +562,6 @@ export default function ListiniPage() {
       fetchSourceInfo(selectedListino.id, profileId);
     }
   }, [selectedListino?.id, profileId]);
-
-  const resetPricingRuleForm = () => {
-    setEditingPricingRuleId(null);
-    setPricingRuleLabel('');
-    setPricingRuleKey('custom');
-    setPricingRuleUnit('kg');
-    setPricingRulePrice('0');
-    setPricingRuleSourceLabel('');
-    setPricingRuleSourceUrl('');
-  };
-
-  const openPricingRulesModal = async () => {
-    setShowPricingRulesModal(true);
-    resetPricingRuleForm();
-    await fetchPricingRules();
-  };
-
-  const handleApplyPreset = (preset: {
-    rule_key: string;
-    label: string;
-    reference_unit: string;
-  }) => {
-    setPricingRuleKey(preset.rule_key);
-    setPricingRuleLabel(preset.label);
-    setPricingRuleUnit(preset.reference_unit);
-  };
-
-  const handleEditPricingRule = (rule: PricingRule) => {
-    setEditingPricingRuleId(rule.id);
-    setPricingRuleKey(rule.rule_key);
-    setPricingRuleLabel(rule.label);
-    setPricingRuleUnit(rule.reference_unit);
-    setPricingRulePrice(String(rule.reference_price));
-    setPricingRuleSourceLabel(rule.source_label || '');
-    setPricingRuleSourceUrl(rule.source_url || '');
-  };
-
-  const handleSavePricingRule = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const label = pricingRuleLabel.trim();
-    if (!label) {
-      toast.error('Inserisci il nome della regola');
-      return;
-    }
-
-    setSavingPricingRule(true);
-    try {
-      const payload = {
-        profile_id: user.id,
-        rule_key: pricingRuleKey.trim() || 'custom',
-        label,
-        reference_unit: pricingRuleUnit.trim() || 'kg',
-        reference_price: parseFloat(pricingRulePrice) || 0,
-        source_label: pricingRuleSourceLabel.trim() || null,
-        source_url: pricingRuleSourceUrl.trim() || null,
-        active: true,
-      };
-
-      const query = editingPricingRuleId
-        ? supabase
-            .from('pricing_reference_rules')
-            .update(payload)
-            .eq('id', editingPricingRuleId)
-        : supabase.from('pricing_reference_rules').insert(payload);
-      const { error } = await query;
-      if (error) throw error;
-
-      toast.success(
-        editingPricingRuleId ? 'Regola prezzo aggiornata' : 'Regola prezzo salvata'
-      );
-      resetPricingRuleForm();
-      await fetchPricingRules();
-    } catch (err) {
-      toast.error((err as Error).message);
-    } finally {
-      setSavingPricingRule(false);
-    }
-  };
-
-  const handleDeletePricingRule = async (ruleId: string) => {
-    if (!confirm('Eliminare questa regola prezzo?')) return;
-    try {
-      const { error } = await supabase
-        .from('pricing_reference_rules')
-        .delete()
-        .eq('id', ruleId);
-      if (error) throw error;
-      toast.success('Regola eliminata');
-      await fetchPricingRules();
-    } catch (err) {
-      toast.error((err as Error).message);
-    }
-  };
 
   const handleCreateListino = async () => {
     const name = prompt(t('listini.promptNewListino'));
@@ -1161,6 +1040,7 @@ export default function ListiniPage() {
                 <span
                   onClick={() => {
                     setShowPricingSettings(false);
+                    setShowPriceHistory(false);
                     setSelectedListino(l);
                   }}
                   className="cursor-pointer flex-1"
@@ -1308,6 +1188,68 @@ export default function ListiniPage() {
                     </div>
                   </div>
                 )}
+              </div>
+              <div className="mb-4 rounded-lg border border-slate-200 p-3 text-sm">
+                <button
+                  type="button"
+                  onClick={togglePriceHistory}
+                  className="flex w-full items-center justify-between font-medium text-slate-800"
+                  aria-expanded={showPriceHistory}
+                >
+                  <span>Ultime variazioni di prezzo</span>
+                  <span className="text-slate-500">{showPriceHistory ? '▲' : '▼'}</span>
+                </button>
+                {showPriceHistory &&
+                  (priceHistory.length ? (
+                    <table className="mt-3 w-full">
+                      <thead>
+                        <tr className="border-b text-slate-600">
+                          <th className="text-left py-1">Voce</th>
+                          <th className="text-right py-1">Prima</th>
+                          <th className="text-right py-1">Dopo</th>
+                          <th className="text-right py-1">Data</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {priceHistory.map((change) => {
+                          const delta = change.old_price
+                            ? Math.round(
+                                ((change.new_price - change.old_price) /
+                                  change.old_price) *
+                                  100
+                              )
+                            : 0;
+                          return (
+                            <tr key={change.id} className="border-b border-slate-100">
+                              <td className="py-1 pr-2">{change.description}</td>
+                              <td className="py-1 text-right">
+                                € {formatEuro(change.old_price)}
+                              </td>
+                              <td className="py-1 text-right">
+                                € {formatEuro(change.new_price)}{' '}
+                                <span
+                                  className={
+                                    delta > 0 ? 'text-red-700' : 'text-green-700'
+                                  }
+                                >
+                                  ({delta > 0 ? '+' : ''}
+                                  {delta}%)
+                                </span>
+                              </td>
+                              <td className="py-1 text-right text-slate-500">
+                                {new Date(change.changed_at).toLocaleDateString('it-IT')}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <p className="mt-2 text-slate-600">
+                      Nessuna variazione ancora: compariranno quando ricarichi il listino
+                      aggiornato del fornitore.
+                    </p>
+                  ))}
               </div>
               {pricingGroups.length > 0 && (
                 <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
@@ -1490,197 +1432,6 @@ export default function ListiniPage() {
                     ? t('actions.edit') || 'Modifica'
                     : t('listini.save')}
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showPricingRulesModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-start justify-between gap-4 mb-6">
-              <div>
-                <h3 className="text-lg font-semibold">Regole prezzo di riferimento</h3>
-                <p className="text-sm text-slate-500">
-                  Servono per i file che hanno peso, metri o altre misure ma non il
-                  prezzo. Esempio: ferro al kg, cavi al metro.
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  setShowPricingRulesModal(false);
-                  resetPricingRuleForm();
-                }}
-                className="text-slate-500 hover:text-slate-700"
-              >
-                Chiudi
-              </button>
-            </div>
-
-            <div className="mb-6">
-              <p className="text-sm font-medium mb-2">Preset rapidi</p>
-              <div className="flex flex-wrap gap-2">
-                {RULE_PRESETS.map((preset) => (
-                  <button
-                    key={preset.rule_key}
-                    onClick={() => handleApplyPreset(preset)}
-                    className="px-3 py-1.5 rounded-full border border-slate-300 text-sm hover:bg-slate-50"
-                  >
-                    {preset.label} ({preset.reference_unit})
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Nome regola</label>
-                  <input
-                    type="text"
-                    value={pricingRuleLabel}
-                    onChange={(e) => setPricingRuleLabel(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2"
-                    placeholder="Es. Ferro / acciaio"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Chiave categoria
-                  </label>
-                  <input
-                    type="text"
-                    value={pricingRuleKey}
-                    onChange={(e) => setPricingRuleKey(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2"
-                    placeholder="Es. metal_ferrous"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">
-                      Unita riferimento
-                    </label>
-                    <input
-                      type="text"
-                      value={pricingRuleUnit}
-                      onChange={(e) => setPricingRuleUnit(e.target.value)}
-                      className="w-full border rounded-lg px-3 py-2"
-                      placeholder="kg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">
-                      Prezzo riferimento
-                    </label>
-                    <input
-                      type="number"
-                      step="0.0001"
-                      value={pricingRulePrice}
-                      onChange={(e) => setPricingRulePrice(e.target.value)}
-                      className="w-full border rounded-lg px-3 py-2"
-                      placeholder="0.0000"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Fonte</label>
-                  <input
-                    type="text"
-                    value={pricingRuleSourceLabel}
-                    onChange={(e) => setPricingRuleSourceLabel(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2"
-                    placeholder="Es. listino fornitore / mercato metalli"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">URL fonte</label>
-                  <input
-                    type="url"
-                    value={pricingRuleSourceUrl}
-                    onChange={(e) => setPricingRuleSourceUrl(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2"
-                    placeholder="https://..."
-                  />
-                </div>
-                <div className="flex gap-3">
-                  <button
-                    onClick={handleSavePricingRule}
-                    className="btn-primary"
-                    disabled={savingPricingRule}
-                  >
-                    {savingPricingRule
-                      ? 'Salvataggio...'
-                      : editingPricingRuleId
-                        ? 'Aggiorna regola'
-                        : 'Salva regola'}
-                  </button>
-                  <button
-                    onClick={resetPricingRuleForm}
-                    className="btn-secondary"
-                    disabled={savingPricingRule}
-                  >
-                    Pulisci
-                  </button>
-                </div>
-              </div>
-
-              <div className="bg-slate-50 rounded-xl border p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold">Regole attive</h4>
-                  <button
-                    onClick={fetchPricingRules}
-                    className="text-sm text-slate-600 hover:text-slate-800"
-                  >
-                    Aggiorna
-                  </button>
-                </div>
-                {pricingRulesLoading ? (
-                  <p className="text-sm text-slate-500">Caricamento...</p>
-                ) : pricingRules.length === 0 ? (
-                  <p className="text-sm text-slate-500">
-                    Nessuna regola salvata. Se carichi ferro con solo il peso, qui devi
-                    impostare almeno una regola €/kg.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {pricingRules.map((rule) => (
-                      <div key={rule.id} className="rounded-lg border bg-white p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="font-medium">{rule.label}</div>
-                            <div className="text-xs text-slate-500">
-                              {rule.rule_key} · {rule.reference_unit} ·{' '}
-                              {Number(rule.reference_price).toFixed(4)}
-                            </div>
-                            {(rule.source_label || rule.source_url) && (
-                              <div className="text-xs text-slate-500 mt-1 break-all">
-                                {[rule.source_label, rule.source_url]
-                                  .filter(Boolean)
-                                  .join(' · ')}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <button
-                              onClick={() => handleEditPricingRule(rule)}
-                              className="text-slate-600 hover:text-slate-800 text-sm"
-                            >
-                              Modifica
-                            </button>
-                            <button
-                              onClick={() => handleDeletePricingRule(rule.id)}
-                              className="text-red-600 hover:text-red-800 text-sm"
-                            >
-                              Elimina
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
             </div>
           </div>
         </div>

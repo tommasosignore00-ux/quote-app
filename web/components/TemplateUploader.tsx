@@ -12,7 +12,7 @@ type TemplateDraft = {
   warnings?: string[];
 };
 
-const ACCEPTED_EXTENSIONS = ['.docx', '.html', '.htm'];
+const ACCEPTED_EXTENSIONS = ['.docx', '.doc', '.html', '.htm'];
 
 /** An HTML file written for the app already has the item and total placeholders. */
 function isReadyTemplate(html: string): boolean {
@@ -92,7 +92,7 @@ export default function TemplateUploader() {
 
     const name = file.name.toLowerCase();
     if (!ACCEPTED_EXTENSIONS.some((ext) => name.endsWith(ext))) {
-      toast.error('Carica il preventivo in formato Word (.docx) o HTML');
+      toast.error('Carica il preventivo in formato Word (.docx o .doc) o HTML');
       return;
     }
 

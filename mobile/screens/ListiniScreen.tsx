@@ -56,17 +56,6 @@ type ListinoItem = {
   category?: string | null;
 };
 
-type PricingRule = {
-  id: string;
-  rule_key: string;
-  label: string;
-  reference_unit: string;
-  reference_price: number;
-  source_label?: string | null;
-  source_url?: string | null;
-  active: boolean;
-};
-
 type UploadPayload = {
   error?: string;
   warning?: string;
@@ -103,15 +92,6 @@ type UploadPayload = {
     reason?: string | null;
   }>;
 };
-
-const RULE_PRESETS = [
-  { rule_key: 'metal_ferrous', label: 'Ferro / acciaio', reference_unit: 'kg' },
-  { rule_key: 'metal_nonferrous', label: 'Rame / metalli non ferrosi', reference_unit: 'kg' },
-  { rule_key: 'electric_cable', label: 'Cavi elettrici', reference_unit: 'm' },
-  { rule_key: 'piping', label: 'Tubazioni / raccordi', reference_unit: 'm' },
-  { rule_key: 'paint_chemical', label: 'Vernici / chimici', reference_unit: 'l' },
-  { rule_key: 'wood_panel', label: 'Legno / pannelli', reference_unit: 'm2' },
-];
 
 function inferMimeType(name: string, mimeType?: string | null): string {
   if (mimeType) return mimeType;
@@ -304,6 +284,8 @@ export default function ListiniScreen() {
   const [categoryMarkupRows, setCategoryMarkupRows] = useState<Array<{ category: string; itemCount: number; markupPercent: number | null }>>([]);
   const [categoryMarkupDrafts, setCategoryMarkupDrafts] = useState<Record<string, string>>({});
   const [savingPricingSettings, setSavingPricingSettings] = useState(false);
+  const [showPriceHistory, setShowPriceHistory] = useState(false);
+  const [priceHistory, setPriceHistory] = useState<Array<{ id: string; old_price: number; new_price: number; changed_at: string; description: string }>>([]);
 
   const [showListinoModal, setShowListinoModal] = useState(false);
   const [newListinoName, setNewListinoName] = useState('');
@@ -316,17 +298,6 @@ export default function ListiniScreen() {
   const [editingItem, setEditingItem] = useState<ListinoItem | null>(null);
   const [savingItem, setSavingItem] = useState(false);
 
-  const [showPricingRulesModal, setShowPricingRulesModal] = useState(false);
-  const [pricingRules, setPricingRules] = useState<PricingRule[]>([]);
-  const [pricingRulesLoading, setPricingRulesLoading] = useState(false);
-  const [savingPricingRule, setSavingPricingRule] = useState(false);
-  const [editingPricingRuleId, setEditingPricingRuleId] = useState<string | null>(null);
-  const [pricingRuleLabel, setPricingRuleLabel] = useState('');
-  const [pricingRuleKey, setPricingRuleKey] = useState('custom');
-  const [pricingRuleUnit, setPricingRuleUnit] = useState('kg');
-  const [pricingRulePrice, setPricingRulePrice] = useState('0');
-  const [pricingRuleSourceLabel, setPricingRuleSourceLabel] = useState('');
-  const [pricingRuleSourceUrl, setPricingRuleSourceUrl] = useState('');
 
   const showWebApiConfigAlert = (featureLabel: string) => {
     Alert.alert(
@@ -446,6 +417,31 @@ export default function ListiniScreen() {
     }
   };
 
+  const togglePriceHistory = async () => {
+    const next = !showPriceHistory;
+    setShowPriceHistory(next);
+    if (!next || !selectedListino) return;
+    const { data, error } = await supabase
+      .from('listino_price_history')
+      .select('id, old_price, new_price, changed_at, listini_vettoriali(description)')
+      .eq('listino_id', selectedListino.id)
+      .order('changed_at', { ascending: false })
+      .limit(30);
+    if (error) {
+      Alert.alert(t('messages.error'), error.message);
+      return;
+    }
+    setPriceHistory(
+      (data || []).map((row: any) => ({
+        id: row.id,
+        old_price: Number(row.old_price),
+        new_price: Number(row.new_price),
+        changed_at: row.changed_at,
+        description: row.listini_vettoriali?.description || 'Voce eliminata',
+      }))
+    );
+  };
+
   const togglePricingSettings = async () => {
     const next = !showPricingSettings;
     setShowPricingSettings(next);
@@ -507,24 +503,6 @@ export default function ListiniScreen() {
     }
   };
 
-  const fetchPricingRules = useCallback(async () => {
-    if (!profileId) return;
-    setPricingRulesLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('pricing_reference_rules')
-        .select('id, rule_key, label, reference_unit, reference_price, source_label, source_url, active')
-        .eq('profile_id', profileId)
-        .order('label', { ascending: true });
-      if (error) throw error;
-      setPricingRules(data || []);
-    } catch (err) {
-      Alert.alert(t('messages.error'), (err as Error).message);
-    } finally {
-      setPricingRulesLoading(false);
-    }
-  }, [profileId, t]);
-
   useFocusEffect(
     useCallback(() => {
       fetchListini();
@@ -562,17 +540,12 @@ export default function ListiniScreen() {
           fetchItems(selectedListino.id);
         }
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pricing_reference_rules', filter: `profile_id=eq.${profileId}` }, () => {
-        if (showPricingRulesModal) {
-          fetchPricingRules();
-        }
-      })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchItems, fetchListini, fetchPricingRules, fetchSourceInfo, profileId, selectedListino?.id, showPricingRulesModal]);
+  }, [fetchItems, fetchListini, fetchSourceInfo, profileId, selectedListino?.id]);
 
   const resetListinoForm = () => {
     setEditingListino(null);
@@ -584,16 +557,6 @@ export default function ListiniScreen() {
     setNewDescription('');
     setNewUnitPrice('0');
     setNewMarkupPercent(String(profileMarkupPercent || 0));
-  };
-
-  const resetPricingRuleForm = () => {
-    setEditingPricingRuleId(null);
-    setPricingRuleLabel('');
-    setPricingRuleKey('custom');
-    setPricingRuleUnit('kg');
-    setPricingRulePrice('0');
-    setPricingRuleSourceLabel('');
-    setPricingRuleSourceUrl('');
   };
 
   const handleCreateOrUpdateListino = async () => {
@@ -947,85 +910,6 @@ export default function ListiniScreen() {
     }
   };
 
-  const openPricingRulesModal = async () => {
-    setShowPricingRulesModal(true);
-    resetPricingRuleForm();
-    await fetchPricingRules();
-  };
-
-  const handleApplyPreset = (preset: { rule_key: string; label: string; reference_unit: string }) => {
-    setPricingRuleKey(preset.rule_key);
-    setPricingRuleLabel(preset.label);
-    setPricingRuleUnit(preset.reference_unit);
-  };
-
-  const handleEditPricingRule = (rule: PricingRule) => {
-    setEditingPricingRuleId(rule.id);
-    setPricingRuleKey(rule.rule_key);
-    setPricingRuleLabel(rule.label);
-    setPricingRuleUnit(rule.reference_unit);
-    setPricingRulePrice(String(rule.reference_price));
-    setPricingRuleSourceLabel(rule.source_label || '');
-    setPricingRuleSourceUrl(rule.source_url || '');
-  };
-
-  const handleSavePricingRule = async () => {
-    if (!profileId) return;
-
-    const label = pricingRuleLabel.trim();
-    if (!label) {
-      Alert.alert(t('messages.error'), 'Inserisci il nome della regola');
-      return;
-    }
-
-    setSavingPricingRule(true);
-    try {
-      const payload = {
-        profile_id: profileId,
-        rule_key: pricingRuleKey.trim() || 'custom',
-        label,
-        reference_unit: pricingRuleUnit.trim() || 'kg',
-        reference_price: parseFloat(pricingRulePrice) || 0,
-        source_label: pricingRuleSourceLabel.trim() || null,
-        source_url: pricingRuleSourceUrl.trim() || null,
-        active: true,
-      };
-
-      const query = editingPricingRuleId
-        ? supabase.from('pricing_reference_rules').update(payload).eq('id', editingPricingRuleId)
-        : supabase.from('pricing_reference_rules').insert(payload);
-
-      const { error } = await query;
-      if (error) throw error;
-
-      resetPricingRuleForm();
-      await fetchPricingRules();
-    } catch (err) {
-      Alert.alert(t('messages.error'), (err as Error).message);
-    } finally {
-      setSavingPricingRule(false);
-    }
-  };
-
-  const handleDeletePricingRule = async (ruleId: string) => {
-    Alert.alert('Eliminare questa regola prezzo?', '', [
-      { text: t('buttons.cancel'), style: 'cancel' },
-      {
-        text: t('actions.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            const { error } = await supabase.from('pricing_reference_rules').delete().eq('id', ruleId);
-            if (error) throw error;
-            await fetchPricingRules();
-          } catch (err) {
-            Alert.alert(t('messages.error'), (err as Error).message);
-          }
-        },
-      },
-    ]);
-  };
-
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Text style={[styles.title, { color: colors.text }]}>{t('main.listini')}</Text>
@@ -1116,6 +1000,7 @@ export default function ListiniScreen() {
                     style={styles.listinoNameWrap}
                     onPress={() => {
                       setShowPricingSettings(false);
+                      setShowPriceHistory(false);
                       setSelectedListino(item);
                     }}
                   >
@@ -1216,6 +1101,33 @@ export default function ListiniScreen() {
                       <Text style={styles.actionBtnText}>{savingPricingSettings ? 'Salvo...' : 'Salva e ricalcola'}</Text>
                     </TouchableOpacity>
                   </>
+                ) : null}
+              </View>
+
+              <View style={[styles.noticeCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 12 }]}>
+                <TouchableOpacity onPress={togglePriceHistory} accessibilityRole="button" accessibilityState={{ expanded: showPriceHistory }}>
+                  <Text style={[styles.noticeTitle, { color: colors.text }]}>
+                    Ultime variazioni di prezzo {showPriceHistory ? '▲' : '▼'}
+                  </Text>
+                </TouchableOpacity>
+                {showPriceHistory ? (
+                  priceHistory.length ? (
+                    priceHistory.map((change) => {
+                      const delta = change.old_price ? Math.round(((change.new_price - change.old_price) / change.old_price) * 100) : 0;
+                      return (
+                        <View key={change.id} style={{ marginTop: 8 }}>
+                          <Text style={[styles.noticeText, { color: colors.text }]} numberOfLines={2}>{change.description}</Text>
+                          <Text style={[styles.noticeText, { color: colors.textSecondary }]}>
+                            € {change.old_price.toFixed(2).replace('.', ',')} → € {change.new_price.toFixed(2).replace('.', ',')} ({delta > 0 ? '+' : ''}{delta}%) · {new Date(change.changed_at).toLocaleDateString('it-IT')}
+                          </Text>
+                        </View>
+                      );
+                    })
+                  ) : (
+                    <Text style={[styles.noticeText, { color: colors.textSecondary, marginTop: 8 }]}>
+                      Nessuna variazione ancora: compariranno quando ricarichi il listino aggiornato del fornitore.
+                    </Text>
+                  )
                 ) : null}
               </View>
 
@@ -1384,152 +1296,6 @@ export default function ListiniScreen() {
         </View>
       </Modal>
 
-      <Modal
-        visible={showPricingRulesModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowPricingRulesModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalLarge, { backgroundColor: colors.modalBg }]}>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.pricingHeader}>
-                <View style={styles.pricingHeaderText}>
-                  <Text style={[styles.modalTitle, { color: colors.text }]}>Regole prezzo di riferimento</Text>
-                  <Text style={[styles.pricingHint, { color: colors.textSecondary }]}>
-                    Servono per i file senza prezzo diretto ma con peso, metri o altre misure.
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => {
-                    setShowPricingRulesModal(false);
-                    resetPricingRuleForm();
-                  }}
-                >
-                  <Text style={[styles.closeText, { color: colors.textSecondary }]}>Chiudi</Text>
-                </TouchableOpacity>
-              </View>
-
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Preset rapidi</Text>
-              <View style={styles.presetWrap}>
-                {RULE_PRESETS.map((preset) => (
-                  <TouchableOpacity
-                    key={preset.rule_key}
-                    style={[styles.presetChip, { borderColor: colors.border, backgroundColor: colors.surface }]}
-                    onPress={() => handleApplyPreset(preset)}
-                  >
-                    <Text style={[styles.presetText, { color: colors.text }]}>
-                      {preset.label} ({preset.reference_unit})
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Modifica regola</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
-                value={pricingRuleLabel}
-                onChangeText={setPricingRuleLabel}
-                placeholder="Nome regola"
-                placeholderTextColor={colors.textTertiary}
-              />
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
-                value={pricingRuleKey}
-                onChangeText={setPricingRuleKey}
-                placeholder="Chiave regola"
-                placeholderTextColor={colors.textTertiary}
-              />
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
-                value={pricingRuleUnit}
-                onChangeText={setPricingRuleUnit}
-                placeholder="Unità di riferimento"
-                placeholderTextColor={colors.textTertiary}
-              />
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
-                value={pricingRulePrice}
-                onChangeText={setPricingRulePrice}
-                keyboardType="decimal-pad"
-                placeholder="Prezzo riferimento"
-                placeholderTextColor={colors.textTertiary}
-              />
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
-                value={pricingRuleSourceLabel}
-                onChangeText={setPricingRuleSourceLabel}
-                placeholder="Fonte"
-                placeholderTextColor={colors.textTertiary}
-              />
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
-                value={pricingRuleSourceUrl}
-                onChangeText={setPricingRuleSourceUrl}
-                placeholder="URL fonte"
-                placeholderTextColor={colors.textTertiary}
-                autoCapitalize="none"
-              />
-
-              <View style={styles.modalBtns}>
-                <TouchableOpacity
-                  style={styles.modalBtnSecondary}
-                  onPress={resetPricingRuleForm}
-                  disabled={savingPricingRule}
-                >
-                  <Text style={styles.modalBtnSecondaryText}>Pulisci</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.modalBtnPrimary}
-                  onPress={handleSavePricingRule}
-                  disabled={savingPricingRule}
-                >
-                  <Text style={styles.modalBtnPrimaryText}>{savingPricingRule ? '...' : 'Salva regola'}</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.pricingRulesList}>
-                <View style={styles.cardHeader}>
-                  <Text style={[styles.sectionTitle, { color: colors.text }]}>Regole salvate</Text>
-                  {pricingRulesLoading ? <ActivityIndicator size="small" color={colors.primary} /> : null}
-                </View>
-
-                {!pricingRules.length && !pricingRulesLoading ? (
-                  <Text style={[styles.placeholder, { color: colors.textTertiary }]}>
-                    Nessuna regola salvata.
-                  </Text>
-                ) : null}
-
-                {pricingRules.map((rule) => (
-                  <View key={rule.id} style={[styles.ruleRow, { borderColor: colors.borderLight }]}>
-                    <View style={styles.ruleInfo}>
-                      <Text style={[styles.ruleLabel, { color: colors.text }]}>
-                        {rule.label} ({rule.reference_unit})
-                      </Text>
-                      <Text style={[styles.ruleMeta, { color: colors.textSecondary }]}>
-                        {rule.rule_key} · €{Number(rule.reference_price).toFixed(2)}
-                      </Text>
-                      {rule.source_label || rule.source_url ? (
-                        <Text style={[styles.ruleMeta, { color: colors.textSecondary }]}>
-                          {[rule.source_label, rule.source_url].filter(Boolean).join(' · ')}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <View style={styles.rowActions}>
-                      <TouchableOpacity onPress={() => handleEditPricingRule(rule)}>
-                        <Text style={styles.rowActionText}>✏️</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => handleDeletePricingRule(rule.id)}>
-                        <Text style={styles.rowActionText}>🗑️</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -1596,7 +1362,6 @@ const styles = StyleSheet.create({
   placeholder: { fontSize: 14 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
   modal: { borderRadius: 16, padding: 20 },
-  modalLarge: { borderRadius: 16, padding: 20, maxHeight: '90%' },
   modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
   input: { borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 10 },
   modalBtns: { flexDirection: 'row', gap: 12, marginTop: 8 },
@@ -1604,17 +1369,4 @@ const styles = StyleSheet.create({
   modalBtnPrimaryText: { color: '#fff', fontWeight: '600' },
   modalBtnSecondary: { flex: 1, backgroundColor: '#e2e8f0', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
   modalBtnSecondaryText: { color: '#334155', fontWeight: '600' },
-  pricingHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 },
-  pricingHeaderText: { flex: 1 },
-  pricingHint: { fontSize: 13, lineHeight: 18 },
-  closeText: { fontWeight: '600' },
-  sectionTitle: { fontSize: 15, fontWeight: '700', marginTop: 8, marginBottom: 8 },
-  presetWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
-  presetChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
-  presetText: { fontSize: 12, fontWeight: '500' },
-  pricingRulesList: { marginTop: 10 },
-  ruleRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1 },
-  ruleInfo: { flex: 1, paddingRight: 12 },
-  ruleLabel: { fontSize: 14, fontWeight: '600' },
-  ruleMeta: { fontSize: 12, marginTop: 2 },
 });

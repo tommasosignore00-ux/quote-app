@@ -15,6 +15,8 @@ export type UniversalParsedItem = {
   pricing_group?: string | null;
   /** Description as first written, to find rows saved before a rename. */
   source_description?: string | null;
+  /** Unit of measure shown on quotes ("pz", "m", "kg", "m²", "h"). */
+  unit?: string | null;
 };
 
 export type UniversalImportSummary = {
@@ -517,6 +519,15 @@ const HEADER_ALIASES: Record<string, string[]> = {
 };
 
 const UNIT_ALIASES: Record<string, string> = {
+  cad: 'pcs',
+  'cad.': 'pcs',
+  cadauno: 'pcs',
+  cadauna: 'pcs',
+  h: 'h',
+  ora: 'h',
+  ore: 'h',
+  corpo: 'corpo',
+  'a corpo': 'corpo',
   mt: 'm',
   metro: 'm',
   metri: 'm',
@@ -939,6 +950,32 @@ function extractContextLabelFromRow(
   return null;
 }
 
+const DISPLAY_UNITS: Record<string, string> = {
+  pcs: 'pz',
+  m: 'm',
+  mm: 'mm',
+  cm: 'cm',
+  m2: 'm²',
+  m3: 'm³',
+  kg: 'kg',
+  g: 'g',
+  t: 't',
+  l: 'l',
+  coil: 'bobina',
+  roll: 'rotolo',
+  pack: 'conf',
+  box: 'scatola',
+  pallet: 'pallet',
+  h: 'h',
+  corpo: 'a corpo',
+};
+
+/** Unit as written on a quote, from the normalized one ("pcs" -> "pz", "m2" -> "m²"). */
+export function displayUnit(unit: string | null | undefined): string | null {
+  if (!unit) return null;
+  return DISPLAY_UNITS[unit] || null;
+}
+
 function normalizeUnit(value: unknown): string | null {
   const t = normalizeText(value);
   if (!t) return null;
@@ -1289,6 +1326,7 @@ function parseRows(rows: unknown[][]): UniversalImportResult {
         unitPrice !== null && unitPrice >= 0 ? 'resolved' : 'needs_reference',
       pricing_basis_unit: pricingBasis?.unit || null,
       pricing_basis_quantity: pricingBasis?.qty ?? null,
+      unit: displayUnit(normalizedUnit),
       inferred_rule_key: inferredRuleKey,
       extracted_measurements: pricingBasis?.measurements || undefined,
     });
@@ -1435,8 +1473,9 @@ export function parseUniversalPdfText(text: string): UniversalImportResult {
   );
 
   // PDF text has no reliable columns: keep the reading that found more usable items
-  // (priced first, then items with a measurement that a pricing rule can price).
-  return pdfResultScore(lineBased) > pdfResultScore(columnBased)
+  // (priced first, then items with a measurement that a pricing rule can price);
+  // on a tie the line reading wins: it is built for PDF layouts.
+  return pdfResultScore(lineBased) >= pdfResultScore(columnBased)
     ? lineBased
     : columnBased;
 }
@@ -1681,6 +1720,7 @@ function parseTechnicalTablesPdfText(
           pricing_source: 'needs_reference',
           pricing_status: 'needs_reference',
           pricing_basis_unit: 'kg',
+          unit: 'pz',
           pricing_basis_quantity: sheetWeight,
           inferred_rule_key: documentIsFerrous
             ? 'metal_ferrous'
@@ -1728,6 +1768,7 @@ function parseTechnicalTablesPdfText(
       pricing_status: 'needs_reference',
       pricing_basis_unit: 'kg',
       pricing_basis_quantity: weight,
+      unit: 'm',
       inferred_rule_key: inferredRuleKey,
       extracted_measurements: { kg: weight },
       pricing_group: heading,
@@ -1839,6 +1880,7 @@ function parseLineBasedPdfText(rawLines: string[]): UniversalImportResult {
       pricing_status: 'resolved',
       pricing_basis_unit: unit ? toBaseQuantity(1, unit).baseUnit : null,
       pricing_basis_quantity: unit ? 1 : null,
+      unit: displayUnit(unit),
       inferred_rule_key: inferRuleKey({ description, category: parentTitle }),
     });
   };

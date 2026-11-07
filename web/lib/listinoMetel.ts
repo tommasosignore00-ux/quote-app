@@ -1,3 +1,4 @@
+import { displayUnit } from './listinoUniversalImport';
 import type {
   UniversalImportResult,
   UniversalParsedItem,
@@ -109,6 +110,7 @@ export function parseMetelText(text: string): UniversalImportResult {
       pricing_source: 'file',
       pricing_status: 'resolved',
       pricing_basis_unit: unit,
+      unit: displayUnit(unit),
       pricing_basis_quantity: unit ? 1 : null,
       inferred_rule_key: null,
     });

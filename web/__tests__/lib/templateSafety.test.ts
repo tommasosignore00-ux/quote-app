@@ -125,3 +125,21 @@ describe('template safety and robustness', () => {
     expect(source.content).not.toContain('base64');
   });
 });
+
+describe('old Word .doc files', () => {
+  it('reads text and table columns from a .doc quote', async () => {
+    const source = await readTemplateSource({
+      buffer: fs.readFileSync(path.join(__dirname, '../fixtures/preventivo-caldaie.doc')),
+      fileName: 'preventivo.doc',
+    });
+    expect(source.kind).toBe('doc');
+    expect(source.content).toContain('TERMOSERVICE NERI SRL');
+    expect(source.content).toContain('Cod.\tDescrizione\tU.M.');
+  });
+});
+
+it('explains how to fix an unreadable .doc', async () => {
+  await expect(
+    readTemplateSource({ buffer: Buffer.from('x'), fileName: 'vecchio.doc' })
+  ).rejects.toThrow(/salvalo come \.docx/);
+});

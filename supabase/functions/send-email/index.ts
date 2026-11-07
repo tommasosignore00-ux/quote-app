@@ -21,6 +21,26 @@ async function senderFor(userId: string): Promise<string> {
   return name ? `"${name}" <${address}>` : EMAIL_FROM
 }
 
+/**
+ * Outlook desktop and other mail apps ignore the <style> block of a quote template:
+ * copy its rules onto each element (the block stays for the apps that support it).
+ * If inlining fails for any reason the email goes out unchanged.
+ */
+async function inlineCss(html: string): Promise<string> {
+  try {
+    const { default: juice } = await import('npm:juice@11')
+    return juice(html, {
+      removeStyleTags: false,
+      preserveMediaQueries: true,
+      applyWidthAttributes: true,
+      applyAttributesTableElements: true,
+    })
+  } catch (err) {
+    console.warn('CSS inlining skipped:', (err as Error).message)
+    return html
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -42,7 +62,7 @@ serve(async (req) => {
       from: await senderFor(user.id),
       to: [to],
       subject,
-      html,
+      html: await inlineCss(html),
     }
     if (user.email) email.reply_to = user.email
     if (pdfBase64 && pdfFilename) {

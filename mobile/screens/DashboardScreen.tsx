@@ -59,6 +59,7 @@ export default function DashboardScreen() {
   const [showCostoModal, setShowCostoModal] = useState(false);
   const [newCostoDesc, setNewCostoDesc] = useState('');
   const [newCostoQty, setNewCostoQty] = useState('1');
+  const [newCostoUnit, setNewCostoUnit] = useState('');
   const [newCostoPrice, setNewCostoPrice] = useState('0');
   const [creatingCosto, setCreatingCosto] = useState(false);
   const [matchedItem, setMatchedItem] = useState<any>(null);
@@ -489,11 +490,14 @@ export default function DashboardScreen() {
         unit_price: unitPrice,
         tax_rate: taxRate,
         listino_item_id: listinoItemId,
+        // Empty: the database copies the unit of the price list item.
+        unit: newCostoUnit.trim() || null,
       }).select('*');
       if (error) throw error;
       if (created && created[0]) setCosti((prev) => [created[0], ...prev]);
       setNewCostoDesc('');
       setNewCostoQty('1');
+      setNewCostoUnit('');
       setNewCostoPrice('0');
       setMatchedItem(null);
       setShowCostoModal(false);
@@ -962,6 +966,7 @@ export default function DashboardScreen() {
               )}
 
               <TextInput style={styles.input} placeholder={t('dashboard.quantity')} value={newCostoQty} onChangeText={setNewCostoQty} keyboardType="decimal-pad" />
+              <TextInput style={styles.input} placeholder="Unità di misura (pz, m, kg, h...)" value={newCostoUnit} onChangeText={setNewCostoUnit} maxLength={20} autoCapitalize="none" />
               <TextInput style={styles.input} placeholder={t('dashboard.unitPrice')} value={newCostoPrice} onChangeText={setNewCostoPrice} keyboardType="decimal-pad" />
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 <TouchableOpacity style={styles.btn} onPress={() => { setShowCostoModal(false); setShowListinoSelector(false); setSearchResults([]); setMatchedItem(null); }}>
