@@ -94,6 +94,55 @@ const PAYMENT_TERMS: Record<string, string> = {
   default: 'Payment due within 30 days. Bank transfer.',
 };
 
+const LOCALE_BY_COUNTRY: Record<string, string> = {
+  IT: 'it-IT',
+  DE: 'de-DE',
+  FR: 'fr-FR',
+  ES: 'es-ES',
+  PT: 'pt-PT',
+  NL: 'nl-NL',
+  BE: 'fr-BE',
+  AT: 'de-AT',
+  CH: 'de-CH',
+  SE: 'sv-SE',
+  NO: 'nb-NO',
+  DK: 'da-DK',
+  GB: 'en-GB',
+  US: 'en-US',
+};
+
+/** Locale of the quote's country, not of the server or device that renders it. */
+function quoteLocale(cc: string): string {
+  return LOCALE_BY_COUNTRY[cc] || 'it-IT';
+}
+
+/** "€ 1.930,00" for Italy: grouping and decimals as the client expects them. */
+function formatMoney(currency: string, value: number, cc: string): string {
+  // 'always': Italian rules alone would print 1930,00 instead of 1.930,00.
+  const amount = (Number(value) || 0).toLocaleString(quoteLocale(cc), {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    useGrouping: 'always',
+  } as Intl.NumberFormatOptions);
+  return `${currency} ${amount}`;
+}
+
+function formatQuoteDate(cc: string, withTime = false): string {
+  const options: Intl.DateTimeFormatOptions = withTime
+    ? {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }
+    : { day: '2-digit', month: '2-digit', year: 'numeric' };
+  return new Date().toLocaleString(quoteLocale(cc), {
+    timeZone: 'Europe/Rome',
+    ...options,
+  });
+}
+
 const CURRENCIES: Record<string, string> = {
   IT: '€',
   DE: '€',
@@ -596,8 +645,8 @@ function processCustomTemplate(template: string, data: QuoteData): string {
             <tr>
               <td>${item.description}</td>
               <td>${item.quantity}</td>
-              <td>${currency}${getCustomerUnitPrice(item).toFixed(2)}</td>
-              <td>${currency}${rowSubtotal.toFixed(2)}</td>
+              <td>${formatMoney(currency, getCustomerUnitPrice(item), cc)}</td>
+              <td>${formatMoney(currency, rowSubtotal, cc)}</td>
             </tr>
           `.trim();
           })
@@ -613,8 +662,8 @@ function processCustomTemplate(template: string, data: QuoteData): string {
       <tr>
         <td>${item.description}</td>
         <td>${item.quantity}</td>
-        <td>${currency}${getCustomerUnitPrice(item).toFixed(2)}</td>
-        <td>${currency}${rowSubtotal.toFixed(2)}</td>
+        <td>${formatMoney(currency, getCustomerUnitPrice(item), cc)}</td>
+        <td>${formatMoney(currency, rowSubtotal, cc)}</td>
       </tr>
     `.trim();
     })
@@ -645,11 +694,11 @@ function processCustomTemplate(template: string, data: QuoteData): string {
     .replace(/\{\{totalLabel\}\}/g, totalLabel)
     .replace(/\{\{itemsTable\}\}/g, itemsTableHtml)
     .replace(/\{\{items\}\}/g, itemsHtml)
-    .replace(/\{\{subtotal\}\}/g, `${currency}${subtotal.toFixed(2)}`)
-    .replace(/\{\{taxes\}\}/g, `${currency}${taxes.toFixed(2)}`)
-    .replace(/\{\{total\}\}/g, `${currency}${total.toFixed(2)}`)
-    .replace(/\{\{date\}\}/g, new Date().toLocaleDateString())
-    .replace(/\{\{dateTime\}\}/g, new Date().toLocaleString())
+    .replace(/\{\{subtotal\}\}/g, `${formatMoney(currency, subtotal, cc)}`)
+    .replace(/\{\{taxes\}\}/g, `${formatMoney(currency, taxes, cc)}`)
+    .replace(/\{\{total\}\}/g, `${formatMoney(currency, total, cc)}`)
+    .replace(/\{\{date\}\}/g, formatQuoteDate(cc))
+    .replace(/\{\{dateTime\}\}/g, formatQuoteDate(cc, true))
     .replace(/\{\{acceptanceLink\}\}/g, ACCEPTANCE_LINK_MARKER)
     .replace(/\{\{acceptanceUrl\}\}/g, ACCEPTANCE_URL_MARKER);
 
@@ -689,8 +738,8 @@ export function generateQuoteHTML(data: QuoteData): string {
       <tr style="border-bottom: 1px solid #ddd;">
         <td style="padding: 10px; text-align: left;">${item.description}</td>
         <td style="padding: 10px; text-align: center;">${item.quantity}</td>
-        <td style="padding: 10px; text-align: right;">${currency}${getCustomerUnitPrice(item).toFixed(2)}</td>
-        <td style="padding: 10px; text-align: right;">${currency}${rowSubtotal.toFixed(2)}</td>
+        <td style="padding: 10px; text-align: right;">${formatMoney(currency, getCustomerUnitPrice(item), cc)}</td>
+        <td style="padding: 10px; text-align: right;">${formatMoney(currency, rowSubtotal, cc)}</td>
       </tr>
     `;
     })
@@ -795,7 +844,7 @@ export function generateQuoteHTML(data: QuoteData): string {
 
         <div class="title">${data.lavoroTitle}</div>
 
-        <div class="revision-date">Revision: ${String(data.revision).padStart(2, '0')} | Date: ${new Date().toLocaleDateString()}</div>
+        <div class="revision-date">Revision: ${String(data.revision).padStart(2, '0')} | Date: ${formatQuoteDate(cc)}</div>
 
         <div class="client-section">
           <div class="client-label">${clientLabel}</div>
@@ -820,15 +869,15 @@ export function generateQuoteHTML(data: QuoteData): string {
         <div class="summary-section">
           <div class="summary-row">
             <span class="summary-label">${subtotalLabel}</span>
-            <span class="summary-value">${currency}${subtotal.toFixed(2)}</span>
+            <span class="summary-value">${formatMoney(currency, subtotal, cc)}</span>
           </div>
           <div class="summary-row">
             <span class="summary-label">${taxLabelFull}</span>
-            <span class="summary-value">${currency}${taxes.toFixed(2)}</span>
+            <span class="summary-value">${formatMoney(currency, taxes, cc)}</span>
           </div>
           <div class="summary-row total-row">
             <span>${totalLabel}</span>
-            <span>${currency}${total.toFixed(2)}</span>
+            <span>${formatMoney(currency, total, cc)}</span>
           </div>
         </div>
 
@@ -851,7 +900,7 @@ export function generateQuoteHTML(data: QuoteData): string {
         </div>
 
         <div class="footer">
-          Generated: ${new Date().toLocaleString()} | Document Rev: ${data.revision}
+          Generated: ${formatQuoteDate(cc, true)} | Document Rev: ${data.revision}
         </div>
       </div>
     </body>

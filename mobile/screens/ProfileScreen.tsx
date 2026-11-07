@@ -1,3 +1,4 @@
+import { buildWebApiUrl, getWebApiAuthHeaders, isWebApiConfigured } from '../lib/webApi';
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, FlatList, Modal } from 'react-native';
 import { useTranslation } from 'react-i18next';
@@ -18,6 +19,7 @@ export default function ProfileScreen() {
   const navigation = useNavigation();
   const { colors, mode, setMode, isDark } = useTheme();
   const [profile, setProfile] = useState<Record<string, any>>({});
+  const [convertingTemplate, setConvertingTemplate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [ibanError, setIbanError] = useState<string | null>(null);
@@ -152,19 +154,65 @@ export default function ProfileScreen() {
 
   const handleUploadTemplate = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({ type: 'text/html' });
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          'text/html',
+          'application/pdf',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ],
+        copyToCacheDirectory: true,
+      });
       if (result.canceled) return;
-      
-      const fileUri = result.assets[0].uri;
-      const content = await FileSystem.readAsStringAsync(fileUri);
-      
-      setProfile({ ...profile, custom_template_html: content });
+
+      const asset = result.assets[0];
+      const name = (asset.name || '').toLowerCase();
+
+      // HTML already prepared with the app's placeholders: use it as it is.
+      if (name.endsWith('.html') || name.endsWith('.htm')) {
+        const content = await FileSystem.readAsStringAsync(asset.uri);
+        if (/\{\{\s*(items|itemsTable)\s*\}\}/.test(content) && /\{\{\s*total\s*\}\}/.test(content)) {
+          setProfile({ ...profile, custom_template_html: content });
+          Alert.alert(t('messages.success'), 'Template caricato. Ricorda di salvare le modifiche.');
+          return;
+        }
+      }
+
+      if (!isWebApiConfigured()) {
+        Alert.alert(t('messages.error'), 'Per convertire Word o PDF serve il collegamento al sito (EXPO_PUBLIC_WEB_URL).');
+        return;
+      }
+
+      // Word, PDF or plain HTML: the AI turns the company's quote into a template.
+      setConvertingTemplate(true);
+      const response = await FileSystem.uploadAsync(buildWebApiUrl('/api/templates/convert'), asset.uri, {
+        fieldName: 'file',
+        httpMethod: 'POST',
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        headers: await getWebApiAuthHeaders(),
+        mimeType: asset.mimeType || undefined,
+      });
+      let payload: { template?: string; notes?: string; missing?: string[]; error?: string } = {};
+      try {
+        payload = JSON.parse(response.body || '{}');
+      } catch {
+        payload = { error: 'Risposta non valida dal server' };
+      }
+      if (response.status < 200 || response.status >= 300 || !payload.template) {
+        throw new Error(payload.error || 'Conversione non riuscita');
+      }
+
+      setProfile({ ...profile, custom_template_html: payload.template });
+      const missing = payload.missing?.length
+        ? `\n\nAttenzione, non ho trovato dove mettere: ${payload.missing.join(', ')}.`
+        : '';
       Alert.alert(
-        t('messages.success'), 
-        'Template HTML caricato! Ricorda di salvare le modifiche.\n\nPlaceholder disponibili: {{lavoroTitle}}, {{clienteName}}, {{revision}}, {{items}}, {{subtotal}}, {{taxes}}, {{total}}, {{companyName}}, {{vatNumber}}, {{iban}}, {{swift}}, ecc.'
+        'Template pronto',
+        `${payload.notes || 'Ho preparato il modello dal tuo preventivo.'}${missing}\n\nRicorda di salvare le modifiche. Puoi vedere l'anteprima e correggerla dal sito, nella pagina Profilo.`
       );
     } catch (err) {
       Alert.alert(t('messages.error'), (err as Error).message);
+    } finally {
+      setConvertingTemplate(false);
     }
   };
 
@@ -425,8 +473,8 @@ export default function ProfileScreen() {
           <View>
             <Text style={styles.templateInfo}>✓ Template personalizzato caricato ({(profile.custom_template_html.length / 1024).toFixed(1)} KB)</Text>
             <View style={styles.templateButtons}>
-              <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={handleUploadTemplate}>
-                <Text style={styles.btnText}>Sostituisci Template</Text>
+              <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={handleUploadTemplate} disabled={convertingTemplate}>
+                <Text style={styles.btnText}>{convertingTemplate ? 'Leggo il preventivo...' : 'Sostituisci Template'}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.btn, styles.btnDanger]} onPress={handleRemoveTemplate}>
                 <Text style={styles.btnText}>Rimuovi</Text>
@@ -434,11 +482,11 @@ export default function ProfileScreen() {
             </View>
           </View>
         ) : (
-          <TouchableOpacity style={[styles.btn, styles.btnOutline]} onPress={handleUploadTemplate}>
-            <Text style={styles.btnOutlineText}>📄 Carica Template HTML</Text>
+          <TouchableOpacity style={[styles.btn, styles.btnOutline]} onPress={handleUploadTemplate} disabled={convertingTemplate}>
+            <Text style={styles.btnOutlineText}>{convertingTemplate ? 'Leggo il preventivo...' : '📄 Carica il tuo preventivo (Word, PDF o HTML)'}</Text>
           </TouchableOpacity>
         )}
-        <Text style={styles.templateHint}>Carica un file HTML con placeholder come {'{{lavoroTitle}}'}, {'{{clienteName}}'}, {'{{items}}'}, {'{{total}}'}, ecc.</Text>
+        <Text style={styles.templateHint}>Carica il preventivo che usi già, anche uno vecchio compilato: l'app lo trasforma nel tuo modello, con cliente, voci e totali al posto giusto.</Text>
       </View>
 
       {/* Punto 25: US State Picker (only shown for US country) */}

@@ -4,10 +4,29 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 
+type TemplateDraft = {
+  template: string;
+  preview: string;
+  notes: string;
+  missing: string[];
+};
+
+const ACCEPTED_EXTENSIONS = ['.docx', '.pdf', '.html', '.htm'];
+
+/** An HTML file written for the app already has the item and total placeholders. */
+function isReadyTemplate(html: string): boolean {
+  return (
+    /\{\{\s*(items|itemsTable)\s*\}\}/.test(html) && /\{\{\s*total\s*\}\}/.test(html)
+  );
+}
+
 export default function TemplateUploader() {
   const [hasTemplate, setHasTemplate] = useState(false);
   const [templateSize, setTemplateSize] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [draft, setDraft] = useState<TemplateDraft | null>(null);
+  const [correction, setCorrection] = useState('');
+  const [converting, setConverting] = useState(false);
 
   useEffect(() => {
     loadTemplate();
@@ -25,43 +44,116 @@ export default function TemplateUploader() {
       .eq('id', user.id)
       .single();
 
-    if (profile?.custom_template_html) {
-      setHasTemplate(true);
-      setTemplateSize(new Blob([profile.custom_template_html]).size);
-    }
+    setHasTemplate(Boolean(profile?.custom_template_html));
+    setTemplateSize(
+      profile?.custom_template_html ? new Blob([profile.custom_template_html]).size : 0
+    );
+  };
+
+  const saveTemplate = async (content: string) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error('Non autenticato');
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ custom_template_html: content })
+      .eq('id', user.id);
+    if (error) throw error;
+
+    setHasTemplate(true);
+    setTemplateSize(new Blob([content]).size);
+  };
+
+  const requestConversion = async (
+    body: FormData | { previousTemplate: string; instructions: string }
+  ) => {
+    const res = await fetch('/api/templates/convert', {
+      method: 'POST',
+      ...(body instanceof FormData
+        ? { body }
+        : {
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(payload?.error || 'Conversione non riuscita');
+    return payload as TemplateDraft;
   };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
 
-    if (!file.name.endsWith('.html') && !file.name.endsWith('.htm')) {
-      toast.error('Solo file HTML sono supportati');
+    const name = file.name.toLowerCase();
+    if (!ACCEPTED_EXTENSIONS.some((ext) => name.endsWith(ext))) {
+      toast.error('Carica il preventivo in formato Word (.docx), PDF o HTML');
       return;
     }
 
     setUploading(true);
     try {
-      const content = await file.text();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+      // HTML already prepared with the app's placeholders: save it as it is.
+      if (name.endsWith('.html') || name.endsWith('.htm')) {
+        const content = await file.text();
+        if (isReadyTemplate(content)) {
+          await saveTemplate(content);
+          toast.success('Template caricato');
+          return;
+        }
+      }
 
-      await supabase
-        .from('profiles')
-        .update({ custom_template_html: content })
-        .eq('id', user.id);
-
-      setHasTemplate(true);
-      setTemplateSize(new Blob([content]).size);
-      toast.success(
-        'Template caricato con successo!\n\nPlaceholder disponibili: {{lavoroTitle}}, {{clienteName}}, {{revision}}, {{items}}, {{itemsTable}}, {{subtotal}}, {{taxes}}, {{total}}, {{companyName}}, {{vatNumber}}, {{iban}}, {{swift}}, {{currency}}, {{taxLabel}}, {{descriptionLabel}}, {{quantityLabel}}, {{priceLabel}}, {{subtotalColLabel}}, {{totalLabel}}, {{date}}, {{dateTime}}, {{acceptanceLink}} (pulsante "accetta il preventivo" nella mail), {{acceptanceUrl}} (solo il link, per un pulsante con la vostra grafica).\n\nIl renderer mostra solo valori cliente-facing e prova a rimuovere diciture interne come ricarico o prezzo acquisto.'
-      );
+      // Anything else: the AI recognises the parts of the quote and builds the template.
+      setConverting(true);
+      const form = new FormData();
+      form.append('file', file);
+      setDraft(await requestConversion(form));
+      setCorrection('');
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
+      setConverting(false);
       setUploading(false);
+    }
+  };
+
+  const handleCorrection = async () => {
+    if (!draft || !correction.trim()) return;
+    setConverting(true);
+    try {
+      setDraft(
+        await requestConversion({
+          previousTemplate: draft.template,
+          instructions: correction.trim(),
+        })
+      );
+      setCorrection('');
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setConverting(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    if (!draft) return;
+    if (
+      draft.missing.length &&
+      !confirm(
+        `In questo template mancano: ${draft.missing.join(', ')}.\nI preventivi potrebbero uscire incompleti. Salvarlo comunque?`
+      )
+    ) {
+      return;
+    }
+    try {
+      await saveTemplate(draft.template);
+      setDraft(null);
+      toast.success('Template salvato: i prossimi preventivi useranno il tuo formato');
+    } catch (err) {
+      toast.error((err as Error).message);
     }
   };
 
@@ -72,7 +164,7 @@ export default function TemplateUploader() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+      if (!user) throw new Error('Non autenticato');
 
       await supabase
         .from('profiles')
@@ -87,11 +179,82 @@ export default function TemplateUploader() {
     }
   };
 
+  const fileInput = (
+    <input
+      type="file"
+      accept={ACCEPTED_EXTENSIONS.join(',')}
+      onChange={handleUpload}
+      disabled={uploading}
+      className="hidden"
+    />
+  );
+
   return (
     <div className="bg-white rounded-xl shadow p-6 mb-6">
-      <h2 className="text-xl font-bold mb-4">Template Preventivo Personalizzato</h2>
+      <h2 className="text-xl font-bold mb-2">Template Preventivo Personalizzato</h2>
+      <p className="text-sm text-slate-600 mb-4">
+        Carica il preventivo che usi già (Word, PDF o HTML, anche uno vecchio già
+        compilato): l&apos;app lo trasforma nel tuo modello, con cliente, voci e totali al
+        posto giusto.
+      </p>
 
-      {hasTemplate ? (
+      {draft ? (
+        <div className="space-y-4">
+          <div
+            className={`rounded-lg border p-4 text-sm ${draft.missing.length ? 'border-red-200 bg-red-50 text-red-800' : 'border-green-200 bg-green-50 text-green-800'}`}
+            role="status"
+          >
+            {draft.missing.length
+              ? `Attenzione: non ho trovato dove mettere ${draft.missing.join(', ')}. Scrivi sotto cosa correggere.`
+              : 'Anteprima con dati di esempio: controlla che cliente, voci e totali siano al posto giusto.'}
+            {draft.notes ? <p className="mt-1 text-slate-700">{draft.notes}</p> : null}
+          </div>
+
+          {/* sandbox with no permissions: the template can neither run scripts nor navigate. */}
+          <iframe
+            title="Anteprima del template con dati di esempio"
+            sandbox=""
+            srcDoc={draft.preview}
+            className="h-[70vh] w-full rounded-lg border border-slate-200 bg-white"
+          />
+
+          <label className="block text-sm text-slate-700">
+            Cosa correggere? (facoltativo)
+            <textarea
+              value={correction}
+              onChange={(e) => setCorrection(e.target.value)}
+              rows={2}
+              maxLength={1000}
+              placeholder="Es.: il totale va in basso a destra, togli la riga del telefono, intestazione blu"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+            />
+          </label>
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={handleSaveDraft}
+              className="btn-primary"
+              disabled={converting}
+            >
+              Salva template
+            </button>
+            <button
+              onClick={handleCorrection}
+              className="btn-secondary"
+              disabled={converting || !correction.trim()}
+            >
+              {converting ? 'Correggo...' : 'Correggi'}
+            </button>
+            <button
+              onClick={() => setDraft(null)}
+              className="btn-secondary"
+              disabled={converting}
+            >
+              Annulla
+            </button>
+          </div>
+        </div>
+      ) : hasTemplate ? (
         <div className="space-y-4">
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
             <p className="text-green-800 font-semibold">
@@ -101,15 +264,13 @@ export default function TemplateUploader() {
 
           <div className="flex gap-3">
             <label className="flex-1 cursor-pointer">
-              <input
-                type="file"
-                accept=".html,.htm"
-                onChange={handleUpload}
-                disabled={uploading}
-                className="hidden"
-              />
+              {fileInput}
               <div className="btn-secondary text-center">
-                {uploading ? 'Caricamento...' : 'Sostituisci Template'}
+                {converting
+                  ? 'Leggo il preventivo...'
+                  : uploading
+                    ? 'Caricamento...'
+                    : 'Sostituisci Template'}
               </div>
             </label>
             <button onClick={handleRemove} className="btn-danger">
@@ -119,17 +280,15 @@ export default function TemplateUploader() {
         </div>
       ) : (
         <label className="block cursor-pointer">
-          <input
-            type="file"
-            accept=".html,.htm"
-            onChange={handleUpload}
-            disabled={uploading}
-            className="hidden"
-          />
+          {fileInput}
           <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:border-primary transition-colors">
             <div className="text-4xl mb-2">📄</div>
             <p className="font-semibold text-slate-700">
-              {uploading ? 'Caricamento...' : 'Clicca per caricare HTML'}
+              {converting
+                ? 'Leggo il preventivo e preparo il modello...'
+                : uploading
+                  ? 'Caricamento...'
+                  : 'Clicca per caricare il tuo preventivo (Word, PDF o HTML)'}
             </p>
           </div>
         </label>

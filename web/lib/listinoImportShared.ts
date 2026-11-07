@@ -86,7 +86,7 @@ async function extractPdfText(buffer: Buffer) {
   }
 }
 
-function runPdfSubprocess(
+export function runPdfSubprocess(
   scriptName: 'extract-pdf-text.cjs' | 'render-pdf-pages.cjs',
   args: string[],
   inputBuffer?: Buffer
@@ -176,7 +176,7 @@ function tryParseStderrError(stderrRaw: string): string | null {
   return stderrRaw || null;
 }
 
-async function extractPdfTextWithFallback(buffer: Buffer): Promise<{
+export async function extractPdfTextWithFallback(buffer: Buffer): Promise<{
   text: string;
   method: 'inline' | 'subprocess' | 'empty';
   error?: string;
@@ -263,7 +263,7 @@ async function ensurePdfScreenshotPolyfills() {
   await pdfScreenshotPolyfillsPromise;
 }
 
-async function renderPdfPages(params: { buffer: Buffer; maxPages?: number }) {
+export async function renderPdfPages(params: { buffer: Buffer; maxPages?: number }) {
   await ensurePdfScreenshotPolyfills();
   const PDFParse = await getPdfParseCtor();
   const parser = new PDFParse({ data: params.buffer });

@@ -7,6 +7,7 @@ const DEFAULT_DAILY_LIMITS = {
   listino_ai_organize: 40,
   voice: 400,
   semantic: 2000,
+  template: 20,
 } as const;
 
 export type AiFeature = keyof typeof DEFAULT_DAILY_LIMITS;
@@ -16,6 +17,7 @@ const FEATURE_LABELS: Record<AiFeature, string> = {
   listino_ai_organize: 'riorganizzazioni AI dei listini',
   voice: 'richieste vocali',
   semantic: 'ricerche intelligenti',
+  template: 'conversioni di template',
 };
 
 function dailyLimit(feature: AiFeature): number {
