@@ -4,6 +4,12 @@ export interface QuoteData {
   lavoroTitle: string;
   clienteName: string;
   clienteEmail?: string;
+  clienteAddress?: string;
+  clienteCity?: string;
+  clientePostalCode?: string;
+  clienteVat?: string;
+  clienteFiscalCode?: string;
+  clientePhone?: string;
   revision: number;
   items: ({ description: string; quantity: number; unit_price: number; material_markup: number } & QuoteLineExtras)[];
   vat_percent: number;
@@ -199,6 +205,47 @@ function renderItemRows(
       })
       .join('\n');
   });
+}
+
+/**
+ * Removes from a template anything that could run code, load external content or
+ * submit data: templates come from user files and AI output, and end up in the app,
+ * in emails and on the client's public page.
+ */
+export function sanitizeTemplateMarkup(html: string): string {
+  return html
+    .replace(/<\s*(script|iframe|object|embed|form|frameset|frame|applet)\b[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
+    .replace(/<\s*(script|iframe|object|embed|form|input|button|textarea|select|link|base|frame|applet)\b[^>]*>/gi, '')
+    .replace(/<\s*meta\b(?![^>]*\b(?:name=["']?color-scheme|charset=))[^>]*>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/(href|src|action|formaction)\s*=\s*(["'])\s*(?:javascript|vbscript|data:text\/html)[^"']*\2/gi, '$1=$2#$2')
+    .replace(/\ssrc\s*=\s*(["'])(?!data:image\/|https:\/\/)[^"']*\1/gi, '')
+    .replace(/@import[^;]*;?/gi, '')
+    .replace(/url\(\s*(["']?)(?!data:image\/)[^)]*\1\s*\)/gi, 'none')
+    .replace(/expression\s*\(/gi, '(');
+}
+
+/**
+ * <span data-if="clienteVat">P.IVA {{clienteVat}}</span>: the element (label included)
+ * is dropped when that field is empty, so a client without VAT number or address does
+ * not leave "P.IVA" or " - , - " on the quote.
+ */
+function applyConditionalBlocks(template: string, values: Record<string, string | undefined | null>): string {
+  let html = template;
+  // Innermost first, a few rounds for nested blocks.
+  for (let round = 0; round < 3; round++) {
+    const next = html.replace(
+      /<(span|p|div|td|li|strong|b|em|small|tr)\b([^>]*?)\sdata-if=(["'])([\w.]+)\3([^>]*)>([\s\S]*?)<\/\1>/gi,
+      (_m, tag: string, before: string, _q: string, field: string, after: string, inner: string) => {
+        const value = values[field];
+        if (value === undefined || value === null || String(value).trim() === '') return '';
+        return `<${tag}${before}${after}>${inner}</${tag}>`;
+      }
+    );
+    if (next === html) break;
+    html = next;
+  }
+  return html;
 }
 
 const CURRENCIES: Record<string, string> = {
@@ -656,10 +703,31 @@ function processCustomTemplate(template: string, data: QuoteData): string {
   }).join('\n');
 
   // Replace all placeholders
-  let html = renderItemRows(template, data.items, currency, cc, Number(data.vat_percent) || 0)
+  let html = renderItemRows(applyConditionalBlocks(sanitizeTemplateMarkup(template), {
+      clienteName: data.clienteName,
+      clienteEmail: data.clienteEmail,
+      clienteAddress: data.clienteAddress,
+      clienteCity: data.clienteCity,
+      clientePostalCode: data.clientePostalCode,
+      clienteVat: data.clienteVat,
+      clienteFiscalCode: data.clienteFiscalCode,
+      clientePhone: data.clientePhone,
+      iban: data.iban,
+      swift: data.swift,
+      vatNumber: data.vatNumber,
+      fiscalCode: data.fiscalCode,
+      lavoroTitle: data.lavoroTitle,
+    }), data.items, currency, cc, Number(data.vat_percent) || 0)
     .replace(/\{\{lavoroTitle\}\}/g, data.lavoroTitle || '')
     .replace(/\{\{clienteName\}\}/g, data.clienteName || '')
     .replace(/\{\{clienteEmail\}\}/g, data.clienteEmail || '')
+    .replace(/\{\{clienteAddress\}\}/g, data.clienteAddress || '')
+    .replace(/\{\{clienteCity\}\}/g, data.clienteCity || '')
+    .replace(/\{\{clientePostalCode\}\}/g, data.clientePostalCode || '')
+    .replace(/\{\{clienteVat\}\}/g, data.clienteVat || '')
+    .replace(/\{\{clienteFiscalCode\}\}/g, data.clienteFiscalCode || '')
+    .replace(/\{\{clientePhone\}\}/g, data.clientePhone || '')
+    .replace(/\{\{vatPercent\}\}/g, `${Number(data.vat_percent) || 0}%`)
     .replace(/\{\{revision\}\}/g, String(data.revision).padStart(2, '0'))
     .replace(/\{\{revisionNumber\}\}/g, String(data.revision))
     .replace(/\{\{companyName\}\}/g, data.companyName || '')
@@ -680,7 +748,9 @@ function processCustomTemplate(template: string, data: QuoteData): string {
     .replace(/\{\{date\}\}/g, formatQuoteDate(cc))
     .replace(/\{\{dateTime\}\}/g, formatQuoteDate(cc, true))
     .replace(/\{\{acceptanceLink\}\}/g, ACCEPTANCE_LINK_MARKER)
-    .replace(/\{\{acceptanceUrl\}\}/g, ACCEPTANCE_URL_MARKER);
+    .replace(/\{\{acceptanceUrl\}\}/g, ACCEPTANCE_URL_MARKER)
+    // Placeholders with no value (or misspelt) must not reach the client as "{{...}}".
+    .replace(/\{\{[^{}]*\}\}/g, '');
 
   return html;
 }

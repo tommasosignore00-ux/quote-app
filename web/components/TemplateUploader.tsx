@@ -9,6 +9,7 @@ type TemplateDraft = {
   preview: string;
   notes: string;
   missing: string[];
+  warnings?: string[];
 };
 
 const ACCEPTED_EXTENSIONS = ['.docx', '.html', '.htm'];
@@ -101,7 +102,15 @@ export default function TemplateUploader() {
       if (name.endsWith('.html') || name.endsWith('.htm')) {
         const content = await file.text();
         if (isReadyTemplate(content)) {
-          await saveTemplate(content);
+          // Cleaned up and logos hosted on the server, then saved.
+          const res = await fetch('/api/templates/prepare', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ template: content }),
+          });
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(payload?.error || 'Caricamento non riuscito');
+          await saveTemplate(payload.template);
           toast.success('Template caricato');
           return;
         }
@@ -209,6 +218,13 @@ export default function TemplateUploader() {
               ? `Attenzione: non ho trovato dove mettere ${draft.missing.join(', ')}. Scrivi sotto cosa correggere.`
               : 'Anteprima con dati di esempio: controlla che cliente, voci e totali siano al posto giusto.'}
             {draft.notes ? <p className="mt-1 text-slate-700">{draft.notes}</p> : null}
+            {draft.warnings?.length ? (
+              <ul className="mt-2 list-disc pl-5 text-amber-800">
+                {draft.warnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            ) : null}
           </div>
 
           {/* sandbox with no permissions: the template can neither run scripts nor navigate. */}

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getRequestUser, unauthorizedResponse } from '../../../../lib/apiAuth';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import { enforceAiQuota } from '../../../../lib/aiQuota';
+import { hostTemplateImages } from '../../../../lib/templateAssets';
 import {
   convertToTemplate,
   previewTemplate,
@@ -42,8 +43,9 @@ export async function POST(req: Request) {
     } else {
       const form = await req.formData();
       const file = form.get('file') as File | null;
-      if (!file)
-        {return NextResponse.json({ error: 'Nessun file caricato' }, { status: 400 });}
+      if (!file) {
+        return NextResponse.json({ error: 'Nessun file caricato' }, { status: 400 });
+      }
       if (file.size > MAX_FILE_BYTES) {
         return NextResponse.json(
           { error: 'File troppo grande (massimo 4 MB)' },
@@ -60,6 +62,9 @@ export async function POST(req: Request) {
       });
     }
 
+    // Logos as hosted files: mail apps like Gmail do not show inline images.
+    const template = await hostTemplateImages(user.id, result.template);
+
     const { data: profile } = await supabaseAdmin
       .from('profiles')
       .select('company_name')
@@ -68,10 +73,11 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
-      template: result.template,
-      preview: previewTemplate(result.template, profile?.company_name),
+      template,
+      preview: previewTemplate(template, profile?.company_name),
       notes: result.notes,
       missing: result.missing,
+      warnings: result.warnings,
     });
   } catch (err) {
     console.error('Template conversion error:', err);

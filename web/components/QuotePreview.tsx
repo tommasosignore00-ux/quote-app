@@ -125,6 +125,12 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
         lavoroTitle: lavoroData.title,
         clienteName: (lavoroData.clienti as { name?: string })?.name || '',
         clienteEmail: (lavoroData.clienti as { email?: string })?.email,
+        clienteAddress: (lavoroData.clienti as { address?: string })?.address,
+        clienteCity: (lavoroData.clienti as { city?: string })?.city,
+        clientePostalCode: (lavoroData.clienti as { postal_code?: string })?.postal_code,
+        clienteVat: (lavoroData.clienti as { vat_number?: string })?.vat_number,
+        clienteFiscalCode: (lavoroData.clienti as { fiscal_code?: string })?.fiscal_code,
+        clientePhone: (lavoroData.clienti as { phone?: string })?.phone,
         revision: currentRev,
         items: (dettaglio || []).map((d: any) => ({
           description: d.description,

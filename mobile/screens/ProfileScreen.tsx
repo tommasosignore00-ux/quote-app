@@ -171,7 +171,19 @@ export default function ProfileScreen() {
         const content = await FileSystem.readAsStringAsync(asset.uri);
         const hasItems = /\{\{#items\}\}[\s\S]*\{\{\/items\}\}|\{\{\s*(items|itemsTable)\s*\}\}/.test(content);
         if (hasItems && /\{\{\s*total\s*\}\}/.test(content)) {
-          setProfile({ ...profile, custom_template_html: content });
+          let ready = content;
+          if (isWebApiConfigured()) {
+            // Cleaned up and logos hosted, so mail apps like Gmail show them.
+            const res = await fetch(buildWebApiUrl('/api/templates/prepare'), {
+              method: 'POST',
+              headers: await getWebApiAuthHeaders({ 'Content-Type': 'application/json' }),
+              body: JSON.stringify({ template: content }),
+            });
+            const payload = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(payload?.error || 'Caricamento non riuscito');
+            ready = payload.template;
+          }
+          setProfile({ ...profile, custom_template_html: ready });
           Alert.alert(t('messages.success'), 'Template caricato. Ricorda di salvare le modifiche.');
           return;
         }
@@ -191,7 +203,7 @@ export default function ProfileScreen() {
         headers: await getWebApiAuthHeaders(),
         mimeType: asset.mimeType || undefined,
       });
-      let payload: { template?: string; notes?: string; missing?: string[]; error?: string } = {};
+      let payload: { template?: string; notes?: string; missing?: string[]; warnings?: string[]; error?: string } = {};
       try {
         payload = JSON.parse(response.body || '{}');
       } catch {
@@ -202,12 +214,13 @@ export default function ProfileScreen() {
       }
 
       setProfile({ ...profile, custom_template_html: payload.template });
+      const warnings = payload.warnings?.length ? `\n\n${payload.warnings.join('\n')}` : '';
       const missing = payload.missing?.length
         ? `\n\nAttenzione, non ho trovato dove mettere: ${payload.missing.join(', ')}.`
         : '';
       Alert.alert(
         'Template pronto',
-        `${payload.notes || 'Ho preparato il modello dal tuo preventivo.'}${missing}\n\nRicorda di salvare le modifiche. Puoi vedere l'anteprima e correggerla dal sito, nella pagina Profilo.`
+        `${payload.notes || 'Ho preparato il modello dal tuo preventivo.'}${missing}${warnings}\n\nRicorda di salvare le modifiche. Puoi vedere l'anteprima e correggerla dal sito, nella pagina Profilo.`
       );
     } catch (err) {
       Alert.alert(t('messages.error'), (err as Error).message);
