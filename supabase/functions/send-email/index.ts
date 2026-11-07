@@ -1,8 +1,25 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { corsHeaders, getRequestUser, jsonResponse } from '../_shared/auth.ts'
+import { adminClient, corsHeaders, getRequestUser, jsonResponse } from '../_shared/auth.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 const EMAIL_FROM = Deno.env.get('EMAIL_FROM') || 'noreply@quoteapp.it'
+
+/**
+ * Sender shown to the client: the user's company name with the app's sending address
+ * ("Rossi Impianti <preventivi@dominio.it>"); replies go to the user (reply_to).
+ * Email providers only accept addresses of verified domains, so the address itself
+ * cannot be the user's personal mailbox.
+ */
+async function senderFor(userId: string): Promise<string> {
+  const address = (EMAIL_FROM.match(/<([^>]+)>/)?.[1] || EMAIL_FROM).trim()
+  const { data } = await adminClient().from('profiles').select('company_name').eq('id', userId).maybeSingle()
+  const name = String(data?.company_name || '')
+    .replace(/[<>"\r\n\\]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 70)
+  return name ? `"${name}" <${address}>` : EMAIL_FROM
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -22,7 +39,7 @@ serve(async (req) => {
 
     // Resend's API only accepts JSON: attachments go as base64 content.
     const email: Record<string, unknown> = {
-      from: EMAIL_FROM,
+      from: await senderFor(user.id),
       to: [to],
       subject,
       html,

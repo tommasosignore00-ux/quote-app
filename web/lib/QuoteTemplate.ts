@@ -555,6 +555,15 @@ function sanitizeCustomTemplate(template: string): string {
   return sanitized;
 }
 
+/**
+ * Where the client's "accept the quote" link goes in a custom template. The quote
+ * document (preview, PDF, public page) shows nothing there; the email puts the button
+ * at {{acceptanceLink}}, or the bare link at {{acceptanceUrl}} for templates with
+ * their own button style. Without either, the button is added at the end of the email.
+ */
+export const ACCEPTANCE_LINK_MARKER = '<!--QUOTE_ACCEPTANCE_LINK-->';
+export const ACCEPTANCE_URL_MARKER = 'https://accettazione.invalid/preventivo';
+
 function processCustomTemplate(template: string, data: QuoteData): string {
   const cc = data.countryCode?.toUpperCase() || 'IT';
   const currency = CURRENCIES[cc] || CURRENCIES.default;
@@ -640,7 +649,9 @@ function processCustomTemplate(template: string, data: QuoteData): string {
     .replace(/\{\{taxes\}\}/g, `${currency}${taxes.toFixed(2)}`)
     .replace(/\{\{total\}\}/g, `${currency}${total.toFixed(2)}`)
     .replace(/\{\{date\}\}/g, new Date().toLocaleDateString())
-    .replace(/\{\{dateTime\}\}/g, new Date().toLocaleString());
+    .replace(/\{\{dateTime\}\}/g, new Date().toLocaleString())
+    .replace(/\{\{acceptanceLink\}\}/g, ACCEPTANCE_LINK_MARKER)
+    .replace(/\{\{acceptanceUrl\}\}/g, ACCEPTANCE_URL_MARKER);
 
   return html;
 }

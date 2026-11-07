@@ -10,7 +10,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import { WebView } from 'react-native-webview';
-import { generateQuoteHTML, QuoteData } from '../lib/QuoteTemplate';
+import { ACCEPTANCE_LINK_MARKER, ACCEPTANCE_URL_MARKER, generateQuoteHTML, QuoteData } from '../lib/QuoteTemplate';
 import { validateQuote, formatValidationMessage } from '../lib/quoteValidation';
 import { injectWatermark, shouldShowWatermark } from '../lib/watermark';
 import { exportAsJSON, exportAsXML, exportAsCSV } from '../lib/exportFormats';
@@ -30,6 +30,10 @@ function withAcceptanceLink(html: string, token?: string | null): string {
     <a href="${url}" style="display:inline-block;background:#15803d;color:#ffffff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">Visualizza e accetta il preventivo</a>
     <p style="color:#64748b;font-size:12px;margin-top:8px">Puoi accettarlo o rifiutarlo online, senza registrarti.</p>
   </div>`;
+  // The company's template decides where the link goes ({{acceptanceLink}} / {{acceptanceUrl}}).
+  if (html.includes(ACCEPTANCE_LINK_MARKER) || html.includes(ACCEPTANCE_URL_MARKER)) {
+    return html.split(ACCEPTANCE_LINK_MARKER).join(block).split(ACCEPTANCE_URL_MARKER).join(url);
+  }
   return html.includes('</body>') ? html.replace('</body>', `${block}</body>`) : `${html}${block}`;
 }
 

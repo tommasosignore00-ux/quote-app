@@ -14,7 +14,9 @@ export default function TemplateUploader() {
   }, []);
 
   const loadTemplate = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return;
 
     const { data: profile } = await supabase
@@ -41,7 +43,9 @@ export default function TemplateUploader() {
     setUploading(true);
     try {
       const content = await file.text();
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
       await supabase
@@ -52,7 +56,7 @@ export default function TemplateUploader() {
       setHasTemplate(true);
       setTemplateSize(new Blob([content]).size);
       toast.success(
-        'Template caricato con successo!\n\nPlaceholder disponibili: {{lavoroTitle}}, {{clienteName}}, {{revision}}, {{items}}, {{itemsTable}}, {{subtotal}}, {{taxes}}, {{total}}, {{companyName}}, {{vatNumber}}, {{iban}}, {{swift}}, {{currency}}, {{taxLabel}}, {{descriptionLabel}}, {{quantityLabel}}, {{priceLabel}}, {{subtotalColLabel}}, {{totalLabel}}, {{date}}, {{dateTime}}.\n\nIl renderer mostra solo valori cliente-facing e prova a rimuovere diciture interne come ricarico o prezzo acquisto.'
+        'Template caricato con successo!\n\nPlaceholder disponibili: {{lavoroTitle}}, {{clienteName}}, {{revision}}, {{items}}, {{itemsTable}}, {{subtotal}}, {{taxes}}, {{total}}, {{companyName}}, {{vatNumber}}, {{iban}}, {{swift}}, {{currency}}, {{taxLabel}}, {{descriptionLabel}}, {{quantityLabel}}, {{priceLabel}}, {{subtotalColLabel}}, {{totalLabel}}, {{date}}, {{dateTime}}, {{acceptanceLink}} (pulsante "accetta il preventivo" nella mail), {{acceptanceUrl}} (solo il link, per un pulsante con la vostra grafica).\n\nIl renderer mostra solo valori cliente-facing e prova a rimuovere diciture interne come ricarico o prezzo acquisto.'
       );
     } catch (err) {
       toast.error((err as Error).message);
@@ -65,7 +69,9 @@ export default function TemplateUploader() {
     if (!confirm('Vuoi rimuovere il template personalizzato?')) return;
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
       await supabase
@@ -84,13 +90,15 @@ export default function TemplateUploader() {
   return (
     <div className="bg-white rounded-xl shadow p-6 mb-6">
       <h2 className="text-xl font-bold mb-4">Template Preventivo Personalizzato</h2>
-      
+
       {hasTemplate ? (
         <div className="space-y-4">
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <p className="text-green-800 font-semibold">✓ Template caricato ({(templateSize / 1024).toFixed(1)} KB)</p>
+            <p className="text-green-800 font-semibold">
+              ✓ Template caricato ({(templateSize / 1024).toFixed(1)} KB)
+            </p>
           </div>
-          
+
           <div className="flex gap-3">
             <label className="flex-1 cursor-pointer">
               <input
