@@ -20,31 +20,25 @@ serve(async (req) => {
       return jsonResponse({ error: 'Missing to, subject, or html' }, 400)
     }
 
-    // Build form data for email with optional PDF attachment
-    const formData = new FormData()
-    formData.append('from', EMAIL_FROM)
-    formData.append('to', to)
-    formData.append('subject', subject)
-    formData.append('html', html)
-    if (user.email) formData.append('reply_to', user.email)
-
-    // Add PDF attachment if provided
+    // Resend's API only accepts JSON: attachments go as base64 content.
+    const email: Record<string, unknown> = {
+      from: EMAIL_FROM,
+      to: [to],
+      subject,
+      html,
+    }
+    if (user.email) email.reply_to = user.email
     if (pdfBase64 && pdfFilename) {
-      const binaryString = atob(pdfBase64)
-      const bytes = new Uint8Array(binaryString.length)
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i)
-      }
-      const blob = new Blob([bytes], { type: 'application/pdf' })
-      formData.append('attachments', blob, pdfFilename)
+      email.attachments = [{ filename: pdfFilename, content: pdfBase64 }]
     }
 
     const emailRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
       },
-      body: formData,
+      body: JSON.stringify(email),
     })
 
     const emailData = await emailRes.json()
