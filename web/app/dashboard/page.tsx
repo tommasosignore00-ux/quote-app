@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { resolveVatPercent } from '@/lib/constants';
+import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
@@ -184,6 +185,10 @@ export default function DashboardPage() {
 
   const addCostoFromItem = async (item: ListinoMatchItem, qty = 1) => {
     if (!selectedLavoro) return;
+    if (selectedLavoro.status === 'approved') {
+      toast.error('Preventivo accettato: non si può modificare');
+      return;
+    }
     await supabase.from('preventivi_dettaglio').insert({
       lavoro_id: selectedLavoro.id,
       description: item.description,
@@ -198,6 +203,10 @@ export default function DashboardPage() {
 
   const addCostoManual = async (desc: string, qty = 1) => {
     if (!selectedLavoro) return;
+    if (selectedLavoro.status === 'approved') {
+      toast.error('Preventivo accettato: non si può modificare');
+      return;
+    }
     await supabase.from('preventivi_dettaglio').insert({
       lavoro_id: selectedLavoro.id,
       description: desc,
@@ -563,15 +572,24 @@ export default function DashboardPage() {
                         ? l.title
                         : `${(l.clienti as { name?: string })?.name || ''} - ${l.title}`}
                     </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteJob(l.id);
-                      }}
-                      className="opacity-0 group-hover:opacity-100 hover:text-red-800 text-xs px-2"
-                    >
-                      🗑️
-                    </button>
+                    {l.status === 'approved' ? (
+                      <span
+                        className="px-2 text-xs"
+                        title="Preventivo accettato: non modificabile"
+                      >
+                        🔒
+                      </span>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteJob(l.id);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 hover:text-red-800 text-xs px-2"
+                      >
+                        🗑️
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -584,21 +602,32 @@ export default function DashboardPage() {
                 <h3>
                   {t('dashboard.details')} {selectedLavoro.title}
                 </h3>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setShowCostoModal(true)}
-                    className="text-xs bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded"
-                  >
-                    + {t('dashboard.addCost')}
-                  </button>
-                  <QuotePreview lavoroId={selectedLavoro.id} lavoro={selectedLavoro} />
-                </div>
+                {selectedLavoro.status === 'approved' ? null : (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowCostoModal(true)}
+                      className="text-xs bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded"
+                    >
+                      + {t('dashboard.addCost')}
+                    </button>
+                    <QuotePreview lavoroId={selectedLavoro.id} lavoro={selectedLavoro} />
+                  </div>
+                )}
               </div>
+              {selectedLavoro.status === 'approved' ? (
+                <p className="mb-4 rounded-lg bg-green-50 p-3 text-sm font-medium text-green-800">
+                  🔒 Preventivo accettato dal cliente: non si può più modificare.{' '}
+                  <Link href="/dashboard/preventivi" className="underline">
+                    Vedi nei preventivi
+                  </Link>
+                </p>
+              ) : null}
               <CostoEditor
                 costi={costi}
                 lavoroId={selectedLavoro.id}
                 onUpdate={fetchData}
                 defaultVatPercent={profileVatPercent}
+                readOnly={selectedLavoro.status === 'approved'}
               />
             </div>
           )}

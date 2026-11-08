@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { getRequestUser, unauthorizedResponse } from '../../../../lib/apiAuth';
 import { openai } from '../../../../lib/openaiServer';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
+import { getListinoProfileIds } from '../../../../lib/listinoAccess';
 
 const supabase = supabaseAdmin;
 
@@ -26,11 +27,11 @@ export async function POST(req: Request) {
     // Call Postgres function to perform k-NN search (function must be added via migration)
     // Solo i listini dell'utente: search_listini non filtra per profilo
     const limitK = Math.min(Math.max(Number(k) || 8, 1), 50);
-    const { data, error } = await supabase.rpc('match_listini', {
+    const { data, error } = await supabase.rpc('match_listini_profiles', {
       query_embedding: qEmbedding,
       match_threshold: 0,
       match_count: limitK,
-      p_profile_id: user.id,
+      p_profile_ids: await getListinoProfileIds(user.id),
     });
     if (error) {
       console.error('Search RPC error:', error);

@@ -193,7 +193,6 @@ export default function DashboardScreen() {
     const { data: items } = await supabase
       .from('listini_vettoriali')
       .select('id, description, unit_price, markup_percent')
-      .eq('profile_id', profileId)
       .limit(30);
     setCarouselItems(items || []);
   }, [profileId]);
@@ -695,10 +694,10 @@ export default function DashboardScreen() {
     const trimmed = query.trim();
     if (!trimmed || !profileId) return [] as any[];
 
+    // No profile filter: RLS returns the user's price lists plus their team owner's.
     const { data: items, error } = await supabase
       .from('listini_vettoriali')
       .select('id, description, unit_price, markup_percent, unit, sku, category, listino_id')
-      .eq('profile_id', profileId)
       .ilike('description', `%${trimmed}%`)
       .limit(50);
 
@@ -716,7 +715,6 @@ export default function DashboardScreen() {
         const { data: wordItems, error: wordError } = await supabase
           .from('listini_vettoriali')
           .select('id, description, unit_price, markup_percent, unit, sku, category, listino_id')
-          .eq('profile_id', profileId)
           .or(filters.join(','))
           .limit(400);
         if (!wordError && wordItems) resultItems = rankListinoMatches(wordItems, trimmed).slice(0, 5);

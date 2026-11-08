@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
+import { fetchAccessibleListini, type Listino } from '../../../lib/teamListini';
 
-type Listino = { id: string; name: string };
 type ListinoItem = {
   id: string;
   description: string;
@@ -368,11 +368,11 @@ export default function ListiniPage() {
     if (!profile) return;
     setProfileId(profile.id);
     setProfileMarkupPercent(profile.material_markup_vat_percent ?? 0);
-    const { data } = await supabase
-      .from('listini')
-      .select('id, name')
-      .eq('profile_id', profile.id);
-    setListini(data || []);
+    try {
+      setListini(await fetchAccessibleListini(profile.id));
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
   };
 
   const fetchItems = async (listinoId: string) => {
@@ -861,7 +861,7 @@ export default function ListiniPage() {
 
       const item = {
         listino_id: selectedListino.id,
-        profile_id: profile.id,
+        profile_id: selectedListino.profile_id,
         description: newDescription,
         unit_price: parseFloat(newUnitPrice) || 0,
         markup_percent: parseFloat(newMarkupPercent) || 0,
@@ -972,7 +972,7 @@ export default function ListiniPage() {
         <button onClick={handleCreateListino} className="btn-primary">
           {t('listini.newListino')}
         </button>
-        {selectedListino && (
+        {selectedListino?.canEdit && (
           <>
             <label
               htmlFor="listini-upload-table"
@@ -1046,26 +1046,33 @@ export default function ListiniPage() {
                   className="cursor-pointer flex-1"
                 >
                   {l.name}
+                  {l.ownershipLabel && (
+                    <span className="ml-2 text-xs opacity-70">{l.ownershipLabel}</span>
+                  )}
                 </span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditingListino(l);
-                    setEditingListinoName(l.name);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 hover:text-slate-700 text-xs px-2"
-                >
-                  ✏️
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteListino(l.id);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 hover:text-red-800 text-xs px-2"
-                >
-                  🗑️
-                </button>
+                {l.canEdit && (
+                  <>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingListino(l);
+                        setEditingListinoName(l.name);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 hover:text-slate-700 text-xs px-2"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteListino(l.id);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 hover:text-red-800 text-xs px-2"
+                    >
+                      🗑️
+                    </button>
+                  </>
+                )}
               </li>
             ))}
           </ul>
@@ -1075,6 +1082,9 @@ export default function ListiniPage() {
             <>
               <h3 className="font-semibold mb-3">
                 {t('listini.items')} {selectedListino.name}
+                {!selectedListino.canEdit && (
+                  <span className="ml-2 text-xs font-normal text-slate-500">Sola lettura</span>
+                )}
               </h3>
               {selectedSourceInfo && (
                 <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
@@ -1103,6 +1113,7 @@ export default function ListiniPage() {
                   ) : null}
                 </div>
               )}
+              {selectedListino.canEdit && (
               <div className="mb-4 rounded-lg border border-slate-200 p-3 text-sm">
                 <button
                   type="button"
@@ -1189,6 +1200,7 @@ export default function ListiniPage() {
                   </div>
                 )}
               </div>
+              )}
               <div className="mb-4 rounded-lg border border-slate-200 p-3 text-sm">
                 <button
                   type="button"
@@ -1251,7 +1263,7 @@ export default function ListiniPage() {
                     </p>
                   ))}
               </div>
-              {pricingGroups.length > 0 && (
+              {selectedListino.canEdit && pricingGroups.length > 0 && (
                 <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -1334,24 +1346,28 @@ export default function ListiniPage() {
                         {Number(i.markup_percent).toFixed(0)}%
                       </td>
                       <td className="text-right py-2">
-                        <button
-                          onClick={() => {
-                            setEditingItem(i);
-                            setNewDescription(i.description);
-                            setNewUnitPrice(String(i.unit_price));
-                            setNewMarkupPercent(String(i.markup_percent));
-                            setShowManualModal(true);
-                          }}
-                          className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-slate-800 text-xs mr-2"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() => handleDeleteItem(i.id)}
-                          className="opacity-0 group-hover:opacity-100 text-red-600 hover:text-red-800 text-xs"
-                        >
-                          🗑️
-                        </button>
+                        {selectedListino.canEdit && (
+                          <>
+                            <button
+                              onClick={() => {
+                                setEditingItem(i);
+                                setNewDescription(i.description);
+                                setNewUnitPrice(String(i.unit_price));
+                                setNewMarkupPercent(String(i.markup_percent));
+                                setShowManualModal(true);
+                              }}
+                              className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-slate-800 text-xs mr-2"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              onClick={() => handleDeleteItem(i.id)}
+                              className="opacity-0 group-hover:opacity-100 text-red-600 hover:text-red-800 text-xs"
+                            >
+                              🗑️
+                            </button>
+                          </>
+                        )}
                       </td>
                     </tr>
                   ))}

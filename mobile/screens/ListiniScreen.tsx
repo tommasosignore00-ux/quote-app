@@ -18,8 +18,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../lib/darkMode';
 import { buildWebApiUrl, getWebApiAuthHeaders, isWebApiConfigured } from '../lib/webApi';
+import { fetchAccessibleListini, type Listino } from '../lib/teamListini';
 
-type Listino = { id: string; name: string };
 type ListinoSourceInfo = {
   fileName: string;
   mimeType: string;
@@ -327,14 +327,7 @@ export default function ListiniScreen() {
       setProfileId(profile.id);
       setProfileMarkupPercent(profile.material_markup_vat_percent ?? 0);
 
-      const { data, error } = await supabase
-        .from('listini')
-        .select('id, name')
-        .eq('profile_id', profile.id)
-        .order('name', { ascending: true });
-      if (error) throw error;
-
-      const nextListini: Listino[] = data || [];
+      const nextListini = await fetchAccessibleListini(profile.id);
       setListini(nextListini);
       setSelectedListino((current) => {
         if (!current) return null;
@@ -571,7 +564,7 @@ export default function ListiniScreen() {
         const { error } = await supabase.from('listini').update({ name }).eq('id', editingListino.id);
         if (error) throw error;
         if (selectedListino?.id === editingListino.id) {
-          setSelectedListino({ id: editingListino.id, name });
+          setSelectedListino({ ...editingListino, name });
         }
       } else {
         const { error } = await supabase.from('listini').insert({ profile_id: profileId, name });
@@ -617,7 +610,7 @@ export default function ListiniScreen() {
 
     const payload = {
       listino_id: selectedListino.id,
-      profile_id: profileId,
+      profile_id: selectedListino.profile_id,
       description: newDescription.trim(),
       unit_price: parseFloat(newUnitPrice) || 0,
       markup_percent: parseFloat(newMarkupPercent) || 0,
@@ -925,7 +918,7 @@ export default function ListiniScreen() {
           <Text style={styles.actionBtnText}>{t('listini.newListino') || 'Nuovo listino'}</Text>
         </TouchableOpacity>
 
-        {selectedListino && (
+        {selectedListino?.canEdit && (
           <>
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: colors.primary, opacity: uploading ? 0.8 : 1 }]}
@@ -1007,22 +1000,29 @@ export default function ListiniScreen() {
                     <Text style={selected ? styles.listinoSelectedText : [styles.listinoText, { color: colors.text }]}>
                       {item.name}
                     </Text>
+                    {item.ownershipLabel ? (
+                      <Text style={{ fontSize: 12, color: selected ? '#fff' : colors.textTertiary }}>
+                        {item.ownershipLabel}
+                      </Text>
+                    ) : null}
                   </TouchableOpacity>
 
-                  <View style={styles.rowActions}>
-                    <TouchableOpacity
-                      onPress={() => {
-                        setEditingListino(item);
-                        setNewListinoName(item.name);
-                        setShowListinoModal(true);
-                      }}
-                    >
-                      <Text style={selected ? styles.listinoSelectedText : styles.rowActionText}>✏️</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleDeleteListino(item.id)}>
-                      <Text style={selected ? styles.listinoSelectedText : styles.rowActionText}>🗑️</Text>
-                    </TouchableOpacity>
-                  </View>
+                  {item.canEdit ? (
+                    <View style={styles.rowActions}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setEditingListino(item);
+                          setNewListinoName(item.name);
+                          setShowListinoModal(true);
+                        }}
+                      >
+                        <Text style={selected ? styles.listinoSelectedText : styles.rowActionText}>✏️</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => handleDeleteListino(item.id)}>
+                        <Text style={selected ? styles.listinoSelectedText : styles.rowActionText}>🗑️</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
                 </View>
               );
             }}
@@ -1033,7 +1033,10 @@ export default function ListiniScreen() {
           {selectedListino ? (
             <>
               <View style={styles.cardHeader}>
-                <Text style={[styles.cardTitle, { color: colors.text }]}>{selectedListino.name}</Text>
+                <Text style={[styles.cardTitle, { color: colors.text }]}>
+                  {selectedListino.name}
+                  {!selectedListino.canEdit ? <Text style={{ fontSize: 12, color: colors.textTertiary }}>  Sola lettura</Text> : null}
+                </Text>
                 {(itemsLoading || uploading || organizingAi) ? (
                   <ActivityIndicator size="small" color={colors.primary} />
                 ) : null}
@@ -1055,6 +1058,7 @@ export default function ListiniScreen() {
                 </View>
               ) : null}
 
+              {selectedListino.canEdit ? (
               <View style={[styles.noticeCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 12 }]}>
                 <TouchableOpacity onPress={togglePricingSettings} accessibilityRole="button" accessibilityState={{ expanded: showPricingSettings }}>
                   <Text style={[styles.noticeTitle, { color: colors.text }]}>
@@ -1103,6 +1107,7 @@ export default function ListiniScreen() {
                   </>
                 ) : null}
               </View>
+              ) : null}
 
               <View style={[styles.noticeCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 12 }]}>
                 <TouchableOpacity onPress={togglePriceHistory} accessibilityRole="button" accessibilityState={{ expanded: showPriceHistory }}>
@@ -1131,7 +1136,7 @@ export default function ListiniScreen() {
                 ) : null}
               </View>
 
-              {pricingGroups.length > 0 ? (
+              {selectedListino.canEdit && pricingGroups.length > 0 ? (
                 <View style={[styles.noticeCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 12 }]}>
                   <Text style={[styles.noticeTitle, { color: colors.text }]}>Prezzi per forma</Text>
                   <Text style={[styles.noticeText, { color: colors.textSecondary }]}>
@@ -1187,7 +1192,7 @@ export default function ListiniScreen() {
                       ) : null}
                     </View>
 
-                    <View style={styles.rowActions}>
+                    {selectedListino.canEdit ? <View style={styles.rowActions}>
                       <TouchableOpacity
                         onPress={() => {
                           setEditingItem(item);
@@ -1202,7 +1207,7 @@ export default function ListiniScreen() {
                       <TouchableOpacity onPress={() => handleDeleteItem(item.id)}>
                         <Text style={styles.rowActionText}>🗑️</Text>
                       </TouchableOpacity>
-                    </View>
+                    </View> : null}
                   </View>
                 )}
               />

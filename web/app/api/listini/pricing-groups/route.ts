@@ -6,6 +6,7 @@ import {
   isOwnProfile,
 } from '../../../../lib/apiAuth';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
+import { getListinoAccess } from '../../../../lib/listinoAccess';
 import { getListinoSourceMetadata } from '../../../../lib/listinoSourceStorage';
 import {
   applyGroupPricesToListino,
@@ -17,17 +18,6 @@ const supabase = supabaseAdmin;
 // Saving prices re-prices up to a few thousand catalogue rows.
 export const maxDuration = 120;
 
-async function ownListino(listinoId: string, profileId: string) {
-  const { data, error } = await supabase
-    .from('listini')
-    .select('id')
-    .eq('id', listinoId)
-    .eq('profile_id', profileId)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return Boolean(data);
-}
-
 /** "Prezzi per forma" section of a listino whose PDF has no prices. */
 export async function GET(req: Request) {
   try {
@@ -38,11 +28,12 @@ export async function GET(req: Request) {
     if (!isOwnProfile(user, searchParams.get('profileId'))) return forbiddenResponse();
     if (!listinoId)
       {return NextResponse.json({ error: 'listinoId è obbligatorio' }, { status: 400 });}
-    if (!(await ownListino(listinoId, user.id))) {
+    const access = await getListinoAccess(user.id, listinoId);
+    if (!access) {
       return NextResponse.json({ error: 'Listino non trovato' }, { status: 404 });
     }
 
-    const groups = await loadPricingGroups({ listinoId, profileId: user.id });
+    const groups = await loadPricingGroups({ listinoId, profileId: access.ownerProfileId });
     return NextResponse.json({ ok: true, groups });
   } catch (err) {
     return NextResponse.json(
@@ -67,16 +58,18 @@ export async function POST(req: Request) {
     };
     if (!isOwnProfile(user, payload.profileId)) return forbiddenResponse();
     const listinoId = String(payload.listinoId || '').trim();
-    const profileId = user.id;
     if (!listinoId || !Array.isArray(payload.prices)) {
       return NextResponse.json(
         { error: 'listinoId e prices sono obbligatori' },
         { status: 400 }
       );
     }
-    if (!(await ownListino(listinoId, profileId))) {
+    const access = await getListinoAccess(user.id, listinoId);
+    if (!access) {
       return NextResponse.json({ error: 'Listino non trovato' }, { status: 404 });
     }
+    if (!access.canEdit) return forbiddenResponse();
+    const profileId = access.ownerProfileId;
 
     const groups = await loadPricingGroups({ listinoId, profileId });
     const groupByName = new Map(groups.map((group) => [group.name, group]));

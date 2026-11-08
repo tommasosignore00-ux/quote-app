@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { useSubscription } from '@/lib/useSubscription';
 
 import LegalConsentPopup from '@/components/LegalConsentPopup';
+import QuoteAcceptedPopup from '@/components/QuoteAcceptedPopup';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
@@ -18,7 +19,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) {
         window.location.href = '/auth/login';
         return;
@@ -31,14 +34,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     // Wait for both auth and subscription checks to complete
     if (!authChecked || loading) return;
-    
+
     // Priority 1: Check onboarding completion
     if (!profile?.onboarding_completed) {
       console.log('Onboarding not completed, redirecting...');
       window.location.href = '/onboarding';
       return;
     }
-    
+
     // Priority 2: Check subscription access (if not skipped)
     if (!hasAccess) {
       console.log('No subscription access, redirecting...');
@@ -53,14 +56,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     window.location.href = '/auth/login';
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50">{t('messages.loading')}</div>;
+  if (loading)
+    {return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        {t('messages.loading')}
+      </div>
+    );}
 
   return (
     <div className="min-h-screen flex">
       <LegalConsentPopup />
+      <QuoteAcceptedPopup />
       <aside className="w-64 bg-slate-900 text-white flex flex-col">
         <div className="p-4 border-b border-slate-700">
-          <Link href="/dashboard" className="font-bold text-lg">Quote App</Link>
+          <Link href="/dashboard" className="font-bold text-lg">
+            Quote App
+          </Link>
         </div>
         <nav className="flex-1 p-4 space-y-2">
           <Link
@@ -68,6 +79,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             className={`block py-2 px-3 rounded-lg ${pathname === '/dashboard' ? 'bg-primary' : 'hover:bg-slate-700'}`}
           >
             {t('main.jobs')}
+          </Link>
+          <Link
+            href="/dashboard/preventivi"
+            className={`block py-2 px-3 rounded-lg ${pathname === '/dashboard/preventivi' ? 'bg-primary' : 'hover:bg-slate-700'}`}
+          >
+            Preventivi
           </Link>
           <Link
             href="/dashboard/listini"
@@ -101,7 +118,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </Link>
         </nav>
         <div className="p-4 border-t border-slate-700">
-          <button onClick={handleLogout} className="text-slate-400 hover:text-white text-sm">
+          <button
+            onClick={handleLogout}
+            className="text-slate-400 hover:text-white text-sm"
+          >
             {t('messages.logout')}
           </button>
         </div>

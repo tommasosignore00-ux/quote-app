@@ -105,7 +105,6 @@ export async function findCrossSellInListino(
   const { data: items, error } = await supabase
     .from('listini_vettoriali')
     .select('id, description, unit_price, markup_percent, sku, category, listino_id')
-    .eq('profile_id', profileId)
     .or(orFilter)
     .limit(maxResults);
 

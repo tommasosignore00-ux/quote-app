@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getRequestUser, unauthorizedResponse, forbiddenResponse, isOwnProfile } from '../../../../lib/apiAuth';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
+import { getListinoAccess } from '../../../../lib/listinoAccess';
 import {
   buildListinoSourcePaths,
   ensureListinoSourceBucket,
@@ -20,23 +21,17 @@ export async function POST(req: Request) {
     };
 
     if (!isOwnProfile(user, payload.profileId?.trim())) return forbiddenResponse();
-    const profileId = user.id;
     const listinoId = payload.listinoId?.trim();
     const fileName = payload.fileName?.trim();
 
-    if (!profileId || !listinoId || !fileName) {
+    if (!listinoId || !fileName) {
       return NextResponse.json({ error: 'profileId, listinoId e fileName sono obbligatori' }, { status: 400 });
     }
 
-    const { data: listino, error: listinoError } = await supabase
-      .from('listini')
-      .select('id')
-      .eq('id', listinoId)
-      .eq('profile_id', profileId)
-      .maybeSingle();
-
-    if (listinoError) return NextResponse.json({ error: listinoError.message }, { status: 500 });
-    if (!listino) return NextResponse.json({ error: 'Listino non trovato' }, { status: 404 });
+    const access = await getListinoAccess(user.id, listinoId);
+    if (!access) return NextResponse.json({ error: 'Listino non trovato' }, { status: 404 });
+    if (!access.canEdit) return forbiddenResponse();
+    const profileId = access.ownerProfileId;
 
     await ensureListinoSourceBucket();
 

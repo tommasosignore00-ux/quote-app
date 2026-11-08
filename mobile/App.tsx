@@ -23,6 +23,7 @@ import OnboardingScreen from './screens/OnboardingScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import ListiniScreen from './screens/ListiniScreen';
+import PreventiviScreen from './screens/PreventiviScreen';
 import QuoteScreen from './screens/QuoteScreen';
 import SubscriptionScreen from './screens/SubscriptionScreen';
 import FattureScreen from './screens/FattureScreen';
@@ -93,6 +94,7 @@ function AppNavigator() {
         <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: i18n.t('app.title') }} />
         <Stack.Screen name="Quote" component={QuoteScreen} options={{ title: i18n.t('navigation.quote') }} />
         <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: i18n.t('navigation.profile') }} />
+        <Stack.Screen name="Preventivi" component={PreventiviScreen} options={{ title: 'Preventivi' }} />
         <Stack.Screen name="Listini" component={ListiniScreen} options={{ title: i18n.t('navigation.listini') }} />
         <Stack.Screen name="Fatture" component={FattureScreen} options={{ title: 'Fatture' }} />
         <Stack.Screen name="Integrazioni" component={IntegrazioniScreen} options={{ title: 'Integrazioni' }} />

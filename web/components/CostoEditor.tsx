@@ -18,6 +18,8 @@ type Props = {
   lavoroId: string;
   onUpdate: () => void;
   defaultVatPercent?: number;
+  /** Quote accepted by the client: lines can only be read. */
+  readOnly?: boolean;
 };
 
 export default function CostoEditor({
@@ -25,6 +27,7 @@ export default function CostoEditor({
   lavoroId,
   onUpdate,
   defaultVatPercent = 22,
+  readOnly = false,
 }: Props) {
   const [editing, setEditing] = useState<string | null>(null);
   const [editQty, setEditQty] = useState(1);
@@ -154,7 +157,7 @@ export default function CostoEditor({
                     Annulla
                   </button>
                 </div>
-              ) : (
+              ) : readOnly ? null : (
                 <div className="flex gap-2">
                   <button
                     onClick={() => startEdit(c)}

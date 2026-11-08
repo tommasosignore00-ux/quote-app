@@ -164,13 +164,25 @@ async function loadCatalogVocabulary(
   userId: string
 ): Promise<string[]> {
   try {
-    const { data } = await supabase
-      .from('listini_vettoriali')
-      .select('pricing_group, category')
-      .eq('profile_id', userId)
-      .limit(3000)
+    // Service role: no RLS here, so team owners' price lists are added explicitly.
+    const { data: memberships } = await supabase
+      .from('team_members')
+      .select('team_owner_id')
+      .eq('member_id', userId)
+      .eq('active', true)
+    const ownerIds = ((memberships || []) as Array<{ team_owner_id: string }>).map((row) => row.team_owner_id)
+    // One query per profile, so a large list cannot crowd out the other's names.
+    const results = await Promise.all(
+      Array.from(new Set([...ownerIds, userId])).map((profileId) =>
+        supabase
+          .from('listini_vettoriali')
+          .select('pricing_group, category')
+          .eq('profile_id', profileId)
+          .limit(3000)
+      )
+    )
     const names = new Set<string>()
-    for (const row of (data || []) as Array<{ pricing_group: string | null; category: string | null }>) {
+    for (const row of results.flatMap((result) => result.data || []) as Array<{ pricing_group: string | null; category: string | null }>) {
       for (const name of [row.pricing_group, row.category]) {
         const clean = String(name || '').trim()
         if (clean && clean.length <= 60) names.add(clean)

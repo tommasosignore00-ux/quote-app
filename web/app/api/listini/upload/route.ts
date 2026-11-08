@@ -11,6 +11,7 @@ import path from 'path';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import { LISTINO_SOURCE_BUCKET } from '../../../../lib/listinoSourceStorage';
 import { processListinoImport } from '../../../../lib/listinoImportShared';
+import { getListinoAccess } from '../../../../lib/listinoAccess';
 
 const supabase = supabaseAdmin;
 
@@ -67,9 +68,16 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Missing file or profileId' }, { status: 400 });
       }
 
+      if (listinoId) {
+        const access = await getListinoAccess(user.id, listinoId);
+        if (!access) return NextResponse.json({ error: 'Listino non trovato' }, { status: 404 });
+        if (!access.canEdit) return forbiddenResponse();
+        profileId = access.ownerProfileId;
+      }
+
       if (storagePath) {
-        // Il file sorgente deve stare nella cartella dell'utente
-        if (!storagePath.startsWith(`${user.id}/`) || storagePath.includes('..')) {
+        // Il file sorgente deve stare nella cartella del proprietario del listino
+        if (!storagePath.startsWith(`${profileId}/`) || storagePath.includes('..')) {
           return forbiddenResponse();
         }
         const sourceDownload = await supabase.storage
@@ -106,6 +114,13 @@ export async function POST(req: Request) {
 
       if (!file || !profileId) {
         return NextResponse.json({ error: 'Missing file or profileId' }, { status: 400 });
+      }
+
+      if (listinoId) {
+        const access = await getListinoAccess(user.id, listinoId);
+        if (!access) return NextResponse.json({ error: 'Listino non trovato' }, { status: 404 });
+        if (!access.canEdit) return forbiddenResponse();
+        profileId = access.ownerProfileId;
       }
 
       uploadedFileName = file.name;

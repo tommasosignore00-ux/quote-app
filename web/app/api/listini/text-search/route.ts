@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getRequestUser, unauthorizedResponse, forbiddenResponse, isOwnProfile } from '../../../../lib/apiAuth';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
+import { getListinoProfileIds } from '../../../../lib/listinoAccess';
 
 export async function POST(req: Request) {
   try {
@@ -18,7 +19,7 @@ export async function POST(req: Request) {
     const { data: items, error } = await supabaseAdmin
       .from('listini_vettoriali')
       .select('id, description, unit_price, markup_percent, listino_id, category, listini(name)')
-      .eq('profile_id', profileId)
+      .in('profile_id', await getListinoProfileIds(profileId))
       .ilike('description', searchTerm)
       .limit(5);
 

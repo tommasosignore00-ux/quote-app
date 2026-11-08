@@ -8,6 +8,7 @@ import {
 } from '../../../../lib/apiAuth';
 import { openai } from '../../../../lib/openaiServer';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
+import { getListinoProfileIds } from '../../../../lib/listinoAccess';
 
 const supabase = supabaseAdmin;
 
@@ -28,11 +29,11 @@ export async function POST(req: Request) {
     });
     const embedding = embeddingRes.data[0].embedding;
 
-    const { data: items } = await supabase.rpc('match_listini', {
+    const { data: items } = await supabase.rpc('match_listini_profiles', {
       query_embedding: embedding,
       match_threshold: 0.5,
       match_count: 5,
-      p_profile_id: profileId,
+      p_profile_ids: await getListinoProfileIds(profileId),
     });
 
     if (!items || items.length === 0) {

@@ -9,6 +9,7 @@ import {
 } from '../../../../lib/apiAuth';
 import OpenAI from 'openai';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
+import { getListinoAccess } from '../../../../lib/listinoAccess';
 import { resolveImportPricing } from '../../../../lib/listinoPricing';
 import {
   LISTINO_SOURCE_BUCKET,
@@ -233,13 +234,13 @@ export async function POST(req: Request) {
     if (quotaExceeded) return quotaExceeded;
     const { listinoId, profileId: claimedProfileId } = await req.json();
     if (!isOwnProfile(user, claimedProfileId)) return forbiddenResponse();
-    const profileId = user.id;
-    if (!listinoId || !profileId) {
-      return NextResponse.json(
-        { error: 'listinoId e profileId sono obbligatori' },
-        { status: 400 }
-      );
+    if (!listinoId) {
+      return NextResponse.json({ error: 'listinoId è obbligatorio' }, { status: 400 });
     }
+    const access = await getListinoAccess(user.id, listinoId);
+    if (!access) return NextResponse.json({ error: 'Listino non trovato' }, { status: 404 });
+    if (!access.canEdit) return forbiddenResponse();
+    const profileId = access.ownerProfileId;
 
     const { data: listino, error: listinoError } = await supabase
       .from('listini')

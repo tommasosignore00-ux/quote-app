@@ -6,10 +6,11 @@ import {
   isOwnProfile,
 } from '../../../../lib/apiAuth';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
+import { getListinoAccess } from '../../../../lib/listinoAccess';
 
 const supabase = supabaseAdmin;
 
-async function ownListino(listinoId: string, profileId: string) {
+async function loadListino(listinoId: string, profileId: string) {
   const { data, error } = await supabase
     .from('listini')
     .select('id, supplier_discount_percent')
@@ -35,7 +36,8 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     if (!isOwnProfile(user, searchParams.get('profileId'))) return forbiddenResponse();
     const listinoId = searchParams.get('listinoId') || '';
-    const listino = listinoId ? await ownListino(listinoId, user.id) : null;
+    const access = listinoId ? await getListinoAccess(user.id, listinoId) : null;
+    const listino = access ? await loadListino(listinoId, access.ownerProfileId) : null;
     if (!listino)
       {return NextResponse.json({ error: 'Listino non trovato' }, { status: 404 });}
 
@@ -98,9 +100,12 @@ export async function POST(req: Request) {
     };
     if (!isOwnProfile(user, payload.profileId)) return forbiddenResponse();
     const listinoId = String(payload.listinoId || '');
-    const listino = listinoId ? await ownListino(listinoId, user.id) : null;
-    if (!listino)
+    const access = listinoId ? await getListinoAccess(user.id, listinoId) : null;
+    const listino = access ? await loadListino(listinoId, access.ownerProfileId) : null;
+    if (!access || !listino)
       {return NextResponse.json({ error: 'Listino non trovato' }, { status: 404 });}
+    if (!access.canEdit) return forbiddenResponse();
+    const ownerProfileId = access.ownerProfileId;
 
     const discount = parsePercent(payload.supplierDiscountPercent, 100) ?? 0;
     if (Number.isNaN(discount)) {
@@ -114,7 +119,7 @@ export async function POST(req: Request) {
       .from('listini')
       .update({ supplier_discount_percent: discount })
       .eq('id', listinoId)
-      .eq('profile_id', user.id);
+      .eq('profile_id', ownerProfileId);
     if (listinoError) throw new Error(listinoError.message);
 
     const toSave: Array<{
@@ -137,7 +142,7 @@ export async function POST(req: Request) {
       } else
         {toSave.push({
           listino_id: listinoId,
-          profile_id: user.id,
+          profile_id: ownerProfileId,
           category,
           markup_percent: markup,
         });}
