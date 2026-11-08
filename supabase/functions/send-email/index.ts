@@ -82,7 +82,7 @@ serve(async (req) => {
 
     if (!emailRes.ok) {
       // Every response carries CORS headers: without them the browser hides the reason.
-      console.error('Resend rejected the email:', emailRes.status, emailData)
+      console.error('Resend rejected the email:', emailRes.status, emailData?.name)
       return jsonResponse({ error: emailData.message || 'Failed to send email' }, 400)
     }
 

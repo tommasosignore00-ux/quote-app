@@ -13,17 +13,19 @@ export default function SubscriptionPage() {
 
   useEffect(() => {
     const getUser = async () => {
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      const {
+        data: { user: currentUser },
+      } = await supabase.auth.getUser();
       setUser(currentUser);
 
       if (currentUser) {
         const { data: profile, error } = await supabase
           .from('profiles')
-          .select('subscription_status, trial_ends_at, stripe_customer_id, subscription_plan')
+          .select(
+            'subscription_status, trial_ends_at, stripe_customer_id, subscription_plan'
+          )
           .eq('id', currentUser.id)
           .single();
-
-        console.log('[Subscription Debug] user:', currentUser.id, 'profile:', JSON.stringify(profile), 'error:', error);
         setSubscription(profile);
       }
     };
@@ -33,13 +35,17 @@ export default function SubscriptionPage() {
 
   const status = subscription?.subscription_status || '';
   const plan = subscription?.subscription_plan || '';
-  const trialEndsAt = subscription?.trial_ends_at ? new Date(subscription.trial_ends_at) : null;
+  const trialEndsAt = subscription?.trial_ends_at
+    ? new Date(subscription.trial_ends_at)
+    : null;
   const skipSub = process.env.NEXT_PUBLIC_SKIP_SUBSCRIPTION === 'true';
   const isActive = status === 'active';
   const isTeam = status === 'team' || plan === 'team';
-  const isTrial = status === 'trialing' || (!isActive && !isTeam && trialEndsAt && trialEndsAt > new Date());
+  const isTrial =
+    status === 'trialing' ||
+    (!isActive && !isTeam && trialEndsAt && trialEndsAt > new Date());
   const isSubscribed = isActive || isTeam || isTrial || skipSub;
-  const currentPlan = isTeam ? 'team' : (subscription?.subscription_plan || '');
+  const currentPlan = isTeam ? 'team' : subscription?.subscription_plan || '';
 
   const handleSubscribe = async (plan: 'monthly' | 'yearly' | 'team') => {
     if (!user) {
@@ -122,9 +128,7 @@ export default function SubscriptionPage() {
                       : 'Accesso attivo'}
               </p>
               <p className="mt-1 text-sm text-green-700">
-                {trialEndsAt
-                  ? `Scade il ${trialEndsAt.toLocaleDateString('it-IT')}`
-                  : ''}
+                {trialEndsAt ? `Scade il ${trialEndsAt.toLocaleDateString('it-IT')}` : ''}
               </p>
             </div>
             {subscription?.stripe_customer_id && (
@@ -143,16 +147,29 @@ export default function SubscriptionPage() {
       {/* Piani disponibili — sempre visibili */}
       <div>
         <p className="text-sm text-slate-600 mb-4">
-          {isSubscribed ? 'Confronta i piani o cambia abbonamento.' : t('subscription.chooseYourPlan')}
+          {isSubscribed
+            ? 'Confronta i piani o cambia abbonamento.'
+            : t('subscription.chooseYourPlan')}
         </p>
 
         <div className="grid md:grid-cols-3 gap-6">
           {/* Monthly */}
-          <div className={`rounded-2xl border bg-white p-6 shadow-sm ${currentPlan === 'monthly' ? 'border-green-400 ring-2 ring-green-200' : 'border-slate-200'}`}>
-            {currentPlan === 'monthly' && <span className="mb-3 inline-block rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">Piano attuale</span>}
-            <h3 className="text-lg font-semibold text-slate-900 mb-1">{t('subscription.monthly')}</h3>
+          <div
+            className={`rounded-2xl border bg-white p-6 shadow-sm ${currentPlan === 'monthly' ? 'border-green-400 ring-2 ring-green-200' : 'border-slate-200'}`}
+          >
+            {currentPlan === 'monthly' && (
+              <span className="mb-3 inline-block rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                Piano attuale
+              </span>
+            )}
+            <h3 className="text-lg font-semibold text-slate-900 mb-1">
+              {t('subscription.monthly')}
+            </h3>
             <p className="text-3xl font-bold text-slate-900 mb-1">
-              €29.99<span className="text-base font-normal text-slate-500">{t('subscription.perMonth')}</span>
+              €29.99
+              <span className="text-base font-normal text-slate-500">
+                {t('subscription.perMonth')}
+              </span>
             </p>
             <ul className="mt-4 space-y-2 text-sm text-slate-600">
               <li>✔ {t('subscription.unlimitedQuotes')}</li>
@@ -166,20 +183,33 @@ export default function SubscriptionPage() {
               disabled={loading || currentPlan === 'monthly'}
               className="mt-6 w-full rounded-lg bg-slate-700 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
             >
-              {currentPlan === 'monthly' ? 'Attivo' : loading ? '...' : t('subscription.subscribe')}
+              {currentPlan === 'monthly'
+                ? 'Attivo'
+                : loading
+                  ? '...'
+                  : t('subscription.subscribe')}
             </button>
           </div>
 
           {/* Yearly */}
-          <div className={`relative rounded-2xl border-2 bg-white p-6 shadow-sm ${currentPlan === 'yearly' ? 'border-green-400 ring-2 ring-green-200' : 'border-slate-900'}`}>
+          <div
+            className={`relative rounded-2xl border-2 bg-white p-6 shadow-sm ${currentPlan === 'yearly' ? 'border-green-400 ring-2 ring-green-200' : 'border-slate-900'}`}
+          >
             <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-green-600 px-3 py-1 text-xs font-bold text-white">
               {currentPlan === 'yearly' ? 'Piano attuale' : t('subscription.bestValue')}
             </span>
-            <h3 className="text-lg font-semibold text-slate-900 mb-1">{t('subscription.yearly')}</h3>
+            <h3 className="text-lg font-semibold text-slate-900 mb-1">
+              {t('subscription.yearly')}
+            </h3>
             <p className="text-3xl font-bold text-slate-900 mb-1">
-              €299.99<span className="text-base font-normal text-slate-500">{t('subscription.perYear')}</span>
+              €299.99
+              <span className="text-base font-normal text-slate-500">
+                {t('subscription.perYear')}
+              </span>
             </p>
-            <p className="text-sm font-semibold text-green-600">{t('subscription.saveTwoMonths')}</p>
+            <p className="text-sm font-semibold text-green-600">
+              {t('subscription.saveTwoMonths')}
+            </p>
             <ul className="mt-4 space-y-2 text-sm text-slate-600">
               <li>✔ {t('subscription.everythingPro')}</li>
               <li>✔ {t('subscription.saveTwoMonths')}</li>
@@ -189,19 +219,34 @@ export default function SubscriptionPage() {
               disabled={loading || currentPlan === 'yearly'}
               className="mt-6 w-full rounded-lg bg-slate-900 py-3 text-sm font-semibold text-white transition hover:bg-black disabled:opacity-50"
             >
-              {currentPlan === 'yearly' ? 'Attivo' : loading ? '...' : t('subscription.subscribe')}
+              {currentPlan === 'yearly'
+                ? 'Attivo'
+                : loading
+                  ? '...'
+                  : t('subscription.subscribe')}
             </button>
           </div>
 
           {/* Team */}
-          <div className={`relative rounded-2xl border-2 bg-white p-6 shadow-sm ${isTeam ? 'border-green-400 ring-2 ring-green-200' : 'border-indigo-600'}`}>
+          <div
+            className={`relative rounded-2xl border-2 bg-white p-6 shadow-sm ${isTeam ? 'border-green-400 ring-2 ring-green-200' : 'border-indigo-600'}`}
+          >
             <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-indigo-600 px-3 py-1 text-xs font-bold text-white">
               Team
             </span>
-            {isTeam && <span className="mb-3 inline-block rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">Piano attuale</span>}
-            <h3 className="text-lg font-semibold text-slate-900 mb-1">{t('subscription.team')}</h3>
+            {isTeam && (
+              <span className="mb-3 inline-block rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                Piano attuale
+              </span>
+            )}
+            <h3 className="text-lg font-semibold text-slate-900 mb-1">
+              {t('subscription.team')}
+            </h3>
             <p className="text-3xl font-bold text-slate-900 mb-1">
-              €79.99<span className="text-base font-normal text-slate-500">{t('subscription.perMonth')}</span>
+              €79.99
+              <span className="text-base font-normal text-slate-500">
+                {t('subscription.perMonth')}
+              </span>
             </p>
             <ul className="mt-4 space-y-2 text-sm text-slate-600">
               <li>✔ {t('subscription.everythingPro')}</li>

@@ -43,7 +43,7 @@ export async function POST(req: Request) {
       // Never report as sent an email that did not leave.
       return NextResponse.json({ error: 'Invio email non configurato' }, { status: 503 });
     } else {
-      console.log('Email would be sent (dev):', { to, subject });
+      console.log('Email not sent: no provider configured (dev)');
     }
 
     return NextResponse.json({ success: true });

@@ -42,7 +42,6 @@ async function sendWelcomeEmail(email: string, name?: string) {
         }),
       });
       if (response.ok) {
-        console.log('Welcome email sent via Resend to', email);
         return;
       }
     } catch (e) {
@@ -51,11 +50,7 @@ async function sendWelcomeEmail(email: string, name?: string) {
   }
 
   // Log that email sending was skipped (development mode)
-  console.log(
-    'Email sending skipped for',
-    email,
-    '(RESEND_API_KEY not configured or dev mode)'
-  );
+  console.log('Welcome email skipped (RESEND_API_KEY not configured or dev mode)');
 }
 
 export async function POST(req: Request) {
@@ -96,11 +91,12 @@ export async function POST(req: Request) {
     }
 
     const user = (data as any)?.user;
-    if (!user)
-      {return NextResponse.json(
+    if (!user) {
+      return NextResponse.json(
         { error: 'User creation returned no user' },
         { status: 500 }
-      );}
+      );
+    }
 
     // Upsert profile
     await supabase.from('profiles').upsert({
@@ -117,13 +113,11 @@ export async function POST(req: Request) {
     if (Array.isArray(legalAccepted)) {
       for (const doc of legalAccepted) {
         try {
-          await supabase
-            .from('legal_acceptances')
-            .insert({
-              user_id: user.id,
-              document_id: doc.id,
-              document_version: doc.version,
-            });
+          await supabase.from('legal_acceptances').insert({
+            user_id: user.id,
+            document_id: doc.id,
+            document_version: doc.version,
+          });
         } catch (e) {
           /* ignore */
         }
