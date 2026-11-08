@@ -375,10 +375,7 @@ export default function ProfileScreen() {
       if (created?.[0]) setTeamMembers(prev => [...prev, created[0]]);
       setInviteEmail('');
 
-      // Update extra members count in profile for metered billing
       const newCount = teamMembers.length + 1;
-      const extraMembers = Math.max(0, newCount - TEAM_MEMBERS_INCLUDED);
-      await supabase.from('profiles').update({ extra_team_members: extraMembers }).eq('id', userId);
 
       if (newCount > TEAM_MEMBERS_INCLUDED) {
         Alert.alert('Membro aggiunto!', `Hai ${newCount} membri (${newCount - TEAM_MEMBERS_INCLUDED} extra a €${EXTRA_MEMBER_PRICE}/mese ciascuno).`);
@@ -395,12 +392,6 @@ export default function ProfileScreen() {
     await supabase.from('team_members').update({ active: false }).eq('id', id);
     const newMembers = teamMembers.filter(m => m.id !== id);
     setTeamMembers(newMembers);
-    // Update extra members count
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const extraMembers = Math.max(0, newMembers.length - TEAM_MEMBERS_INCLUDED);
-      await supabase.from('profiles').update({ extra_team_members: extraMembers }).eq('id', user.id);
-    }
   };
 
   // Punto 43: Add webhook

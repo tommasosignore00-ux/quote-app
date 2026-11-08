@@ -302,13 +302,8 @@ export default function ProfilePage() {
       if (error) throw error;
 
       const nextTeamMembers = [...teamMembers, data];
+      // The database recalculates the billed count when the team changes.
       const extraMembers = Math.max(0, nextTeamMembers.length - TEAM_MEMBERS_INCLUDED);
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ extra_team_members: extraMembers })
-        .eq('id', user.id);
-
-      if (profileError) throw profileError;
 
       setTeamMembers(nextTeamMembers);
       setProfile((current) => ({ ...current, extra_team_members: extraMembers }));
@@ -333,13 +328,8 @@ export default function ProfilePage() {
       if (error) throw error;
 
       const nextTeamMembers = teamMembers.filter((member) => member.id !== id);
+      // The database recalculates the billed count when the team changes.
       const extraMembers = Math.max(0, nextTeamMembers.length - TEAM_MEMBERS_INCLUDED);
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ extra_team_members: extraMembers })
-        .eq('id', user.id);
-
-      if (profileError) throw profileError;
 
       setTeamMembers(nextTeamMembers);
       setProfile((current) => ({ ...current, extra_team_members: extraMembers }));

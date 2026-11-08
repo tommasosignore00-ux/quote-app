@@ -51,43 +51,19 @@ export default function RegisterScreen() {
     }
     setLoading(true);
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          // Read by the database signup trigger, which sets consent and referral.
+          data: {
+            gdpr_consent_version: '1.0',
+            ...(referralCode ? { referral_code: referralCode } : {}),
+          },
+        },
+      });
       if (authError) throw authError;
       if (authData.user) {
-        // Punto 35: Resolve referral code to referrer ID
-        let referredBy: string | null = null;
-        if (referralCode) {
-          const { data: referrer } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('referral_code', referralCode)
-            .maybeSingle();
-          referredBy = referrer?.id || null;
-        }
-
-        await supabase.from('profiles').upsert({
-          id: authData.user.id,
-          email,
-          country_code: 'IT',
-          language: 'it',
-          onboarding_completed: false,
-          // Punto 27: GDPR consent timestamp
-          gdpr_consent_at: new Date().toISOString(),
-          gdpr_consent_version: '1.0',
-          // Punto 35: Referral tracking
-          referred_by: referredBy,
-        });
-
-        // Punto 35: Create affiliate_referrals record
-        if (referredBy) {
-          await supabase.from('affiliate_referrals').insert({
-            referrer_id: referredBy,
-            referred_id: authData.user.id,
-            referral_code: referralCode,
-            status: 'registered',
-          }).catch(() => {});
-        }
-
         Alert.alert(t('messages.success'), t('auth.registrationComplete'));
         (navigation as any).navigate('Login');
       }
