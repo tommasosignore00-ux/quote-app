@@ -1,3 +1,4 @@
+import { trackEvent } from '../lib/analytics';
 import { enableDecisionPush, firstTime } from '../lib/nudges';
 import { loadEntitlement } from '../lib/entitlement';
 import React, { useState, useEffect } from 'react';
@@ -224,6 +225,7 @@ export default function QuoteScreen() {
       setRevision(revision + 1);
 
       await trackTimeSaving('send_email');
+      trackEvent('quote_sent');
       Alert.alert(t('messages.success'), t('messages.emailSent'));
       setShowEmailModal(false);
       if (user && await firstTime('decision-push-offer')) {

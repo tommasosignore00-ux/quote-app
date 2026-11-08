@@ -1,3 +1,4 @@
+import { trackEvent } from '../lib/analytics';
 import { Ionicons } from '@expo/vector-icons';
 import { countUnmatchedItems, firstTime, scheduleEveningReminder } from '../lib/nudges';
 import { holdClientDecisions } from '../lib/notifications';
@@ -620,6 +621,7 @@ export default function DashboardScreen() {
       closeVoiceDraft();
       triggerHaptic('aiSuccess');
 
+      trackEvent('voice_item_confirmed');
       for (let i = 0; i < rows.length; i++) await trackTimeSaving('add_costo');
       refreshTimeSaved();
 
