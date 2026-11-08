@@ -5,6 +5,19 @@ import { createServerClient } from '@supabase/ssr';
 import type { User } from '@supabase/supabase-js';
 import { supabaseAdmin } from './supabase-server';
 
+/** A user with a verified authenticator must have completed it in this session. */
+function needsSecondFactor(user: User, accessToken?: string): boolean {
+  if (!user.factors?.some((factor) => factor.status === 'verified')) return false;
+  try {
+    const claims = JSON.parse(
+      Buffer.from(accessToken!.split('.')[1], 'base64url').toString()
+    );
+    return claims.aal !== 'aal2';
+  } catch {
+    return true;
+  }
+}
+
 /**
  * Restituisce l'utente autenticato che sta chiamando l'API, oppure null.
  *
@@ -22,7 +35,7 @@ export async function getRequestUser(req: Request): Promise<User | null> {
 
   if (bearer) {
     const { data, error } = await supabaseAdmin.auth.getUser(bearer);
-    if (error || !data?.user) return null;
+    if (error || !data?.user || needsSecondFactor(data.user, bearer)) return null;
     return data.user;
   }
 
@@ -44,6 +57,8 @@ export async function getRequestUser(req: Request): Promise<User | null> {
     );
     const { data, error } = await supabase.auth.getUser();
     if (error || !data?.user) return null;
+    const { data: session } = await supabase.auth.getSession();
+    if (needsSecondFactor(data.user, session.session?.access_token)) return null;
     return data.user;
   } catch {
     return null;

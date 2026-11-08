@@ -12,6 +12,7 @@ import {
   LEGAL_FRAMEWORKS,
   normalizeCountryCode,
 } from '@/lib/constants';
+import TwoFactorSettings from '@/components/TwoFactorSettings';
 import toast from 'react-hot-toast';
 import { setLanguage } from '@/lib/language';
 import TemplateUploader from '@/components/TemplateUploader';
@@ -248,6 +249,27 @@ export default function ProfilePage() {
       return;
     }
     setCommandMappings((current) => current.filter((mapping) => mapping.id !== id));
+  };
+
+  const handleLogoFile = async (file?: File) => {
+    if (!file) return;
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = '';
+    bytes.forEach((byte) => {
+      binary += String.fromCharCode(byte);
+    });
+    const res = await fetch('/api/profile/logo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base64: btoa(binary) }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(body.error || 'Caricamento non riuscito');
+      return;
+    }
+    setProfile((current) => ({ ...current, logo_url: body.url }));
+    toast.success('Logo caricato');
   };
 
   const reloadTeam = async () => {
@@ -592,13 +614,20 @@ export default function ProfilePage() {
           </label>
 
           <label className="space-y-1 text-sm font-medium text-slate-700">
-            <span>Logo aziendale (indirizzo https dell&apos;immagine)</span>
+            <span>Logo aziendale (PNG, JPEG o WebP, massimo 2 MB)</span>
+            {profile.logo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={String(profile.logo_url)}
+                alt=""
+                className="max-h-16 max-w-[220px]"
+              />
+            ) : null}
             <input
-              type="url"
-              value={String(profile.logo_url || '')}
-              onChange={(e) => setProfile({ ...profile, logo_url: e.target.value })}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(e) => handleLogoFile(e.target.files?.[0])}
               className="w-full rounded-lg border border-slate-200 px-3 py-2"
-              placeholder="https://..."
             />
           </label>
 
@@ -703,6 +732,8 @@ export default function ProfilePage() {
           ))}
         </div>
       </section>
+
+      <TwoFactorSettings />
 
       {teamInvitations.length > 0 && (
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

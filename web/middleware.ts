@@ -83,6 +83,11 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/auth/login', request.url));
     }
 
+    const { data: assurance } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (assurance?.nextLevel === 'aal2' && assurance.currentLevel !== 'aal2') {
+      return NextResponse.redirect(new URL('/auth/login?mfa=1', request.url));
+    }
+
     // Session exists - check last activity for timeout
     const lastActivity = Number(request.cookies.get('last-activity')?.value);
     const now = Date.now();

@@ -13,6 +13,30 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [needsCode, setNeedsCode] = useState(false);
+  const [code, setCode] = useState('');
+
+  const continueToApp = async (userId: string) => {
+    const { data: profile } = await supabase.from('profiles').select('onboarding_completed').eq('id', userId).single();
+    (navigation as any).reset({ index: 0, routes: [{ name: profile?.onboarding_completed ? 'Dashboard' : 'Onboarding' }] });
+  };
+
+  const handleCode = async () => {
+    setLoading(true);
+    try {
+      const { data: factors } = await supabase.auth.mfa.listFactors();
+      const factor = factors?.totp?.[0];
+      if (!factor) throw new Error('Nessun autenticatore configurato');
+      const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId: factor.id, code });
+      if (error) throw new Error('Codice non corretto');
+      const { data } = await supabase.auth.getUser();
+      if (data.user) await continueToApp(data.user.id);
+    } catch (err) {
+      Alert.alert(t('messages.error'), (err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogin = async () => {
     setLoading(true);
@@ -25,18 +49,30 @@ export default function LoginScreen() {
             : 'Email o password non corrette.'
         );
       }
-      const { data: profile } = await supabase.from('profiles').select('onboarding_completed').eq('id', data.user.id).single();
-      if (profile?.onboarding_completed) {
-        (navigation as any).reset({ index: 0, routes: [{ name: 'Dashboard' }] });
-      } else {
-        (navigation as any).reset({ index: 0, routes: [{ name: 'Onboarding' }] });
+      const { data: assurance } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (assurance?.nextLevel === 'aal2' && assurance.currentLevel !== 'aal2') {
+        setNeedsCode(true);
+        return;
       }
+      await continueToApp(data.user.id);
     } catch (err: unknown) {
       Alert.alert(t('messages.error'), (err as Error).message);
     } finally {
       setLoading(false);
     }
   };
+
+  if (needsCode) {
+    return (
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.container, { backgroundColor: colors.background }]}>
+        <Text style={{ color: colors.text, fontSize: 18, marginBottom: 12 }}>Inserisci il codice a 6 cifre della tua app di autenticazione.</Text>
+        <TextInput style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} value={code} onChangeText={(v) => setCode(v.replace(/\D/g, ''))} keyboardType="number-pad" maxLength={6} textContentType="oneTimeCode" placeholderTextColor={colors.textTertiary} />
+        <TouchableOpacity style={[styles.btnPrimary, { backgroundColor: colors.primary, minHeight: 64, justifyContent: 'center' }, loading && styles.disabled]} onPress={handleCode} disabled={loading || code.length !== 6}>
+          <Text style={styles.btnText}>{loading ? '...' : 'Verifica'}</Text>
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
+    );
+  }
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.container, { backgroundColor: colors.background }]}>

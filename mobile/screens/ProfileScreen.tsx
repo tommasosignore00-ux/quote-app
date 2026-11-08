@@ -1,11 +1,13 @@
 import { buildWebApiUrl, getWebApiAuthHeaders, isWebApiConfigured } from '../lib/webApi';
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, FlatList, Modal } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Switch, StyleSheet, ScrollView, FlatList, Modal } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import { DEFAULT_COUNTRY_CODE, DEFAULT_LANGUAGE } from '../lib/market';
 import { supabase } from '../lib/supabase';
 import { Alert } from 'react-native';
+import TwoFactorSettings from '../components/TwoFactorSettings';
+import { getAnalyticsConsent, setAnalyticsConsent } from '../lib/analytics';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -41,6 +43,8 @@ export default function ProfileScreen() {
   // Punto 41: Team management
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [teamInvitations, setTeamInvitations] = useState<any[]>([]);
+  const [analyticsConsent, setAnalyticsConsentState] = useState(false);
+  useEffect(() => { getAnalyticsConsent().then(setAnalyticsConsentState); }, []);
   const [showTeamSection, setShowTeamSection] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('technician');
@@ -322,6 +326,25 @@ export default function ProfileScreen() {
   const TEAM_MEMBERS_INCLUDED = 5;
   const EXTRA_MEMBER_PRICE = 7.99;
 
+  const handleLogoUpload = async () => {
+    const result = await DocumentPicker.getDocumentAsync({ type: ['image/png', 'image/jpeg', 'image/webp'], copyToCacheDirectory: true });
+    const asset = result.canceled ? null : result.assets?.[0];
+    if (!asset) return;
+    try {
+      const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
+      const res = await fetch(buildWebApiUrl('/api/profile/logo'), {
+        method: 'POST',
+        headers: await getWebApiAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ base64 }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Caricamento non riuscito');
+      setProfile({ ...profile, logo_url: body.url });
+    } catch (err) {
+      Alert.alert('Errore', (err as Error).message);
+    }
+  };
+
   const loadTeam = async () => {
     if (!isWebApiConfigured()) return;
     const res = await fetch(buildWebApiUrl('/api/team'), { headers: await getWebApiAuthHeaders() });
@@ -443,8 +466,10 @@ export default function ProfileScreen() {
       {ibanError && <Text style={styles.errorText}>⚠️ {ibanError}</Text>}
       <Text style={styles.label}>{t('profile.swiftBic')}</Text>
       <TextInput style={styles.input} placeholder={t('profile.swiftBic')} value={profile.swift_bic || ''} onChangeText={(v) => setProfile({ ...profile, swift_bic: v })} placeholderTextColor="#94a3b8" />
-      <Text style={styles.label}>Logo aziendale (indirizzo https)</Text>
-      <TextInput style={styles.input} placeholder="https://..." autoCapitalize="none" keyboardType="url" value={profile.logo_url || ''} onChangeText={(v) => setProfile({ ...profile, logo_url: v })} placeholderTextColor="#94a3b8" />
+      <Text style={styles.label}>Logo aziendale</Text>
+      <TouchableOpacity style={[styles.btn, { minHeight: 64, justifyContent: 'center' }]} onPress={handleLogoUpload} accessibilityRole="button">
+        <Text style={styles.btnText}>{profile.logo_url ? 'Sostituisci il logo' : 'Carica il logo'}</Text>
+      </TouchableOpacity>
       <Text style={styles.label}>Colore sui preventivi (es. #1f2937)</Text>
       <TextInput style={styles.input} placeholder="#1f2937" autoCapitalize="none" value={profile.brand_color || ''} onChangeText={(v) => setProfile({ ...profile, brand_color: v })} placeholderTextColor="#94a3b8" />
       <Text style={styles.label}>{t('messages.address')}</Text>
@@ -476,6 +501,17 @@ export default function ProfileScreen() {
           )}
         </View>
       )}
+
+      <TwoFactorSettings />
+
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 64, marginBottom: 12 }}>
+        <Text style={{ color: colors.text, fontSize: 15, flex: 1, paddingRight: 12 }}>Condividi statistiche anonime di utilizzo</Text>
+        <Switch
+          value={analyticsConsent}
+          onValueChange={(value) => { setAnalyticsConsentState(value); setAnalyticsConsent(value); }}
+          accessibilityLabel="Condividi statistiche anonime di utilizzo"
+        />
+      </View>
 
       {/* Punto 44: Time Savings Widget */}
       {timeSavedStats ? (
