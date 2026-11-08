@@ -3,6 +3,7 @@
     "name": "Mastrovoce",
     "slug": "quote-app-mobile",
     "scheme": "quoteapp",
+    "icon": "./assets/icon.png",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
@@ -32,6 +33,7 @@
     },
     "android": {
       "package": "com.mastrovoce.app",
+      "adaptiveIcon": { "foregroundImage": "./assets/adaptive-icon.png", "backgroundColor": "#c2410c" },
       "allowBackup": false,
       "permissions": [
         "RECORD_AUDIO",

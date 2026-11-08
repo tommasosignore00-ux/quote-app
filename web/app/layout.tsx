@@ -56,6 +56,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           content="Detta le voci dal cantiere e prepara il preventivo per il cliente."
         />
 
+        <meta
+          property="og:image"
+          content={`${process.env.NEXT_PUBLIC_APP_URL || ''}/og.png`}
+        />
+        <meta
+          name="twitter:image"
+          content={`${process.env.NEXT_PUBLIC_APP_URL || ''}/og.png`}
+        />
         {/* Favicon */}
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
