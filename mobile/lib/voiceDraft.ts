@@ -187,3 +187,69 @@ export function countWordHits(description: string, words: string[]): number {
   const text = normalizeName(description);
   return words.filter((word) => text.includes(word)).length;
 }
+
+/** Sizes and numbers said for the article ("10" in "tondo da 10", "40" and "20" in "40 per 20"). */
+export function listinoSearchNumbers(query: string): string[] {
+  const found = String(query ?? '').match(/\d+(?:[.,]\d+)?/g) || [];
+  return Array.from(new Set(found.map((number) => number.replace('.', ','))));
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** The description has this exact number: "10" matches "10 mm", not "100" or "0,10". */
+function containsNumber(description: string, number: string): boolean {
+  const variants = [number, number.replace(',', '.')].map(escapeRegExp).join('|');
+  return new RegExp(`(^|[^\\d,.])(${variants})(?![\\d]|[,.]\\d)`).test(String(description ?? ''));
+}
+
+/**
+ * "10 metri di tubo" -> "tubo": the quantity said at the start is not part of the
+ * article name, while a size after it ("tondo da 10") is.
+ */
+export function stripLeadingQuantity(description: string, quantity: number): string {
+  const match = String(description ?? '').match(
+    /^\s*(\d+(?:[.,]\d+)?)\s*(metri (?:lineari|quadri|quadrati|cubi)|metri|metro|mt|ml|m|pezzi|pezzo|pz|kg|chili|litri|nr)?\s+(?:di\s+|da\s+)?/i
+  );
+  if (!match) return description;
+  if (Number(match[1].replace(',', '.')) !== quantity) return description;
+  const rest = description.slice(match[0].length).trim();
+  return rest || description;
+}
+
+/**
+ * Price list candidates for what was said, best first. fullMatch: the article has
+ * every word and every size that was said, so it can be preselected.
+ */
+export function rankListinoMatches<T extends { description: string }>(
+  items: T[],
+  query: string
+): Array<T & { fullMatch: boolean }> {
+  const words = listinoSearchWords(query);
+  const numbers = listinoSearchNumbers(query);
+  return items
+    .map((item) => {
+      // The size is in the name ("Travi IPE 100"), not in the details after "(" or " - ".
+      const name = String(item.description ?? '').split(/\s+-\s+|\(/)[0];
+      const nameHasNumbers = /\d/.test(name);
+      return {
+        item,
+        hits: countWordHits(item.description, words),
+        numberHits: numbers.filter((number) =>
+          containsNumber(nameHasNumbers ? name : item.description, number)
+        ).length,
+      };
+    })
+    .filter(({ hits, numberHits }) => (words.length ? hits > 0 : numberHits > 0))
+    .sort(
+      (a, b) =>
+        b.hits - a.hits ||
+        b.numberHits - a.numberHits ||
+        a.item.description.length - b.item.description.length
+    )
+    .map(({ item, hits, numberHits }) => ({
+      ...item,
+      fullMatch: hits === words.length && numberHits === numbers.length,
+    }));
+}

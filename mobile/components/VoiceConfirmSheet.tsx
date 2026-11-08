@@ -323,7 +323,13 @@ export default function VoiceConfirmSheet({
                       {unit ? ` / ${unit}` : ''}
                     </Text>
                   ) : (
-                    <Text style={styles.warning}>Non trovato nel listino: prezzo da inserire</Text>
+                    <Text style={styles.warning}>
+                      {item.matches.some((candidate) => candidate.fullMatch)
+                        ? 'Più articoli possibili: scegli quello giusto'
+                        : item.matches.length
+                          ? 'Non trovato uguale nel listino'
+                          : 'Non trovato nel listino: prezzo da inserire'}
+                    </Text>
                   )}
                 </TouchableOpacity>
                 {/* Big enough for gloves: choosing another article is a real button. */}
@@ -336,7 +342,9 @@ export default function VoiceConfirmSheet({
                     <Text style={[styles.otherMatches, { color: colors.primary }]}>
                       {match
                         ? `Scegli un altro articolo (${item.matches.length})`
-                        : `Vedi ${item.matches.length === 1 ? '1 articolo simile' : `${item.matches.length} articoli simili`}`}
+                        : item.matches.some((candidate) => candidate.fullMatch)
+                          ? `Scegli l'articolo (${item.matches.length})`
+                          : `Vedi ${item.matches.length === 1 ? '1 articolo simile' : `${item.matches.length} articoli simili`}`}
                     </Text>
                   </TouchableOpacity>
                 ) : null}

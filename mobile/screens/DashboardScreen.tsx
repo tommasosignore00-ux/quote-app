@@ -7,9 +7,11 @@ import { DEFAULT_COUNTRY_CODE, DEFAULT_CURRENCY, DEFAULT_LANGUAGE, DEFAULT_LOCAL
 import VoiceButton from '../components/VoiceButton';
 import VoiceConfirmSheet, { type DraftItem } from '../components/VoiceConfirmSheet';
 import {
-  countWordHits,
   extractVoiceItems,
+  listinoSearchNumbers,
   listinoSearchWords,
+  rankListinoMatches,
+  stripLeadingQuantity,
   isSessionActive,
   matchByName,
   resolveSpokenTarget,
@@ -368,7 +370,7 @@ export default function DashboardScreen() {
       spoken.map(async (item, index) => {
         let matches: DraftItem['matches'] = [];
         try {
-          matches = await findListinoMatches(item.description);
+          matches = await findListinoMatches(stripLeadingQuantity(item.description, item.quantity));
         } catch (err) {
           console.warn('listino search error', err);
         }
@@ -388,7 +390,8 @@ export default function DashboardScreen() {
           unit: item.unit,
           matches,
           // A partial match is only offered: the user picks it if it is right.
-          choice: matches.length && matches[0].fullMatch !== false ? 0 : -1,
+          // Preselected only when it is the one article matching everything said.
+          choice: matches[0]?.fullMatch !== false && matches.length > 0 && matches[1]?.fullMatch !== true ? 0 : -1,
         };
       })
     );
@@ -697,32 +700,26 @@ export default function DashboardScreen() {
       .select('id, description, unit_price, markup_percent, unit, sku, category, listino_id')
       .eq('profile_id', profileId)
       .ilike('description', `%${trimmed}%`)
-      .limit(5);
+      .limit(50);
 
     if (error) throw error;
 
     // fullMatch: the article contains everything that was said, so it can be preselected.
-    let resultItems: any[] = (items || []).map((item: any) => ({ ...item, fullMatch: true }));
+    let resultItems: any[] = rankListinoMatches((items || []) as any[], trimmed).slice(0, 5);
 
-    // Otherwise look for the meaningful words: articles with more of them first.
+    // Otherwise look for the meaningful words, then rank by words and sizes said.
     if (resultItems.length === 0) {
       const words = listinoSearchWords(trimmed);
-      if (words.length > 0) {
-        const orFilter = words.map((w) => `description.ilike.%${w}%`).join(',');
+      const numbers = listinoSearchNumbers(trimmed);
+      const filters = (words.length ? words : numbers).map((w) => `description.ilike.%${w}%`);
+      if (filters.length > 0) {
         const { data: wordItems, error: wordError } = await supabase
           .from('listini_vettoriali')
           .select('id, description, unit_price, markup_percent, unit, sku, category, listino_id')
           .eq('profile_id', profileId)
-          .or(orFilter)
-          .limit(60);
-        if (!wordError && wordItems) {
-          resultItems = wordItems
-            .map((item: any) => ({ ...item, hits: countWordHits(item.description, words) }))
-            .filter((item: any) => item.hits > 0)
-            .sort((a: any, b: any) => b.hits - a.hits)
-            .slice(0, 5)
-            .map(({ hits, ...item }: any) => ({ ...item, fullMatch: hits === words.length }));
-        }
+          .or(filters.join(','))
+          .limit(400);
+        if (!wordError && wordItems) resultItems = rankListinoMatches(wordItems, trimmed).slice(0, 5);
       }
     }
 
