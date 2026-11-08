@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, FlatList, StyleSheet, Modal, TextInput, Alert, ScrollView, KeyboardAvoidingView, Platform, DeviceEventEmitter } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -96,6 +96,10 @@ export default function DashboardScreen() {
     jobTitle: string | null;
   } | null>(null);
   const [savingVoiceDraft, setSavingVoiceDraft] = useState(false);
+  // Results wait here so a replayed recording never replaces a draft being edited.
+  const voiceQueueRef = useRef<VoiceResult[]>([]);
+  const voiceBusyRef = useRef(false);
+  const voiceDraftOpenRef = useRef(false);
   const [voiceSession, setVoiceSession] = useState<VoiceSession | null>(null);
   const [lastVoiceAdd, setLastVoiceAdd] = useState<string | null>(null);
 
@@ -405,7 +409,54 @@ export default function DashboardScreen() {
     );
   };
 
-  const handleVoiceResult = async (result: VoiceResult) => {
+  const askVoiceConfirm = (title: string, message: string, confirmLabel: string) =>
+    new Promise<boolean>((resolve) => {
+      Alert.alert(
+        title,
+        message,
+        [
+          { text: 'Annulla', style: 'cancel', onPress: () => resolve(false) },
+          { text: confirmLabel, onPress: () => resolve(true) },
+        ],
+        { cancelable: false }
+      );
+    });
+
+  const voiceNotice = (title: string, message: string) =>
+    new Promise<void>((resolve) => {
+      Alert.alert(title, message, [{ text: 'OK', onPress: () => resolve() }], { cancelable: false });
+    });
+
+  const drainVoiceQueue = async () => {
+    if (voiceBusyRef.current) return;
+    voiceBusyRef.current = true;
+    try {
+      while (!voiceDraftOpenRef.current && voiceQueueRef.current.length) {
+        const next = voiceQueueRef.current.shift() as VoiceResult;
+        try {
+          await processVoiceResultRef.current(next);
+        } catch (err) {
+          await voiceNotice(t('messages.error'), (err as Error).message);
+        }
+      }
+    } finally {
+      voiceBusyRef.current = false;
+    }
+  };
+
+  const handleVoiceResult = (result: VoiceResult) => {
+    voiceQueueRef.current.push(result);
+    drainVoiceQueue();
+  };
+
+  const closeVoiceDraft = () => {
+    voiceDraftOpenRef.current = false;
+    setVoiceDraft(null);
+    // After the sheet has slid away: two modals cannot animate together.
+    setTimeout(drainVoiceQueue, 400);
+  };
+
+  const processVoiceResult = async (result: VoiceResult) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     const ownerId = profileId || user.id;
@@ -413,26 +464,19 @@ export default function DashboardScreen() {
     // New customer: always asked before creating it.
     if (result.action === 'create_cliente' && result.data?.name) {
       const name = String(result.data.name).trim();
-      Alert.alert('Nuovo cliente', `Creo il cliente «${name}»?`, [
-        { text: 'Annulla', style: 'cancel' },
-        {
-          text: 'Crea',
-          onPress: async () => {
-            const { data: created, error } = await supabase
-              .from('clienti')
-              .insert({ profile_id: ownerId, name, country_code: newClientCountry, preferred_language: newClientLanguage })
-              .select('*');
-            if (error) {
-              Alert.alert(t('messages.error'), error.message);
-              return;
-            }
-            if (created?.[0]) setClienti((prev) => [...prev, created[0]]);
-            await trackTimeSaving('create_cliente');
-            refreshTimeSaved();
-            fetchData();
-          },
-        },
-      ]);
+      if (!(await askVoiceConfirm('Nuovo cliente', `Creo il cliente «${name}»?`, 'Crea'))) return;
+      const { data: created, error } = await supabase
+        .from('clienti')
+        .insert({ profile_id: ownerId, name, country_code: newClientCountry, preferred_language: newClientLanguage })
+        .select('*');
+      if (error) {
+        await voiceNotice(t('messages.error'), error.message);
+        return;
+      }
+      if (created?.[0]) setClienti((prev) => [...prev, created[0]]);
+      await trackTimeSaving('create_cliente');
+      refreshTimeSaved();
+      fetchData();
       return;
     }
 
@@ -446,33 +490,26 @@ export default function DashboardScreen() {
       }
       if (!cliente && selectedCliente) cliente = selectedCliente;
       if (!cliente) {
-        Alert.alert('Cliente non trovato', `Per creare il lavoro «${title}» scegli prima il cliente nell'elenco, poi riprova.`);
+        await voiceNotice('Cliente non trovato', `Per creare il lavoro «${title}» scegli prima il cliente nell'elenco, poi riprova.`);
         return;
       }
       const target = cliente;
-      Alert.alert('Nuovo lavoro', `Creo il lavoro «${title}» per ${target.name}?`, [
-        { text: 'Annulla', style: 'cancel' },
-        {
-          text: 'Crea',
-          onPress: async () => {
-            const { error } = await supabase.from('lavori').insert({ profile_id: ownerId, cliente_id: target.id, title });
-            if (error) {
-              Alert.alert(t('messages.error'), error.message);
-              return;
-            }
-            await trackTimeSaving('create_lavoro');
-            refreshTimeSaved();
-            fetchData();
-          },
-        },
-      ]);
+      if (!(await askVoiceConfirm('Nuovo lavoro', `Creo il lavoro «${title}» per ${target.name}?`, 'Crea'))) return;
+      const { error } = await supabase.from('lavori').insert({ profile_id: ownerId, cliente_id: target.id, title });
+      if (error) {
+        await voiceNotice(t('messages.error'), error.message);
+        return;
+      }
+      await trackTimeSaving('create_lavoro');
+      refreshTimeSaved();
+      fetchData();
       return;
     }
 
     // Items to add: they go to a draft the user confirms.
     const spokenItems = extractVoiceItems(result);
     if (!spokenItems.length) {
-      Alert.alert('Non ho capito cosa aggiungere', result.text ? `Ho sentito: "${result.text}". Riprova.` : 'Riprova.');
+      await voiceNotice('Non ho capito cosa aggiungere', result.text ? `Ho sentito: "${result.text}". Riprova.` : 'Riprova.');
       return;
     }
 
@@ -497,6 +534,7 @@ export default function DashboardScreen() {
     }
 
     const items = await buildDraftItems(spokenItems, (result.data?.listino_item_id as string) || null);
+    voiceDraftOpenRef.current = true;
     setVoiceDraft({
       transcript: result.text || '',
       items,
@@ -505,6 +543,10 @@ export default function DashboardScreen() {
       jobTitle: spoken.jobTitle,
     });
   };
+
+  // The queue runs across renders: it must use the customers and jobs of the latest one.
+  const processVoiceResultRef = useRef(processVoiceResult);
+  processVoiceResultRef.current = processVoiceResult;
 
   const handleCreateLavoroFromVoice = async (clienteId: string, title: string): Promise<JobRecord | null> => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -549,7 +591,7 @@ export default function DashboardScreen() {
 
       setVoiceSession({ clienteId: lavoro.cliente_id, lavoroId: lavoro.id, lastUsedAt: Date.now() });
       setLastVoiceAdd(rows.length === 1 ? `Aggiunta: ${rows[0].description}` : `Aggiunte ${rows.length} voci`);
-      setVoiceDraft(null);
+      closeVoiceDraft();
       triggerHaptic('aiSuccess');
 
       for (let i = 0; i < rows.length; i++) await trackTimeSaving('add_costo');
@@ -1213,7 +1255,7 @@ export default function DashboardScreen() {
         onChangeItems={(items) => setVoiceDraft((draft) => (draft ? { ...draft, items } : draft))}
         onCreateLavoro={handleCreateLavoroFromVoice}
         onConfirm={handleConfirmVoiceDraft}
-        onCancel={() => setVoiceDraft(null)}
+        onCancel={closeVoiceDraft}
       />
 
       {/* Scrolls sideways: the items no longer fit on a phone. */}

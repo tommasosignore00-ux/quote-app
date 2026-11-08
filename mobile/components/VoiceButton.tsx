@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { getFunctionHeaders } from '../lib/supabaseFunctions';
 import { TouchableOpacity, Text, StyleSheet, Alert, View, Animated, DeviceEventEmitter, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import {
@@ -7,10 +6,34 @@ import {
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
   useAudioRecorder,
+  type RecordingOptions,
 } from 'expo-audio';
 import { triggerHaptic } from '../lib/haptics';
-import { saveOfflineRecording, syncOfflineRecordings, getPendingRecordingsCount } from '../lib/offlineRecording';
+import {
+  deleteRecordings,
+  getPendingRecordingsCount,
+  getRecordingsNeedingAttention,
+  retryRecordings,
+  saveOfflineRecording,
+  syncOfflineRecordings,
+  uploadVoiceRecording,
+} from '../lib/offlineRecording';
 import NetInfo from '@react-native-community/netinfo';
+
+// Speech only: mono 16 kHz is what the transcription uses, and a 2 minute clip stays
+// around 500 KB, so it uploads on a weak site connection.
+const VOICE_RECORDING_PRESET: RecordingOptions = {
+  ...RecordingPresets.HIGH_QUALITY,
+  sampleRate: 16000,
+  numberOfChannels: 1,
+  bitRate: 32000,
+  web: { mimeType: 'audio/webm', bitsPerSecond: 32000 },
+};
+const MAX_RECORDING_MS = 120000;
+const MIN_RECORDING_MS = 700;
+
+// Several buttons can be mounted: the question about stuck recordings is asked once.
+let attentionPromptOpen = false;
 
 type VoiceButtonProps = {
   onResult: (result: { action: string; data?: Record<string, unknown>; text?: string; agent?: any }) => void;
@@ -34,8 +57,13 @@ export default function VoiceButton({ onResult, clienti = [], context, size = 64
   const [processing, setProcessing] = useState(false);
   const [pendingOffline, setPendingOffline] = useState(0);
   // expo-audio recorder (expo-av is deprecated and removed in the next Expo SDKs).
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorder = useAudioRecorder(VOICE_RECORDING_PRESET);
   const isRecordingRef = useRef(false);
+  const recordingStartedAtRef = useRef(0);
+  const autoStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Always the latest callback, so the connection listener is registered only once.
+  const onResultRef = useRef(onResult);
+  onResultRef.current = onResult;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   // Pulse animation while recording
@@ -54,28 +82,57 @@ export default function VoiceButton({ onResult, clienti = [], context, size = 64
     }
   }, [recording]);
 
+  const askAboutStuckRecordings = async () => {
+    if (attentionPromptOpen) return;
+    const stuck = await getRecordingsNeedingAttention();
+    if (!stuck.length) return;
+    attentionPromptOpen = true;
+    const ids = stuck.map((rec) => rec.id);
+    const refresh = async () => {
+      attentionPromptOpen = false;
+      setPendingOffline(await getPendingRecordingsCount());
+    };
+    Alert.alert(
+      'Registrazioni non elaborate',
+      stuck.length === 1
+        ? 'Una registrazione salvata non è stata capita. Cosa vuoi fare?'
+        : `${stuck.length} registrazioni salvate non sono state capite. Cosa vuoi fare?`,
+      [
+        { text: 'Tienile', style: 'cancel', onPress: refresh },
+        { text: 'Riprova', onPress: () => retryRecordings(ids).then(refresh) },
+        { text: 'Eliminale', style: 'destructive', onPress: () => deleteRecordings(ids).then(refresh) },
+      ],
+      { cancelable: false }
+    );
+  };
+
   // Check pending offline recordings
   useEffect(() => {
     getPendingRecordingsCount().then(setPendingOffline);
+    askAboutStuckRecordings();
   }, []);
 
   // Auto-sync offline recordings when online
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(async (state) => {
-      if (state.isConnected) {
-        const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-        const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-        if (supabaseUrl && supabaseAnonKey) {
-          const { results } = await syncOfflineRecordings(supabaseUrl, supabaseAnonKey);
-          for (const result of results) {
-            if (result.action) onResult(result);
-          }
-          setPendingOffline(await getPendingRecordingsCount());
-        }
+      if (!state.isConnected) return;
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+      const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+      if (!supabaseUrl || !supabaseAnonKey) return;
+      const { results, missing } = await syncOfflineRecordings(supabaseUrl, supabaseAnonKey);
+      for (const result of results) onResultRef.current(result);
+      setPendingOffline(await getPendingRecordingsCount());
+      if (missing > 0) {
+        Alert.alert('Registrazioni perse', missing === 1 ? 'Una registrazione salvata non è più sul telefono.' : `${missing} registrazioni salvate non sono più sul telefono.`);
       }
+      askAboutStuckRecordings();
     });
     return () => unsubscribe();
-  }, [onResult]);
+  }, []);
+
+  useEffect(() => () => {
+    if (autoStopTimerRef.current) clearTimeout(autoStopTimerRef.current);
+  }, []);
 
   const startRecording = async () => {
     try {
@@ -95,7 +152,9 @@ export default function VoiceButton({ onResult, clienti = [], context, size = 64
       await recorder.prepareToRecordAsync();
       recorder.record();
       isRecordingRef.current = true;
+      recordingStartedAtRef.current = Date.now();
       setRecording(true);
+      autoStopTimerRef.current = setTimeout(() => stopRecordingRef.current(), MAX_RECORDING_MS);
       // Punto 10: Feedback Aptico
       triggerHaptic('recordingStart');
     } catch (err) {
@@ -104,67 +163,75 @@ export default function VoiceButton({ onResult, clienti = [], context, size = 64
     }
   };
 
+  const saveForLater = async (uri: string, message: string) => {
+    await saveOfflineRecording(uri, clienti, context);
+    setPendingOffline(await getPendingRecordingsCount());
+    Alert.alert('📡 Registrazione salvata', message);
+  };
+
   const stopRecording = async () => {
     if (!isRecordingRef.current) return;
+    // Cleared first: the auto-stop and a tap can arrive together.
+    isRecordingRef.current = false;
+    if (autoStopTimerRef.current) clearTimeout(autoStopTimerRef.current);
+    autoStopTimerRef.current = null;
+    let uri: string | null = null;
     try {
+      const durationMs = Date.now() - recordingStartedAtRef.current;
       await recorder.stop();
-      const uri = recorder.uri;
-      isRecordingRef.current = false;
+      uri = recorder.uri;
       setRecording(false);
       // Back to playback mode, so other audio is not routed as a recording session.
       await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
       triggerHaptic('recordingStop');
 
       if (!uri) return;
+      if (durationMs < MIN_RECORDING_MS) {
+        Alert.alert('Registrazione troppo breve', 'Tocca il microfono, parla, poi tocca di nuovo per finire.');
+        return;
+      }
       setProcessing(true);
 
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-      const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+      const savedMessage = t('messages.offlineRecordingSaved') || 'Registrazione salvata. Verrà elaborata quando tornerà la connessione.';
 
       // Punto 1: Check network - if offline, save for later
       const netState = await NetInfo.fetch();
       if (!netState.isConnected) {
-        await saveOfflineRecording(uri, clienti, context);
-        const count = await getPendingRecordingsCount();
-        setPendingOffline(count);
-        Alert.alert(
-          '📡 Offline',
-          t('messages.offlineRecordingSaved') || 'Registrazione salvata. Verrà elaborata quando tornerà la connessione.'
-        );
+        await saveForLater(uri, savedMessage);
         return;
       }
 
-      const formData = new FormData();
-      formData.append('audio', { uri, name: 'recording.m4a', type: 'audio/m4a' } as any);
-      formData.append('clienti', JSON.stringify(clienti.map((client) => ({ id: client.id, name: client.name }))));
-      if (context) {
-        formData.append('context', JSON.stringify(context));
+      const outcome = await uploadVoiceRecording(supabaseUrl, uri, clienti, context);
+      if (outcome.kind === 'transient') {
+        triggerHaptic('aiError');
+        await saveForLater(uri, 'Il servizio non ha risposto: riprovo da solo appena possibile, non devi ridettare.');
+        return;
       }
-
-      const res = await fetch(`${supabaseUrl}/functions/v1/voice-process`, {
-        method: 'POST',
-        headers: await getFunctionHeaders(),
-        body: formData,
-      });
-      const result = await res.json();
-      if (!res.ok || result?.error) {
-        throw new Error(result?.error || 'Elaborazione non riuscita, riprova');
+      if (outcome.kind !== 'ok') {
+        triggerHaptic('aiError');
+        Alert.alert(t('messages.error'), outcome.message);
+        return;
       }
+      const result = outcome.result;
       if (result.action) {
         triggerHaptic('aiSuccess');
-        onResult(result);
+        onResultRef.current(result);
       } else {
         triggerHaptic('aiError');
         Alert.alert('Non ho capito', result.text ? `Ho sentito: "${result.text}". Riprova parlando più vicino al telefono.` : 'Non ho sentito niente. Riprova parlando più vicino al telefono.');
       }
     } catch (err) {
       triggerHaptic('aiError');
-      // Punto 1: On error, try saving offline
+      setRecording(false);
       Alert.alert(t('messages.error'), (err as Error).message);
     } finally {
       setProcessing(false);
     }
   };
+  // The auto-stop timer must see the customers and context of the latest render.
+  const stopRecordingRef = useRef(stopRecording);
+  stopRecordingRef.current = stopRecording;
 
   const handlePress = () => {
     if (processing) return;
