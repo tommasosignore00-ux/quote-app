@@ -18,7 +18,8 @@ export async function fetchAccessibleListini(userId: string): Promise<Listino[]>
       .from('team_members')
       .select('team_owner_id, permissions')
       .eq('member_id', userId)
-      .eq('active', true),
+      .eq('active', true)
+      .not('accepted_at', 'is', null),
   ]);
   if (listiniResult.error) throw listiniResult.error;
   if (membershipsResult.error) throw membershipsResult.error;

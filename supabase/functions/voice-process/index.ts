@@ -120,6 +120,7 @@ async function loadCatalogVocabulary(
       .select('team_owner_id')
       .eq('member_id', userId)
       .eq('active', true)
+      .not('accepted_at', 'is', null)
     const ownerIds = ((memberships || []) as Array<{ team_owner_id: string }>).map((row) => row.team_owner_id)
     // One query per profile, so a large list cannot crowd out the other's names.
     const results = await Promise.all(

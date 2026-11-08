@@ -228,6 +228,7 @@ serve(async (req) => {
               .select('*', { count: 'exact', head: true })
               .eq('team_owner_id', teamUser.id)
               .eq('active', true)
+              .not('accepted_at', 'is', null)
 
             const actualExtra = Math.max(0, (count || 0) - TEAM_MEMBERS_INCLUDED)
             if (actualExtra === 0) {

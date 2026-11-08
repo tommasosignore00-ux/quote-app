@@ -38,30 +38,6 @@ const WEBHOOK_EVENT_OPTIONS = [
   'subscription.changed',
 ];
 
-const TEAM_PERMISSIONS: Record<string, Record<string, boolean>> = {
-  admin: {
-    can_create_quotes: true,
-    can_edit_quotes: true,
-    can_manage_clients: true,
-    can_manage_listini: true,
-    can_view_reports: true,
-  },
-  technician: {
-    can_create_quotes: true,
-    can_edit_quotes: true,
-    can_manage_clients: false,
-    can_manage_listini: false,
-    can_view_reports: false,
-  },
-  readonly: {
-    can_create_quotes: false,
-    can_edit_quotes: false,
-    can_manage_clients: false,
-    can_manage_listini: false,
-    can_view_reports: true,
-  },
-};
-
 const TABS = ['profilo', 'automazioni', 'team', 'privacy'] as const;
 type Tab = (typeof TABS)[number];
 
@@ -88,6 +64,7 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [commandMappings, setCommandMappings] = useState<CommandMapping[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [teamInvitations, setTeamInvitations] = useState<TeamMember[]>([]);
   const [webhooks, setWebhooks] = useState<WebhookEndpoint[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('technician');
@@ -129,11 +106,7 @@ export default function ProfilePage() {
             .eq('profile_id', user.id)
             .order('usage_count', { ascending: false })
             .limit(50),
-          supabase
-            .from('team_members')
-            .select('*, member:member_id(email, company_name)')
-            .eq('team_owner_id', user.id)
-            .eq('active', true),
+          fetch('/api/team').then((res) => (res.ok ? res.json() : null)),
           supabase
             .from('webhook_endpoints')
             .select('*')
@@ -150,7 +123,10 @@ export default function ProfilePage() {
       }
 
       if (mappingsResult.data) setCommandMappings(mappingsResult.data);
-      if (teamResult.data) setTeamMembers(teamResult.data);
+      if (teamResult) {
+        setTeamMembers(teamResult.members);
+        setTeamInvitations(teamResult.invitations);
+      }
       if (webhooksResult.data) setWebhooks(webhooksResult.data);
 
       setLoading(false);
@@ -271,72 +247,55 @@ export default function ProfilePage() {
     setCommandMappings((current) => current.filter((mapping) => mapping.id !== id));
   };
 
+  const reloadTeam = async () => {
+    const res = await fetch('/api/team');
+    if (!res.ok) return;
+    const team = await res.json();
+    setTeamMembers(team.members);
+    setTeamInvitations(team.invitations);
+  };
+
   const handleInviteMember = async () => {
     if (!inviteEmail.trim()) return;
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error(t('messages.notAuthenticated'));
-
-      const { data: invitedProfile, error: invitedProfileError } = await supabase
-        .from('profiles')
-        .select('id, email, company_name')
-        .eq('email', inviteEmail.trim())
-        .maybeSingle();
-
-      if (invitedProfileError) throw invitedProfileError;
-      if (!invitedProfile) throw new Error("L'utente deve prima registrarsi");
-
-      const { data, error } = await supabase
-        .from('team_members')
-        .insert({
-          team_owner_id: user.id,
-          member_id: invitedProfile.id,
-          role: inviteRole,
-          permissions: TEAM_PERMISSIONS[inviteRole] || TEAM_PERMISSIONS.readonly,
-        })
-        .select('*, member:member_id(email, company_name)')
-        .single();
-
-      if (error) throw error;
-
-      const nextTeamMembers = [...teamMembers, data];
-      // The database recalculates the billed count when the team changes.
-      const extraMembers = Math.max(0, nextTeamMembers.length - TEAM_MEMBERS_INCLUDED);
-
-      setTeamMembers(nextTeamMembers);
-      setProfile((current) => ({ ...current, extra_team_members: extraMembers }));
-      setInviteEmail('');
-      toast.success('Membro aggiunto al team');
-    } catch (err) {
-      toast.error((err as Error).message);
+    const res = await fetch('/api/team', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(body.error || 'Invito non riuscito');
+      return;
     }
+    setInviteEmail('');
+    toast.success(body.message);
+    await reloadTeam();
   };
 
   const handleRemoveTeamMember = async (id: string) => {
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error(t('messages.notAuthenticated'));
-
-      const { error } = await supabase
-        .from('team_members')
-        .update({ active: false })
-        .eq('id', id);
-      if (error) throw error;
-
-      const nextTeamMembers = teamMembers.filter((member) => member.id !== id);
-      // The database recalculates the billed count when the team changes.
-      const extraMembers = Math.max(0, nextTeamMembers.length - TEAM_MEMBERS_INCLUDED);
-
-      setTeamMembers(nextTeamMembers);
-      setProfile((current) => ({ ...current, extra_team_members: extraMembers }));
-      toast.success('Membro rimosso');
-    } catch (err) {
-      toast.error((err as Error).message);
+    const res = await fetch(`/api/team?id=${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      toast.error('Operazione non riuscita');
+      return;
     }
+    toast.success('Membro rimosso');
+    await reloadTeam();
+  };
+
+  const handleRespondInvitation = async (id: string, accept: boolean) => {
+    const res = await fetch('/api/team/respond', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, accept }),
+    });
+    if (!res.ok) {
+      toast.error('Operazione non riuscita');
+      return;
+    }
+    toast.success(accept ? 'Invito accettato' : 'Invito rifiutato');
+    await reloadTeam();
   };
 
   const toggleWebhookEvent = (event: string) => {
@@ -721,6 +680,39 @@ export default function ProfilePage() {
         </div>
       </section>
 
+      {teamInvitations.length > 0 && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Inviti al team</h2>
+          <div className="mt-4 space-y-3">
+            {teamInvitations.map((invitation) => (
+              <div
+                key={invitation.id}
+                className="flex flex-wrap items-center justify-between gap-3"
+              >
+                <span className="text-sm text-slate-700">
+                  {invitation.owner?.company_name || 'Un titolare'} ti ha invitato nel
+                  team
+                </span>
+                <span className="flex gap-2">
+                  <button
+                    className="btn-primary min-h-[44px]"
+                    onClick={() => handleRespondInvitation(invitation.id, true)}
+                  >
+                    Accetta
+                  </button>
+                  <button
+                    className="min-h-[44px] rounded-lg border px-4"
+                    onClick={() => handleRespondInvitation(invitation.id, false)}
+                  >
+                    Rifiuta
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Webhooks */}
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div>
@@ -915,6 +907,7 @@ export default function ProfilePage() {
                     </p>
                     <p className="text-xs uppercase tracking-wide text-slate-500">
                       {member.role}
+                      {!member.accepted_at && ' · in attesa di accettazione'}
                     </p>
                   </div>
                   <button

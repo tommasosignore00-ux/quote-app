@@ -13,9 +13,12 @@ export async function getListinoProfileIds(userId: string): Promise<string[]> {
     .from('team_members')
     .select('team_owner_id')
     .eq('member_id', userId)
-    .eq('active', true);
+    .eq('active', true)
+    .not('accepted_at', 'is', null);
   if (error) throw new Error(error.message);
-  return Array.from(new Set([userId, ...(data || []).map((row) => row.team_owner_id as string)]));
+  return Array.from(
+    new Set([userId, ...(data || []).map((row) => row.team_owner_id as string)])
+  );
 }
 
 /** What the user can do on a listino; null when it is neither theirs nor their team owner's. */
@@ -38,6 +41,7 @@ export async function getListinoAccess(
     .eq('team_owner_id', listino.profile_id)
     .eq('member_id', userId)
     .eq('active', true)
+    .not('accepted_at', 'is', null)
     .maybeSingle();
   if (membershipError) throw new Error(membershipError.message);
   if (!membership) return null;

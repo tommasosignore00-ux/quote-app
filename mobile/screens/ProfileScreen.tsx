@@ -40,6 +40,7 @@ export default function ProfileScreen() {
 
   // Punto 41: Team management
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [teamInvitations, setTeamInvitations] = useState<any[]>([]);
   const [showTeamSection, setShowTeamSection] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('technician');
@@ -83,12 +84,7 @@ export default function ProfileScreen() {
       }
 
       // Punto 41: Load team members
-      const { data: team } = await supabase
-        .from('team_members')
-        .select('*, member:member_id(email, company_name)')
-        .eq('team_owner_id', user.id)
-        .eq('active', true);
-      if (team) setTeamMembers(team);
+      await loadTeam();
 
       // Punto 43: Load webhooks
       const { data: hooks } = await supabase
@@ -324,82 +320,67 @@ export default function ProfileScreen() {
   const TEAM_MEMBERS_INCLUDED = 5;
   const EXTRA_MEMBER_PRICE = 7.99;
 
-  // Punto 41: Invite team member
-  const handleInviteMember = async () => {
-    if (!inviteEmail.trim()) return;
+  const loadTeam = async () => {
+    if (!isWebApiConfigured()) return;
+    const res = await fetch(buildWebApiUrl('/api/team'), { headers: await getWebApiAuthHeaders() });
+    if (!res.ok) return;
+    const team = await res.json();
+    setTeamMembers(team.members);
+    setTeamInvitations(team.invitations);
+  };
+
+  const sendInvite = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Enforce member limit
-      const currentCount = teamMembers.length;
-      if (currentCount >= TEAM_MEMBERS_INCLUDED) {
-        const extraCount = currentCount - TEAM_MEMBERS_INCLUDED + 1;
-        const extraCost = extraCount * EXTRA_MEMBER_PRICE;
-        return new Promise<void>((resolve) => {
-          Alert.alert(
-            'Membro extra',
-            `Hai già ${currentCount} membri (${TEAM_MEMBERS_INCLUDED} inclusi nel piano).\n\nAggiungere questo membro costerà €${EXTRA_MEMBER_PRICE}/mese in più.\nTotale supplemento: €${extraCost.toFixed(2)}/mese.`,
-            [
-              { text: 'Annulla', style: 'cancel', onPress: () => resolve() },
-              { text: 'Aggiungi (€' + EXTRA_MEMBER_PRICE + '/mese)', onPress: async () => {
-                await doInviteMember(user.id);
-                resolve();
-              }},
-            ]
-          );
-        });
-      }
-
-      await doInviteMember(user.id);
+      const res = await fetch(buildWebApiUrl('/api/team'), {
+        method: 'POST',
+        headers: await getWebApiAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Invito non riuscito');
+      setInviteEmail('');
+      Alert.alert('Invito', body.message);
+      await loadTeam();
     } catch (err) {
       Alert.alert('Errore', (err as Error).message);
     }
   };
 
-  const doInviteMember = async (userId: string) => {
-    try {
-      const { data: invitedProfile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', inviteEmail)
-        .maybeSingle();
-      if (!invitedProfile) {
-        Alert.alert('Utente non trovato', "L'utente deve prima registrarsi all'app");
-        return;
-      }
-      const defaultPermissions: Record<string, Record<string, boolean>> = {
-        admin: { create_quotes: true, edit_quotes: true, delete_quotes: true, manage_clients: true, view_reports: true },
-        technician: { create_quotes: true, edit_quotes: true, delete_quotes: false, manage_clients: false, view_reports: false },
-        readonly: { create_quotes: false, edit_quotes: false, delete_quotes: false, manage_clients: false, view_reports: true },
-      };
-      const { data: created, error } = await supabase.from('team_members').insert({
-        team_owner_id: userId,
-        member_id: invitedProfile.id,
-        role: inviteRole,
-        permissions: defaultPermissions[inviteRole] || defaultPermissions.readonly,
-      }).select('*, member:member_id(email, company_name)');
-      if (error) throw error;
-      if (created?.[0]) setTeamMembers(prev => [...prev, created[0]]);
-      setInviteEmail('');
-
-      const newCount = teamMembers.length + 1;
-
-      if (newCount > TEAM_MEMBERS_INCLUDED) {
-        Alert.alert('Membro aggiunto!', `Hai ${newCount} membri (${newCount - TEAM_MEMBERS_INCLUDED} extra a €${EXTRA_MEMBER_PRICE}/mese ciascuno).`);
-      } else {
-        Alert.alert('Membro aggiunto!', `${newCount}/${TEAM_MEMBERS_INCLUDED} membri inclusi nel piano.`);
-      }
-    } catch (err) {
-      Alert.alert('Errore', (err as Error).message);
+  // Punto 41: Invite team member
+  const handleInviteMember = () => {
+    if (!inviteEmail.trim()) return;
+    if (teamMembers.length < TEAM_MEMBERS_INCLUDED) {
+      sendInvite();
+      return;
     }
+    Alert.alert(
+      'Membro extra',
+      `Il piano include ${TEAM_MEMBERS_INCLUDED} membri. Ogni membro in più costa €${EXTRA_MEMBER_PRICE} al mese.`,
+      [
+        { text: 'Annulla', style: 'cancel' },
+        { text: 'Invita', onPress: sendInvite },
+      ]
+    );
   };
 
   // Punto 41: Remove team member
   const handleRemoveTeamMember = async (id: string) => {
-    await supabase.from('team_members').update({ active: false }).eq('id', id);
-    const newMembers = teamMembers.filter(m => m.id !== id);
-    setTeamMembers(newMembers);
+    const res = await fetch(buildWebApiUrl(`/api/team?id=${encodeURIComponent(id)}`), {
+      method: 'DELETE',
+      headers: await getWebApiAuthHeaders(),
+    });
+    if (res.ok) await loadTeam();
+    else Alert.alert('Errore', 'Operazione non riuscita');
+  };
+
+  const handleRespondInvitation = async (id: string, accept: boolean) => {
+    const res = await fetch(buildWebApiUrl('/api/team/respond'), {
+      method: 'POST',
+      headers: await getWebApiAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ id, accept }),
+    });
+    if (res.ok) await loadTeam();
+    else Alert.alert('Errore', 'Operazione non riuscita');
   };
 
   // Punto 43: Add webhook
@@ -587,7 +568,23 @@ export default function ProfileScreen() {
       )}
 
       {/* Punto 41: Team Management - solo per abbonamento team */}
-      {profile.subscription_status === 'team' && <>
+      {teamInvitations.map(invitation => (
+        <View key={invitation.id} style={[styles.sectionBox, { marginBottom: 12 }]}>
+          <Text style={{ color: colors.text, fontSize: 15, marginBottom: 10 }}>
+            {invitation.owner?.company_name || 'Un titolare'} ti ha invitato nel team
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity style={{ flex: 1, minHeight: 64, justifyContent: 'center', alignItems: 'center', borderRadius: 10, backgroundColor: colors.primary }} onPress={() => handleRespondInvitation(invitation.id, true)} accessibilityRole="button">
+              <Text style={{ color: '#fff', fontWeight: '700' }}>Accetta</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={{ flex: 1, minHeight: 64, justifyContent: 'center', alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: colors.border }} onPress={() => handleRespondInvitation(invitation.id, false)} accessibilityRole="button">
+              <Text style={{ color: colors.text, fontWeight: '700' }}>Rifiuta</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ))}
+
+      {profile.team_plan === true && <>
       <TouchableOpacity onPress={() => setShowTeamSection(!showTeamSection)} style={styles.sectionHeader}>
         <Text style={{ fontWeight: '700', fontSize: 16, color: colors.text }}>👥 Team ({teamMembers.length}/{TEAM_MEMBERS_INCLUDED} inclusi{teamMembers.length > TEAM_MEMBERS_INCLUDED ? ` + ${teamMembers.length - TEAM_MEMBERS_INCLUDED} extra` : ''})</Text>
         <Text style={{ color: colors.textSecondary }}>{showTeamSection ? '▲' : '▼'}</Text>
@@ -605,7 +602,7 @@ export default function ProfileScreen() {
             <View key={m.id} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }}>
               <View>
                 <Text style={{ fontSize: 14, color: colors.text }}>{m.member?.email || 'N/A'}</Text>
-                <Text style={{ fontSize: 12, color: '#64748b' }}>{m.role}</Text>
+                <Text style={{ fontSize: 12, color: '#64748b' }}>{m.role}{!m.accepted_at ? ' · in attesa di accettazione' : ''}</Text>
               </View>
               <TouchableOpacity onPress={() => handleRemoveTeamMember(m.id)}>
                 <Text style={{ fontSize: 18, color: '#ef4444' }}>✕</Text>
