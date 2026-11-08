@@ -12,7 +12,7 @@ body {
 }
 
 .btn-primary {
-  @apply bg-primary hover:bg-primary-dark text-white font-semibold py-2 px-4 rounded-lg transition focus:outline-none focus:ring-4 focus:ring-red-300;
+  @apply bg-primary hover:bg-primary-dark text-white font-semibold py-2 px-4 rounded-lg transition focus:outline-none focus:ring-4 focus:ring-orange-300 min-h-[44px];
 }
 
 /* Screen reader only - visually hidden but accessible */

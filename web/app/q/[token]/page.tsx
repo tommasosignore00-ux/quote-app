@@ -26,13 +26,17 @@ export default async function PublicQuotePage({ params }: { params: { token: str
   const { data: version } = await supabaseAdmin
     .from('preventivi_versioni')
     .select(
-      'html_content, lavoro_id, revision, public_token_expires_at, client_decision, client_decision_at, client_signer_name, lavori(title)'
+      'html_content, lavoro_id, revision, public_token_expires_at, client_decision, client_decision_at, client_signer_name, lavori(title, profiles(company_name))'
     )
     .eq('public_token', params.token)
     .maybeSingle();
   if (!version?.html_content) notFound();
 
-  const lavoro = version.lavori as unknown as { title?: string } | null;
+  const lavoro = version.lavori as unknown as {
+    title?: string;
+    profiles?: { company_name?: string | null } | null;
+  } | null;
+  const company = lavoro?.profiles?.company_name;
   const decidedAt = version.client_decision_at
     ? new Date(version.client_decision_at).toLocaleString('it-IT', {
         timeZone: 'Europe/Rome',
@@ -82,7 +86,8 @@ export default async function PublicQuotePage({ params }: { params: { token: str
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-4">
       <h1 className="text-xl font-semibold text-slate-900">
-        Preventivo{lavoro?.title ? `: ${lavoro.title}` : ''}
+        Preventivo{company ? ` di ${company}` : ''}
+        {lavoro?.title ? `: ${lavoro.title}` : ''}
       </h1>
       {/* sandbox with no permissions: the quote HTML can neither run scripts nor navigate. */}
       <iframe

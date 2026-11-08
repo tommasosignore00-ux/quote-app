@@ -106,8 +106,8 @@
   },
   "actions": {
     "add": "Aggiungi",
-    "addClient": "Aggiungi Cliente",
-    "addJob": "Aggiungi Lavoro",
+    "addClient": "+ Nuovo cliente",
+    "addJob": "+ Nuovo lavoro",
     "addCost": "Aggiungi Costo",
     "edit": "Modifica",
     "delete": "Elimina",

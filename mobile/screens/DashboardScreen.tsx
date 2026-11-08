@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { countUnmatchedItems, firstTime, scheduleEveningReminder } from '../lib/nudges';
 import { holdClientDecisions } from '../lib/notifications';
 import { loadEntitlement } from '../lib/entitlement';
@@ -1019,7 +1020,7 @@ export default function DashboardScreen() {
                   <Text style={[styles.item, selectedClienteId === item.id && styles.clienteSelectedText]}>{item.name}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => handleDeleteClient(item.id)}>
-                  <Text style={styles.deleteBtn}>🗑️</Text>
+                  <Text style={styles.deleteBtn}>Elimina</Text>
                 </TouchableOpacity>
               </View>
             ))}
@@ -1046,7 +1047,7 @@ export default function DashboardScreen() {
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => handleDeleteJob(item.id)} style={styles.deleteBtnContainer}>
-                  <Text style={styles.deleteBtn}>🗑️</Text>
+                  <Text style={styles.deleteBtn}>Elimina</Text>
                 </TouchableOpacity>
               </View>
             ))}
@@ -1174,7 +1175,7 @@ export default function DashboardScreen() {
                 <Text style={[styles.costoPrice, { color: colors.primary }]}>€{(item.quantity * item.unit_price * (1 + (Number(item.tax_rate) || 0) / 100)).toFixed(2)}</Text>
               </View>
               <TouchableOpacity onPress={() => handleDeleteCosto(item.id)} style={styles.deleteBtnContainer}>
-                <Text style={styles.deleteBtn}>🗑️</Text>
+                <Text style={styles.deleteBtn}>Elimina</Text>
               </TouchableOpacity>
             </View>
           ))}
@@ -1314,22 +1315,28 @@ export default function DashboardScreen() {
       {/* Scrolls sideways: the items no longer fit on a phone. */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.navScroll, { borderTopColor: colors.border, backgroundColor: colors.navBg }]} contentContainerStyle={styles.navContent}>
         <TouchableOpacity style={styles.navBtn} onPress={() => (navigation as any).navigate('Dashboard')}>
-          <Text style={[styles.navText, { color: colors.textSecondary }]}>🏠 {t('main.jobs')}</Text>
+          <Ionicons name="home-outline" size={22} color={colors.textSecondary} />
+          <Text style={[styles.navText, { color: colors.textSecondary }]}>{t('main.jobs')}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navBtn} onPress={() => (navigation as any).navigate('Preventivi')}>
-          <Text style={[styles.navText, { color: colors.textSecondary }]}>📑 Preventivi</Text>
+          <Ionicons name="document-text-outline" size={22} color={colors.textSecondary} />
+          <Text style={[styles.navText, { color: colors.textSecondary }]}>Preventivi</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navBtn} onPress={() => (navigation as any).navigate('Listini')}>
-          <Text style={[styles.navText, { color: colors.textSecondary }]}>📋 {t('main.listini')}</Text>
+          <Ionicons name="list-outline" size={22} color={colors.textSecondary} />
+          <Text style={[styles.navText, { color: colors.textSecondary }]}>{t('main.listini')}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navBtn} onPress={() => (navigation as any).navigate('Fatture')}>
-          <Text style={[styles.navText, { color: colors.textSecondary }]}>📄 Fatture</Text>
+          <Ionicons name="receipt-outline" size={22} color={colors.textSecondary} />
+          <Text style={[styles.navText, { color: colors.textSecondary }]}>Fatture</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navBtn} onPress={() => (navigation as any).navigate('Integrazioni')}>
-          <Text style={[styles.navText, { color: colors.textSecondary }]}>🔗 Integrazioni</Text>
+          <Ionicons name="link-outline" size={22} color={colors.textSecondary} />
+          <Text style={[styles.navText, { color: colors.textSecondary }]}>Integrazioni</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navBtn} onPress={() => (navigation as any).navigate('Profile')}>
-          <Text style={[styles.navText, { color: colors.textSecondary }]}>👤 {t('main.profile')}</Text>
+          <Ionicons name="person-outline" size={22} color={colors.textSecondary} />
+          <Text style={[styles.navText, { color: colors.textSecondary }]}>{t('main.profile')}</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -1346,7 +1353,7 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   item: { fontSize: 17, marginBottom: 4, flex: 1 },
   listItemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  deleteBtn: { fontSize: 22, paddingHorizontal: 8 },
+  deleteBtn: { fontSize: 14, fontWeight: '600', color: '#b91c1c', paddingHorizontal: 12, paddingVertical: 22 },
   deleteBtnContainer: { paddingHorizontal: 8 },
   lavoroItemContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   lavoroItem: { padding: 12, borderRadius: 10, flex: 1, backgroundColor: '#f8fafc' },
@@ -1372,7 +1379,7 @@ const styles = StyleSheet.create({
   nav: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 18, borderTopWidth: 1, borderTopColor: '#e2e8f0', marginTop: 'auto' },
   navScroll: { flexGrow: 0, borderTopWidth: 1, marginTop: 'auto' },
   navContent: { paddingVertical: 18, gap: 4 },
-  navBtn: { padding: 10 },
+  navBtn: { minHeight: 64, minWidth: 72, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
   navText: { fontSize: 14, color: '#64748b', fontWeight: '600' },
   voiceCenterWrap: { alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   sessionBar: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 3, borderRadius: 18, padding: 14, marginBottom: 16 },

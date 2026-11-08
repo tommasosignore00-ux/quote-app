@@ -4,13 +4,16 @@ import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../lib/darkMode';
 import { triggerHaptic } from '../lib/haptics';
+import { subscribeToDecisionHold } from '../lib/notifications';
 import { fetchUnseenAcceptances, markAcceptanceSeen, type QuoteVersionRow } from '../lib/quoteTracking';
 
-/** "Preventivo accettato": appears live, or when the app comes back to the foreground. */
+/** A client's answer: appears live, or when the app comes back to the foreground. */
 export default function QuoteAcceptedPopup() {
   const { colors } = useTheme();
   const navigation = useNavigation();
   const [queue, setQueue] = useState<QuoteVersionRow[]>([]);
+  const [held, setHeld] = useState(false);
+  useEffect(() => subscribeToDecisionHold(setHeld), []);
 
   const refresh = useCallback(async () => {
     const unseen = await fetchUnseenAcceptances();
@@ -36,7 +39,8 @@ export default function QuoteAcceptedPopup() {
   }, [refresh]);
 
   const current = queue[0];
-  if (!current) return null;
+  if (!current || held) return null;
+  const accepted = current.client_decision === 'accepted';
 
   const close = async (openList: boolean) => {
     setQueue((items) => items.slice(1));
@@ -49,11 +53,11 @@ export default function QuoteAcceptedPopup() {
       <View style={styles.overlay}>
         <View style={[styles.card, { backgroundColor: colors.modalBg }]}>
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>✓</Text>
+            <Text style={styles.badgeText}>{accepted ? '✓' : '–'}</Text>
           </View>
-          <Text style={[styles.title, { color: colors.text }]}>Preventivo accettato</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{accepted ? 'Preventivo accettato' : 'Preventivo rifiutato'}</Text>
           <Text style={[styles.body, { color: colors.text }]}>
-            {current.lavori?.clienti?.name || 'Il cliente'} ha accettato «{current.lavori?.title || 'il preventivo'}»
+            {current.lavori?.clienti?.name || 'Il cliente'} {accepted ? 'ha accettato' : 'ha rifiutato'} «{current.lavori?.title || 'il preventivo'}»
           </Text>
           {current.client_signer_name ? (
             <Text style={[styles.signer, { color: colors.textSecondary }]}>Firmato da {current.client_signer_name}</Text>

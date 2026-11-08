@@ -229,27 +229,27 @@ export default function OnboardingPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-6">
         <div className="max-w-lg w-full bg-white/10 backdrop-blur rounded-2xl p-8 text-white text-center">
-          <div className="text-6xl mb-6">🚀</div>
-          <h1 className="text-4xl font-bold mb-4">Welcome to Mastrovoce!</h1>
+          <div className="text-6xl mb-6" />
+          <h1 className="text-4xl font-bold mb-4">Benvenuto in Mastrovoce</h1>
           <p className="text-slate-200 mb-8 text-lg">
             Create professional quotes and manage your clients with ease.
           </p>
           <ul className="text-left space-y-3 mb-8 text-slate-300">
             <li className="flex items-center">
-              <span className="text-green-400 mr-3 text-xl">✓</span> Voice-powered quote
-              creation
+              <span className="text-green-400 mr-3 text-xl">✓</span> Preventivi dettati a
+              voce
             </li>
             <li className="flex items-center">
               <span className="text-green-400 mr-3 text-xl">✓</span> Pensato per il
               mercato italiano (IVA, fatturazione elettronica)
             </li>
             <li className="flex items-center">
-              <span className="text-green-400 mr-3 text-xl">✓</span> Professional
-              templates for 32 countries
+              <span className="text-green-400 mr-3 text-xl">✓</span> Modelli di preventivo
+              chiari
             </li>
             <li className="flex items-center">
-              <span className="text-green-400 mr-3 text-xl">✓</span> Secure client & quote
-              management
+              <span className="text-green-400 mr-3 text-xl">✓</span> Clienti e preventivi
+              al sicuro
             </li>
           </ul>
           <button
@@ -293,7 +293,7 @@ export default function OnboardingPage() {
                 onClick={() => setTutorialStep(tutorialStep - 1)}
                 className="flex-1 py-3 px-4 rounded-lg bg-white/20 hover:bg-white/30"
               >
-                Back
+                Indietro
               </button>
             )}
             {tutorialStep < TUTORIAL_STEPS.length - 1 ? (
@@ -301,7 +301,7 @@ export default function OnboardingPage() {
                 onClick={() => setTutorialStep(tutorialStep + 1)}
                 className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition"
               >
-                Next
+                Avanti
               </button>
             ) : (
               <button
@@ -376,7 +376,7 @@ export default function OnboardingPage() {
               onClick={() => setMainStep(2)}
               className="flex-1 py-3 rounded-lg bg-white/20 hover:bg-white/30 transition"
             >
-              Back
+              Indietro
             </button>
             <button
               onClick={async () => {
@@ -402,19 +402,19 @@ export default function OnboardingPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-6">
         <div className="max-w-lg w-full bg-white/10 backdrop-blur rounded-2xl p-8 text-white">
-          <h2 className="text-2xl font-bold mb-2">Company Information</h2>
-          <p className="text-slate-300 mb-6">Tell us about your company</p>
+          <h2 className="text-2xl font-bold mb-2">Dati dell&apos;azienda</h2>
+          <p className="text-slate-300 mb-6">Servono per intestare i tuoi preventivi.</p>
 
           <form className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Company Name *</label>
+              <label className="block text-sm font-medium mb-1">Nome azienda *</label>
               <input
                 type="text"
                 name="company_name"
                 value={formData.company_name}
                 onChange={handleInputChange}
                 className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
-                placeholder="Your Company Name"
+                placeholder="Es. Idraulica Rossi"
               />
             </div>
 
@@ -433,7 +433,7 @@ export default function OnboardingPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Country</label>
+              <label className="block text-sm font-medium mb-1">Paese</label>
               <div className="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-slate-300">
                 🇮🇹 Italia
               </div>
@@ -448,13 +448,13 @@ export default function OnboardingPage() {
               onClick={() => setMainStep(3)}
               className="flex-1 py-3 rounded-lg bg-white/20 hover:bg-white/30 transition"
             >
-              Back
+              Indietro
             </button>
             <button
               onClick={handleContinueCompanyInfo}
               className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition"
             >
-              Next
+              Avanti
             </button>
           </div>
         </div>
@@ -468,19 +468,17 @@ export default function OnboardingPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-6">
         <div className="max-w-2xl w-full">
           <h2 className="text-3xl font-bold text-white mb-4 text-center">
-            Choose Your Plan
+            Scegli il piano
           </h2>
-          <p className="text-slate-300 text-center mb-8">
-            Get started with our flexible pricing
-          </p>
+          <p className="text-slate-300 text-center mb-8">Puoi disdire quando vuoi.</p>
 
           <div className="grid md:grid-cols-2 gap-6 mb-8">
             {/* Monthly */}
             <div className="bg-white/10 border border-white/20 rounded-lg p-6 hover:border-blue-500 transition">
-              <h3 className="text-xl font-bold text-white mb-2">Monthly</h3>
+              <h3 className="text-xl font-bold text-white mb-2">Mensile</h3>
               <p className="text-4xl font-bold text-blue-400 mb-2">€29,99</p>
               <p className="text-slate-300 text-sm mb-6">
-                /month, cancel anytime + 7 day trial
+                /mese, disdici quando vuoi + 7 giorni di prova
               </p>
               <button
                 onClick={() => handleCheckout('price_monthly')}
@@ -498,7 +496,7 @@ export default function OnboardingPage() {
               <div className="absolute top-0 right-0 bg-green-500 text-white px-3 py-1 rounded-bl text-xs font-bold">
                 SAVE 17%
               </div>
-              <h3 className="text-xl font-bold text-white mb-2">Yearly</h3>
+              <h3 className="text-xl font-bold text-white mb-2">Annuale</h3>
               <p className="text-4xl font-bold text-white mb-2">€299,99</p>
               <p className="text-blue-100 text-sm mb-6">
                 /anno (€25/mese) + 7 giorni di prova
@@ -517,9 +515,8 @@ export default function OnboardingPage() {
 
           <div className="bg-white/10 border border-white/20 rounded-lg p-4 mb-8">
             <p className="text-sm text-slate-300">
-              <strong className="text-white">What&apos;s included:</strong> Unlimited
-              quotes, clients, price lists, voice transcription in Italian, professional
-              templates, and more.
+              <strong className="text-white">Cosa comprende:</strong> preventivi, clienti,
+              listini e dettatura in italiano.
             </p>
           </div>
 
@@ -528,7 +525,7 @@ export default function OnboardingPage() {
               onClick={() => setMainStep(4)}
               className="flex-1 py-3 rounded-lg bg-white/20 hover:bg-white/30 text-white transition"
             >
-              Back
+              Indietro
             </button>
             <button
               onClick={handleSkipToTrial}
@@ -548,7 +545,7 @@ export default function OnboardingPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-6">
         <div className="max-w-lg w-full bg-white/10 backdrop-blur rounded-2xl p-8 text-white text-center">
           <div className="text-6xl mb-6">✅</div>
-          <h1 className="text-3xl font-bold mb-4">All Set!</h1>
+          <h1 className="text-3xl font-bold mb-4">Tutto pronto</h1>
           <p className="text-slate-200 mb-8">
             Your account is ready. Let&apos;s start creating amazing quotes.
           </p>
@@ -556,7 +553,7 @@ export default function OnboardingPage() {
             onClick={() => router.push('/dashboard')}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition"
           >
-            Go to Dashboard
+            Vai ai tuoi lavori
           </button>
         </div>
       </div>

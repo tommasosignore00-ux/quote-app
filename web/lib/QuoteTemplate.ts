@@ -1,4 +1,5 @@
 import sanitizeHtml from 'sanitize-html';
+import { APP_NAME } from './brand';
 
 export interface QuoteData {
   lavoroTitle: string;
@@ -30,6 +31,8 @@ export interface QuoteData {
   countryCode?: string;
   templateType?: 'classic' | 'minimal' | 'professional' | 'custom';
   customTemplateHtml?: string;
+  logoUrl?: string | null;
+  brandColor?: string | null;
 }
 
 const TAX_LABELS: Record<string, string> = {
@@ -1036,6 +1039,12 @@ function escapeQuoteData(data: QuoteData): QuoteData {
 
 export function generateQuoteHTML(rawData: QuoteData): string {
   const data = escapeQuoteData(rawData);
+  const brandColor = /^#[0-9a-f]{6}$/i.test(rawData.brandColor || '')
+    ? rawData.brandColor!
+    : '#1f2937';
+  const logoUrl = /^https:\/\//i.test(rawData.logoUrl || '')
+    ? escapeTemplateValue(rawData.logoUrl!)
+    : '';
   // Use custom template if provided
   if (data.templateType === 'custom' && data.customTemplateHtml) {
     return processCustomTemplate(data.customTemplateHtml, data);
@@ -1081,7 +1090,7 @@ export function generateQuoteHTML(rawData: QuoteData): string {
       body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f9f9f9; }
       .container { max-width: 800px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
       .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 20px; }
-      .logo-area { font-size: 24px; font-weight: bold; color: #dc2626; }
+      .logo-area { font-size: 24px; font-weight: bold; color: ${brandColor}; }
       .company-info { text-align: right; font-size: 12px; color: #666; }
       .title { font-size: 28px; font-weight: bold; margin: 20px 0; color: #1f2937; }
       .client-section { margin-bottom: 30px; }
@@ -1095,7 +1104,7 @@ export function generateQuoteHTML(rawData: QuoteData): string {
       .summary-row { display: flex; justify-content: space-between; margin-bottom: 10px; }
       .summary-label { font-weight: bold; }
       .summary-value { text-align: right; }
-      .total-row { font-size: 16px; font-weight: bold; color: #dc2626; margin-top: 15px; }
+      .total-row { font-size: 16px; font-weight: bold; color: ${brandColor}; margin-top: 15px; }
       .notes { margin-top: 30px; padding-top: 20px; font-size: 12px; color: #666; line-height: 1.6; }
       .footer { margin-top: 40px; padding-top: 20px; font-size: 11px; color: #999; text-align: center; }
       .signature-area { margin-top: 30px; display: flex; justify-content: space-between; }
@@ -1122,14 +1131,14 @@ export function generateQuoteHTML(rawData: QuoteData): string {
         baseStyles +
         `
         .container { padding: 60px; }
-        .header { margin-bottom: 50px; border-bottom: 3px solid #dc2626; padding-bottom: 30px; }
+        .header { margin-bottom: 50px; border-bottom: 3px solid ${brandColor}; padding-bottom: 30px; }
         .logo-area { font-size: 32px; }
         .title { font-size: 32px; margin: 40px 0; }
         .client-section { margin-bottom: 50px; }
-        th { background: #1f2937; color: white; padding: 15px; border-bottom: 2px solid #dc2626; }
+        th { background: #1f2937; color: white; padding: 15px; border-bottom: 2px solid ${brandColor}; }
         td { padding: 15px; }
         tr { border-bottom: 1px solid #e5e7eb; }
-        .summary-section { background: #f9fafb; padding: 30px; border-radius: 8px; border-left: 4px solid #dc2626; margin: 40px 0; }
+        .summary-section { background: #f9fafb; padding: 30px; border-radius: 8px; border-left: 4px solid ${brandColor}; margin: 40px 0; }
         .notes { border-top: 2px solid #e5e7eb; padding-top: 30px; margin-top: 50px; }
         .signature-area { margin-top: 60px; }
       `
@@ -1140,8 +1149,8 @@ export function generateQuoteHTML(rawData: QuoteData): string {
         baseStyles +
         `
         .container { padding: 40px; }
-        .header { margin-bottom: 30px; border-bottom: 3px solid #dc2626; }
-        th { background: #f3f4f6; padding: 12px; border-bottom: 2px solid #dc2626; }
+        .header { margin-bottom: 30px; border-bottom: 3px solid ${brandColor}; }
+        th { background: #f3f4f6; padding: 12px; border-bottom: 2px solid ${brandColor}; }
         td { border-bottom: 1px solid #ddd; }
         .summary-section { background: #f9fafb; }
         .notes { border-top: 1px solid #e5e7eb; }
@@ -1163,10 +1172,10 @@ export function generateQuoteHTML(rawData: QuoteData): string {
     <body>
       <div class="container">
         <div class="header">
-          <div class="logo-area">📋 ${quoteLabel}</div>
+          <div class="logo-area">${logoUrl ? `<img src="${logoUrl}" alt="" style="max-height:64px;max-width:220px">` : data.companyName || quoteLabel}</div>
           <div class="company-info">
-            <strong>${data.companyName || 'Company'}</strong><br>
-            ${data.vatNumber ? `VAT: ${data.vatNumber}<br>` : ''}
+            <strong>${data.companyName || ''}</strong><br>
+            ${data.vatNumber ? `P.IVA ${data.vatNumber}<br>` : ''}
             ${data.address ? `${data.address}<br>` : ''}
             ${data.city ? `${data.city}${data.postalCode ? ', ' + data.postalCode : ''}<br>` : ''}
           </div>
@@ -1174,7 +1183,7 @@ export function generateQuoteHTML(rawData: QuoteData): string {
 
         <div class="title">${data.lavoroTitle}</div>
 
-        <div class="revision-date">Revision: ${String(data.revision).padStart(2, '0')} | Date: ${formatQuoteDate(cc)}</div>
+        <div class="revision-date">Revisione ${String(data.revision).padStart(2, '0')} · Data ${formatQuoteDate(cc)}</div>
 
         <div class="client-section">
           <div class="client-label">${clientLabel}</div>
@@ -1184,7 +1193,7 @@ export function generateQuoteHTML(rawData: QuoteData): string {
 
         <table>
           <thead>
-            <tr style="border-bottom: 2px solid #dc2626;">
+            <tr style="border-bottom: 2px solid ${brandColor};">
               <th>${descriptionLabel}</th>
               <th style="text-align: center;">${quantityLabel}</th>
               <th style="text-align: right;">${priceLabel}</th>
@@ -1212,7 +1221,7 @@ export function generateQuoteHTML(rawData: QuoteData): string {
         </div>
 
         <div class="notes">
-          <strong>Pagamenti / Payment Terms / Paiement:</strong><br>
+          <strong>Pagamento:</strong><br>
           ${paymentTerms}
           ${data.iban ? `<br><br><strong>IBAN:</strong> ${data.iban}` : ''}
           ${data.swift ? ` | <strong>SWIFT:</strong> ${data.swift}` : ''}
@@ -1230,7 +1239,7 @@ export function generateQuoteHTML(rawData: QuoteData): string {
         </div>
 
         <div class="footer">
-          Generated: ${formatQuoteDate(cc, true)} | Document Rev: ${data.revision}
+          Preventivo preparato con ${APP_NAME}
         </div>
       </div>
     </body>

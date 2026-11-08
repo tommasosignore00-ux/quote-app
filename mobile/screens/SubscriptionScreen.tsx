@@ -15,7 +15,6 @@ const PLANS = [
     features: [
       'Creazione e invio preventivi (max 5/mese)',
       '1 utente',
-      'PDF con watermark',
       '1 template standard',
       'Cronologia ultimi 10 preventivi',
       'Notifiche base',
@@ -29,7 +28,6 @@ const PLANS = [
     period: '/mese',
     features: [
       'Preventivi illimitati',
-      'PDF senza watermark',
       'Firma digitale',
       'Export multi-formato (Excel, Word, XML, JSON, CSV)',
       'Template personalizzati',
@@ -51,7 +49,7 @@ const PLANS = [
       'Risparmia 2 mesi!'
     ],
     priceId: 'price_pro_yearly',
-    badge: 'BEST VALUE'
+    badge: 'Conviene di più'
   },
   {
     key: 'team',

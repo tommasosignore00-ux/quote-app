@@ -489,13 +489,11 @@ export default function DashboardPage() {
         if (error) throw error;
         if (created?.[0]) setClienti((p) => [...p, created[0]]);
       } else if (draft.kind === 'lavoro') {
-        const { error } = await supabase
-          .from('lavori')
-          .insert({
-            profile_id: profileId,
-            cliente_id: draft.clienteId,
-            title: draft.title.trim(),
-          });
+        const { error } = await supabase.from('lavori').insert({
+          profile_id: profileId,
+          cliente_id: draft.clienteId,
+          title: draft.title.trim(),
+        });
         if (error) throw error;
       } else {
         if (!selectedLavoro) throw new Error('Nessun lavoro aperto');
@@ -581,9 +579,9 @@ export default function DashboardPage() {
                           e.stopPropagation();
                           handleDeleteClient(c.id);
                         }}
-                        className="opacity-0 group-hover:opacity-100 text-red-600 hover:text-red-800 text-xs px-2"
+                        className="text-danger hover:text-danger-dark text-sm px-3 min-h-[44px]"
                       >
-                        🗑️
+                        Elimina
                       </button>
                     </li>
                   ))}
@@ -626,7 +624,7 @@ export default function DashboardPage() {
                       }}
                       className="opacity-0 group-hover:opacity-100 hover:text-red-800 text-xs px-2"
                     >
-                      🗑️
+                      Elimina
                     </button>
                   </li>
                 ))}

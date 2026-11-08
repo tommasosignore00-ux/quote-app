@@ -146,6 +146,8 @@ export default function ProfileScreen() {
         postal_code: profile.postal_code,
         iban: profile.iban,
         swift_bic: profile.swift_bic,
+        logo_url: profile.logo_url?.trim() || null,
+        brand_color: /^#[0-9a-fA-F]{6}$/.test(profile.brand_color || '') ? profile.brand_color : '#1f2937',
         us_state: usState || null,
         updated_at: new Date().toISOString(),
       }).eq('id', user.id);
@@ -441,6 +443,10 @@ export default function ProfileScreen() {
       {ibanError && <Text style={styles.errorText}>⚠️ {ibanError}</Text>}
       <Text style={styles.label}>{t('profile.swiftBic')}</Text>
       <TextInput style={styles.input} placeholder={t('profile.swiftBic')} value={profile.swift_bic || ''} onChangeText={(v) => setProfile({ ...profile, swift_bic: v })} placeholderTextColor="#94a3b8" />
+      <Text style={styles.label}>Logo aziendale (indirizzo https)</Text>
+      <TextInput style={styles.input} placeholder="https://..." autoCapitalize="none" keyboardType="url" value={profile.logo_url || ''} onChangeText={(v) => setProfile({ ...profile, logo_url: v })} placeholderTextColor="#94a3b8" />
+      <Text style={styles.label}>Colore sui preventivi (es. #1f2937)</Text>
+      <TextInput style={styles.input} placeholder="#1f2937" autoCapitalize="none" value={profile.brand_color || ''} onChangeText={(v) => setProfile({ ...profile, brand_color: v })} placeholderTextColor="#94a3b8" />
       <Text style={styles.label}>{t('messages.address')}</Text>
       <TextInput style={styles.input} placeholder={t('messages.address')} value={profile.address || ''} onChangeText={(v) => setProfile({ ...profile, address: v })} placeholderTextColor="#94a3b8" />
       <Text style={styles.label}>{t('messages.city')}</Text>

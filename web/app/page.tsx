@@ -60,7 +60,7 @@ export default function HomePage() {
               </h2>
               <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300">
                 Mastrovoce aiuta professionisti, artigiani e piccole imprese a creare
-                preventivi e fatture, gestire clienti, usare l&apos;input vocale con AI e
+                preventivi e fatture, gestire clienti, dettare le voci dal cantiere e
                 condividere documenti direttamente dal web e dal mobile.
               </p>
 
@@ -84,7 +84,7 @@ export default function HomePage() {
                   </p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-sm font-semibold text-white">AI vocale</p>
+                  <p className="text-sm font-semibold text-white">Detti le voci</p>
                   <p className="mt-2 text-sm text-slate-300">
                     Acquisizione rapida di lavori, voci e prezzi tramite voce.
                   </p>

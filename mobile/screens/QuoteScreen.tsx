@@ -13,7 +13,6 @@ import * as Print from 'expo-print';
 import { WebView } from 'react-native-webview';
 import { generateQuoteHTML, QuoteData, quoteLineExtras } from '../lib/QuoteTemplate';
 import { validateQuote, formatValidationMessage } from '../lib/quoteValidation';
-import { injectWatermark, shouldShowWatermark } from '../lib/watermark';
 import { exportAsJSON, exportAsXML, exportAsCSV } from '../lib/exportFormats';
 import { roundForCountry } from '../lib/roundingUtils';
 import { useTheme } from '../lib/darkMode';
@@ -159,6 +158,8 @@ export default function QuoteScreen() {
         country: profile?.country,
         iban: profile?.iban,
         swift: profile?.swift,
+        logoUrl: profile?.logo_url,
+        brandColor: profile?.brand_color,
         countryCode,
         templateType: selectedTemplate,
         customTemplateHtml: selectedTemplate === 'custom' ? profile?.custom_template_html : undefined,
@@ -172,11 +173,6 @@ export default function QuoteScreen() {
 
       let html = generateQuoteHTML(quoteData);
 
-      // Punto 32: Watermark for trial/free users
-      // Solo Pro/Team hanno PDF puliti
-      if (shouldShowWatermark(profile?.subscription_status, profile?.trial_ends_at)) {
-        html = injectWatermark(html);
-      }
 
       // Punto 9: If signature exists, inject it SOLO se abbonato
       if (signatureSvg && isProOrTeam) {
@@ -386,7 +382,7 @@ export default function QuoteScreen() {
       )}
 
       <TouchableOpacity style={[styles.btn, { backgroundColor: colors.primary }]} onPress={generatePreview} disabled={loading}>
-        <Text style={styles.btnText}>{loading ? t('buttons.loading') : t('buttons.generatePreview')}</Text>
+        <Text style={styles.btnText}>{loading ? t('buttons.loading') : 'Prepara il preventivo'}</Text>
       </TouchableOpacity>
 
       {approved && preview && (

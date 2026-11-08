@@ -58,7 +58,7 @@ export async function fetchUnseenAcceptances(): Promise<QuoteVersionRow[]> {
   const { data, error } = await supabase
     .from('preventivi_versioni')
     .select(COLUMNS)
-    .eq('client_decision', 'accepted')
+    .in('client_decision', ['accepted', 'rejected'])
     .is('owner_notified_at', null)
     .order('client_decision_at', { ascending: true });
   if (error) return [];

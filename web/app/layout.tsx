@@ -23,18 +23,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta
           name="description"
-          content="Mastrovoce - Gestione preventivi con AI vocale, ricerca semantica e sincronizzazione real-time. Crea preventivi professionali in pochi secondi."
+          content="Mastrovoce - Detta le voci dal cantiere e prepara il preventivo per il cliente."
         />
         <meta
           name="keywords"
-          content="preventivi, quote, AI, vocale, gestione preventivi, fatturazione, invoice, Stripe"
+          content="preventivi, idraulici, elettricisti, artigiani, preventivi a voce, listini"
         />
         <meta name="author" content="Mastrovoce" />
         <meta name="theme-color" content="#dc2626" />
 
         {/* Open Graph */}
         <meta property="og:type" content="website" />
-        <meta property="og:title" content="Mastrovoce - Preventivi con AI Vocale" />
+        <meta
+          property="og:title"
+          content="Mastrovoce - Preventivi a voce per artigiani"
+        />
         <meta
           property="og:description"
           content="Crea preventivi professionali con input vocale, ricerca semantica e sincronizzazione real-time."
@@ -44,10 +47,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
         {/* Twitter Card */}
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Mastrovoce - Preventivi con AI Vocale" />
+        <meta
+          name="twitter:title"
+          content="Mastrovoce - Preventivi a voce per artigiani"
+        />
         <meta
           name="twitter:description"
-          content="Crea preventivi professionali con input vocale e AI."
+          content="Detta le voci dal cantiere e prepara il preventivo per il cliente."
         />
 
         {/* Favicon */}
@@ -55,7 +61,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/manifest.json" />
 
-        <title>Mastrovoce - Preventivi con AI Vocale</title>
+        <title>Mastrovoce - Preventivi a voce per artigiani</title>
       </head>
       <body suppressHydrationWarning>
         <a href="#main-content" className="skip-to-content">

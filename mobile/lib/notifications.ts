@@ -8,8 +8,20 @@ import { supabase } from './supabase';
 // While the user is recording or confirming, a client's answer waits.
 const holdReasons = new Set<string>();
 const heldNotifications: Notifications.NotificationContent[] = [];
+const holdListeners = new Set<(held: boolean) => void>();
+
+export function subscribeToDecisionHold(listener: (held: boolean) => void): () => void {
+  holdListeners.add(listener);
+  listener(holdReasons.size > 0);
+  return () => holdListeners.delete(listener);
+}
 
 export function holdClientDecisions(reason: string, active: boolean): void {
+  applyHold(reason, active);
+  holdListeners.forEach((listener) => listener(holdReasons.size > 0));
+}
+
+function applyHold(reason: string, active: boolean): void {
   if (active) {
     holdReasons.add(reason);
     return;

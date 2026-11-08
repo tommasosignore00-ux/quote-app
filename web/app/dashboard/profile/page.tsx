@@ -82,8 +82,9 @@ export default function ProfilePage() {
   const fiscalConfig = useMemo(() => getFiscalConfig(countryCode), [countryCode]);
 
   const subscriptionStatus = String(profile.subscription_status || 'inactive');
-  const hasWebhookAccess =
-    subscriptionStatus === 'active' || subscriptionStatus === 'team';
+  const hasWebhookAccess = ['active', 'trialing', 'past_due'].includes(
+    subscriptionStatus
+  );
   const isTeamPlan = subscriptionStatus === 'team' || Boolean(profile.team_plan);
   const legalFramework = LEGAL_FRAMEWORKS[countryCode] || 'GDPR';
 
@@ -174,6 +175,8 @@ export default function ProfilePage() {
           postal_code: profile.postal_code,
           iban: iban ? formatIBAN(iban) : null,
           swift_bic: profile.swift_bic,
+          logo_url: profile.logo_url || null,
+          brand_color: profile.brand_color || '#1f2937',
           us_state: usState || null,
           ...fiscalFieldValues,
           updated_at: new Date().toISOString(),
@@ -585,6 +588,27 @@ export default function ProfilePage() {
               onChange={(e) => setProfile({ ...profile, swift_bic: e.target.value })}
               className="w-full rounded-lg border border-slate-200 px-3 py-2"
               placeholder="UNCRITMM"
+            />
+          </label>
+
+          <label className="space-y-1 text-sm font-medium text-slate-700">
+            <span>Logo aziendale (indirizzo https dell&apos;immagine)</span>
+            <input
+              type="url"
+              value={String(profile.logo_url || '')}
+              onChange={(e) => setProfile({ ...profile, logo_url: e.target.value })}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2"
+              placeholder="https://..."
+            />
+          </label>
+
+          <label className="space-y-1 text-sm font-medium text-slate-700">
+            <span>Colore sui preventivi</span>
+            <input
+              type="color"
+              value={String(profile.brand_color || '#1f2937')}
+              onChange={(e) => setProfile({ ...profile, brand_color: e.target.value })}
+              className="h-11 w-full rounded-lg border border-slate-200 px-1"
             />
           </label>
         </div>

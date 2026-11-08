@@ -138,6 +138,8 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
         country: profile?.country,
         iban: profile?.iban,
         swift: profile?.swift,
+        logoUrl: profile?.logo_url,
+        brandColor: profile?.brand_color,
         countryCode: normalizeCountryCode(profile?.country_code),
         templateType: selectedTemplate,
         customTemplateHtml:
