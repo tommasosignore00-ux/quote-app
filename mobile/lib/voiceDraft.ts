@@ -4,6 +4,10 @@
  * named in the audio, if any.
  */
 
+import { normalizeName, normalizeSpokenTrade } from './listinoSearch';
+
+export { normalizeName, normalizeSpokenTrade };
+
 export type VoiceResult = {
   action: string;
   data?: Record<string, unknown>;
@@ -95,18 +99,6 @@ export function wordToNumber(input: string): number | null {
   return null;
 }
 
-/**
- * Speech recognition spells the steel profiles out: "acca e a 200", "ip e 120", "u p n 80".
- * The same rules run on the server before the AI (voice-process).
- */
-export function normalizeSpokenTrade(text: string): string {
-  return String(text ?? '')
-    .replace(/\b(?:acca\s*e|h\s*e)\s*(a|b)(?:i)?\b/gi, (_, letter: string) => `HE${letter.toUpperCase()}`)
-    .replace(/\bh\s+e\s*(a|b)\b/gi, (_, letter: string) => `HE${letter.toUpperCase()}`)
-    .replace(/\bi\s*p\s*e\b(?=\s*\d|\s*$)/gi, 'IPE')
-    .replace(/\bu\s*p\s*n\b/gi, 'UPN');
-}
-
 function cleanText(value: unknown): string {
   return String(value ?? '').trim().replace(/\s+/g, ' ');
 }
@@ -173,15 +165,6 @@ export function itemFromTranscript(text: string): VoiceItem | null {
   }
   rest = rest.trim();
   return rest ? { description: rest, quantity, unit, unitPrice: null } : null;
-}
-
-export function normalizeName(value: unknown): string {
-  return String(value ?? '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
 }
 
 /**
@@ -278,70 +261,6 @@ export function normalizeSpokenUnit(unit: string | null): string | null {
   return text.slice(0, 20);
 }
 
-// Words that say nothing about which article it is.
-const SEARCH_STOPWORDS = new Set([
-  'aggiungi', 'aggiungere', 'metti', 'mettere', 'inserisci', 'anche', 'poi',
-  'di', 'da', 'del', 'dello', 'della', 'dei', 'degli', 'delle', 'con', 'per', 'tra', 'fra',
-  'al', 'allo', 'alla', 'ai', 'agli', 'alle', 'il', 'lo', 'la', 'le', 'gli', 'un', 'una', 'uno',
-  'ed', 'mm', 'cm', 'mt', 'ml', 'metri', 'metro', 'pezzi', 'pezzo', 'pz', 'kg', 'chili', 'litri', 'nr', 'numero',
-]);
-
-/**
- * Words to look for in the price list: no numbers, units or filler words, and the
- * final vowel dropped so "tubo" also finds "tubi" and "raccordo" finds "raccordi".
- */
-export function listinoSearchWords(query: string): string[] {
-  const words = joinSplitAbbreviations(normalizeName(query).split(' '))
-    .filter((word) => word.length >= 3 && !/^\d+$/.test(word) && !SEARCH_STOPWORDS.has(word))
-    .map((word) => (word.length >= 4 && /[aeiou]$/.test(word) ? word.slice(0, -1) : word));
-  return Array.from(new Set(words));
-}
-
-/**
- * Speech recognition splits abbreviations into letters: "ip e 120" -> "ipe 120",
- * "u p n" -> "upn". Runs of 1-2 letter pieces are joined back together.
- */
-export function joinSplitAbbreviations(tokens: string[]): string[] {
-  const out: string[] = [];
-  let run: string[] = [];
-  const flush = () => {
-    if (run.length > 1) out.push(run.join(''));
-    else out.push(...run);
-    run = [];
-  };
-  for (const token of tokens) {
-    if (/^[a-z]{1,2}$/.test(token) && !SEARCH_STOPWORDS.has(token)) run.push(token);
-    else {
-      flush();
-      out.push(token);
-    }
-  }
-  flush();
-  return out.filter(Boolean);
-}
-
-/** How many of the search words an article description contains. */
-export function countWordHits(description: string, words: string[]): number {
-  const text = normalizeName(description);
-  return words.filter((word) => text.includes(word)).length;
-}
-
-/** Sizes and numbers said for the article ("10" in "tondo da 10", "40" and "20" in "40 per 20"). */
-export function listinoSearchNumbers(query: string): string[] {
-  const found = String(query ?? '').match(/\d+(?:[.,]\d+)?/g) || [];
-  return Array.from(new Set(found.map((number) => number.replace('.', ','))));
-}
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/** The description has this exact number: "10" matches "10 mm", not "100" or "0,10". */
-function containsNumber(description: string, number: string): boolean {
-  const variants = [number, number.replace(',', '.')].map(escapeRegExp).join('|');
-  return new RegExp(`(^|[^\\d,.])(${variants})(?![\\d]|[,.]\\d)`).test(String(description ?? ''));
-}
-
 /**
  * "10 metri di tubo" -> "tubo": the quantity said at the start is not part of the
  * article name, while a size after it ("tondo da 10") is.
@@ -353,40 +272,4 @@ export function stripLeadingQuantity(description: string, quantity: number | nul
   if (!leading || leading.quantity !== quantity) return description;
   const rest = text.slice(leading.length).trim();
   return rest || description;
-}
-
-/**
- * Price list candidates for what was said, best first. fullMatch: the article has
- * every word and every size that was said, so it can be preselected.
- */
-export function rankListinoMatches<T extends { description: string }>(
-  items: T[],
-  query: string
-): Array<T & { fullMatch: boolean }> {
-  const words = listinoSearchWords(query);
-  const numbers = listinoSearchNumbers(query);
-  return items
-    .map((item) => {
-      // The size is in the name ("Travi IPE 100"), not in the details after "(" or " - ".
-      const name = String(item.description ?? '').split(/\s+-\s+|\(/)[0];
-      const nameHasNumbers = /\d/.test(name);
-      return {
-        item,
-        hits: countWordHits(item.description, words),
-        numberHits: numbers.filter((number) =>
-          containsNumber(nameHasNumbers ? name : item.description, number)
-        ).length,
-      };
-    })
-    .filter(({ hits, numberHits }) => (words.length ? hits > 0 : numberHits > 0))
-    .sort(
-      (a, b) =>
-        b.hits - a.hits ||
-        b.numberHits - a.numberHits ||
-        a.item.description.length - b.item.description.length
-    )
-    .map(({ item, hits, numberHits }) => ({
-      ...item,
-      fullMatch: hits === words.length && numberHits === numbers.length,
-    }));
 }

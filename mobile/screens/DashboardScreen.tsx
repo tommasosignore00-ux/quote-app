@@ -9,9 +9,6 @@ import QuoteAcceptedPopup from '../components/QuoteAcceptedPopup';
 import VoiceConfirmSheet, { draftItemOwnPrice, type DraftItem } from '../components/VoiceConfirmSheet';
 import {
   extractVoiceItems,
-  listinoSearchNumbers,
-  listinoSearchWords,
-  rankListinoMatches,
   stripLeadingQuantity,
   isSessionActive,
   matchByName,
@@ -21,6 +18,7 @@ import {
   type VoiceResult,
   type VoiceSession,
 } from '../lib/voiceDraft';
+import { buildListinoFilters, parseListinoQuery, rankListinoMatches } from '../lib/listinoSearch';
 import { useFocusEffect } from '@react-navigation/native';
 import { trackTimeSaving, getTimeSavingsStats } from '../lib/timeSavings';
 import { findCrossSellInListino } from '../lib/crossSelling';
@@ -710,7 +708,7 @@ export default function DashboardScreen() {
           unitPrice = Number(item.unit_price);
           taxRate = Number(item.markup_percent) || profileMaterialMarkup;
           listinoItemId = item.id;
-        } else if (items.length > 1) {
+        } else if (items.length > 0) {
           setSearchResults(items);
           setShowListinoSelector(true);
           setCreatingCosto(false);
@@ -747,32 +745,38 @@ export default function DashboardScreen() {
   const findListinoMatches = async (query: string) => {
     const trimmed = query.trim();
     if (!trimmed || !profileId) return [] as any[];
+    const columns = 'id, description, unit_price, markup_percent, unit, sku, category, listino_id';
+    const parsed = parseListinoQuery(trimmed);
+    const filters = buildListinoFilters(parsed);
 
     // No profile filter: RLS returns the user's price lists plus their team owner's.
-    const { data: items, error } = await supabase
-      .from('listini_vettoriali')
-      .select('id, description, unit_price, markup_percent, unit, sku, category, listino_id')
-      .ilike('description', `%${trimmed}%`)
-      .limit(50);
+    // Articles with everything that was said come first; ordered so results are repeatable.
+    let resultItems: any[] = [];
+    if (filters.all.length > 0) {
+      let search = supabase.from('listini_vettoriali').select(columns);
+      for (const filter of filters.all) search = search.or(filter);
+      const { data, error } = await search.order('description').limit(400);
+      if (error) throw error;
+      resultItems = rankListinoMatches((data || []) as any[], trimmed).slice(0, 5);
+    }
 
-    if (error) throw error;
+    // Then anything sharing a word or size; never preselected unless it has them all.
+    if (resultItems.length === 0 && filters.any) {
+      const { data, error } = await supabase
+        .from('listini_vettoriali')
+        .select(columns)
+        .or(filters.any)
+        .order('description')
+        .limit(400);
+      if (error) throw error;
+      resultItems = rankListinoMatches((data || []) as any[], trimmed).slice(0, 5);
+    }
 
-    // fullMatch: the article contains everything that was said, so it can be preselected.
-    let resultItems: any[] = rankListinoMatches((items || []) as any[], trimmed).slice(0, 5);
-
-    // Otherwise look for the meaningful words, then rank by words and sizes said.
-    if (resultItems.length === 0) {
-      const words = listinoSearchWords(trimmed);
-      const numbers = listinoSearchNumbers(trimmed);
-      const filters = (words.length ? words : numbers).map((w) => `description.ilike.%${w}%`);
-      if (filters.length > 0) {
-        const { data: wordItems, error: wordError } = await supabase
-          .from('listini_vettoriali')
-          .select('id, description, unit_price, markup_percent, unit, sku, category, listino_id')
-          .or(filters.join(','))
-          .limit(400);
-        if (!wordError && wordItems) resultItems = rankListinoMatches(wordItems, trimmed).slice(0, 5);
-      }
+    // Last resort, for typing errors: offered as similar articles, never preselected.
+    if (resultItems.length === 0 && parsed.plainWords.length > 0) {
+      const { data, error } = await supabase.rpc('search_listino_typo', { p_query: parsed.plainWords.join(' '), p_limit: 5 });
+      if (error) console.warn('listino typo search unavailable', error.message);
+      resultItems = ((data || []) as any[]).map((item) => ({ ...item, fullMatch: false }));
     }
 
     if (resultItems.length === 0) return [];
@@ -812,7 +816,7 @@ export default function DashboardScreen() {
         return;
       }
 
-      if (items.length > 1) {
+      if (items.length > 0) {
         setSearchResults(items);
         setShowListinoSelector(true);
         return;
