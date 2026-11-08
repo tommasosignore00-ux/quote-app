@@ -56,7 +56,33 @@ export function extractVoiceItems(result: VoiceResult): VoiceItem[] {
       unit: normalizeSpokenUnit(cleanText(result.data.unit) || null),
     });
   }
+  // The AI did not return the item: read "aggiungi 6 metri di ..." from the transcript.
+  if (!items.length && result.text) {
+    const fromText = itemFromTranscript(result.text);
+    if (fromText) items.push(fromText);
+  }
   return items;
+}
+
+const ADD_VERBS = /^(?:aggiungi|aggiungere|metti|mettere|inserisci|inserire|aggiungo|metto)\s+/i;
+const LEADING_QUANTITY =
+  /^(\d+(?:[.,]\d+)?)\s*(metri (?:lineari|quadri|quadrati|cubi)|metri|metro|mt|ml|m|pezzi|pezzo|pz|kg|chili|litri|nr|ore)?\s+(?:di\s+|da\s+)?/i;
+
+/** "Aggiungi 6 metri di trave IPE 120." -> 6 m of "trave IPE 120". */
+export function itemFromTranscript(text: string): VoiceItem | null {
+  const sentence = cleanText(text).replace(/[.!?]+$/, '');
+  if (!ADD_VERBS.test(sentence)) return null;
+  let rest = sentence.replace(ADD_VERBS, '');
+  let quantity = 1;
+  let unit: string | null = null;
+  const match = rest.match(LEADING_QUANTITY);
+  if (match) {
+    quantity = toQuantity(match[1]);
+    unit = normalizeSpokenUnit(match[2] || null);
+    rest = rest.slice(match[0].length);
+  }
+  rest = rest.trim();
+  return rest ? { description: rest, quantity, unit } : null;
 }
 
 export function normalizeName(value: unknown): string {
@@ -175,11 +201,33 @@ const SEARCH_STOPWORDS = new Set([
  * final vowel dropped so "tubo" also finds "tubi" and "raccordo" finds "raccordi".
  */
 export function listinoSearchWords(query: string): string[] {
-  const words = normalizeName(query)
-    .split(' ')
+  const words = joinSplitAbbreviations(normalizeName(query).split(' '))
     .filter((word) => word.length >= 3 && !/^\d+$/.test(word) && !SEARCH_STOPWORDS.has(word))
     .map((word) => (word.length >= 4 && /[aeiou]$/.test(word) ? word.slice(0, -1) : word));
   return Array.from(new Set(words));
+}
+
+/**
+ * Speech recognition splits abbreviations into letters: "ip e 120" -> "ipe 120",
+ * "u p n" -> "upn". Runs of 1-2 letter pieces are joined back together.
+ */
+export function joinSplitAbbreviations(tokens: string[]): string[] {
+  const out: string[] = [];
+  let run: string[] = [];
+  const flush = () => {
+    if (run.length > 1) out.push(run.join(''));
+    else out.push(...run);
+    run = [];
+  };
+  for (const token of tokens) {
+    if (/^[a-z]{1,2}$/.test(token) && !SEARCH_STOPWORDS.has(token)) run.push(token);
+    else {
+      flush();
+      out.push(token);
+    }
+  }
+  flush();
+  return out.filter(Boolean);
 }
 
 /** How many of the search words an article description contains. */

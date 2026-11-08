@@ -35,11 +35,20 @@ Trasformare il comando utente in un piano sicuro e immediatamente eseguibile per
 - traduzione contenuti di preventivo
 
 REGOLE CRITICHE
+0. Il testo arriva da una trascrizione vocale e puo contenere errori: correggi quelli evidenti
+   usando catalogVocabulary (nomi del listino dell'utente). Esempi: "ip e 120" -> "IPE 120",
+   "acca e a 200" -> "HEA 200", "u p n 80" -> "UPN 80", "multi strato" -> "multistrato".
+   Nella description delle voci scrivi il nome corretto, come compare nel listino.
 1. Non inventare mai dati mancanti (prezzi, clienti, codici, quantita).
 2. Se currentCustomer/currentJob/currentQuote esistono, usali come riferimento primario.
 3. Se esiste listino (catalogItems), usalo come fonte preferita per descrizioni coerenti.
 4. Se il match listino non e certo, mantieni description testuale e NON inventare unitPrice.
 5. Se mancano dati essenziali, usa intent="clarification_needed" con domande brevi.
+   Eccezione: se l'utente chiede di aggiungere materiali o lavorazioni, restituisci SEMPRE
+   intent="add_quote_items" con le voci in quote.items, anche se non le trovi nel listino e
+   anche se cliente o lavoro non sono indicati (li sceglie l'utente nell'app).
+   Ogni voce: description senza la quantita (es. "Travi IPE 120"), quantity numerica,
+   unit ("m", "pz", "kg", "m²", "m³", "l", "h") se detta.
 6. Per translate_quote traduci SOLO testo; non alterare numeri, importi, quantita, aliquote.
 7. Adatta lingua e terminologia al paese/locale aziendale.
 8. In presenza di piu azioni, usa intent="mixed" e valorizza comunque il blocco legacy piu utile subito.
@@ -143,6 +152,36 @@ async function getEmbeddingWithCache(
   return embedding
 }
 
+// Trade words the transcription often gets wrong, on top of the user's own price list.
+const BASE_VOCABULARY = [
+  'IPE', 'HEA', 'HEB', 'UPN', 'INP', 'tondi laminati', 'tubi', 'piatti', 'angolari', 'lamiere',
+  'multistrato', 'raccordi', 'PVC', 'PEX', 'manicotti', 'curve', 'gomiti',
+]
+
+/** Names of the user's price list groups and categories ("Travi IPE", "Tondi laminati"). */
+async function loadCatalogVocabulary(
+  supabase: ReturnType<typeof createClient>,
+  userId: string
+): Promise<string[]> {
+  try {
+    const { data } = await supabase
+      .from('listini_vettoriali')
+      .select('pricing_group, category')
+      .eq('profile_id', userId)
+      .limit(3000)
+    const names = new Set<string>()
+    for (const row of (data || []) as Array<{ pricing_group: string | null; category: string | null }>) {
+      for (const name of [row.pricing_group, row.category]) {
+        const clean = String(name || '').trim()
+        if (clean && clean.length <= 60) names.add(clean)
+      }
+    }
+    return Array.from(names).slice(0, 60)
+  } catch {
+    return []
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -169,10 +208,17 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'No audio' }), { status: 400, headers: corsHeaders })
     }
 
+    const catalogVocabulary = await loadCatalogVocabulary(supabase, userId)
+
     const transcriptionFormData = new FormData()
     transcriptionFormData.append('file', audio)
     transcriptionFormData.append('model', OPENAI_TRANSCRIBE_MODEL)
     transcriptionFormData.append('language', 'it') // App disponibile solo in Italia
+    // Words of the trade and of the user's price list, so "IPE 120" is not written "ip e 120".
+    transcriptionFormData.append(
+      'prompt',
+      `Preventivo per materiali e lavori. Articoli: ${[...catalogVocabulary, ...BASE_VOCABULARY].join(', ')}.`.slice(0, 800)
+    )
 
     const transcriptionRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
@@ -214,7 +260,7 @@ serve(async (req) => {
       }
     }
 
-    const context = buildVoiceAgentContext(formData)
+    const context = { ...buildVoiceAgentContext(formData), catalogVocabulary }
     const completionRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
