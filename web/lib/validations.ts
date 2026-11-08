@@ -8,23 +8,33 @@ const activeCountrySchema = z
   .string()
   .length(2)
   .transform((v) => v.toUpperCase())
-  .refine((v) => ACTIVE_COUNTRY_CODES.includes(v), 'Il servizio è disponibile solo in Italia');
+  .refine(
+    (v) => ACTIVE_COUNTRY_CODES.includes(v),
+    'Il servizio è disponibile solo in Italia'
+  );
 const activeLanguageSchema = z
   .string()
   .min(2)
   .max(5)
   .transform((v) => v.toLowerCase().split('-')[0])
-  .refine((v) => ACTIVE_LANGUAGE_CODES.includes(v), 'Lingua non supportata: è disponibile solo l\'italiano');
+  .refine(
+    (v) => ACTIVE_LANGUAGE_CODES.includes(v),
+    "Lingua non supportata: è disponibile solo l'italiano"
+  );
 
 export const registerSchema = z.object({
   email: z.string().email('Email non valida'),
   password: z.string().min(8, 'La password deve avere almeno 8 caratteri'),
   country_code: activeCountrySchema.optional().nullable(),
   language: activeLanguageSchema.optional().nullable(),
-  legalAccepted: z.array(z.object({
-    id: z.string().uuid(),
-    version: z.string(),
-  })).optional(),
+  legalAccepted: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        version: z.string(),
+      })
+    )
+    .optional(),
 });
 
 export const loginSchema = z.object({
@@ -58,14 +68,6 @@ export const semanticMatchSchema = z.object({
 });
 
 // ── Quote Schemas ──────────────────────────────────────────
-
-export const sendEmailSchema = z.object({
-  to: z.string().email('Email destinatario non valida'),
-  subject: z.string().min(1, 'Subject è richiesto'),
-  html: z.string().min(1, 'Corpo HTML richiesto'),
-  lavoroId: z.string().uuid().optional(),
-  revision: z.number().int().positive().optional(),
-});
 
 // ── Listini Schemas ──────────────────────────────────────────
 
@@ -115,11 +117,16 @@ export const updateProfileSchema = z.object({
 
 // ── Helper ──────────────────────────────────────────
 
-export function validateRequest<T>(schema: z.ZodSchema<T>, data: unknown): { success: true; data: T } | { success: false; error: string } {
+export function validateRequest<T>(
+  schema: z.ZodSchema<T>,
+  data: unknown
+): { success: true; data: T } | { success: false; error: string } {
   const result = schema.safeParse(data);
   if (result.success) {
     return { success: true, data: result.data };
   }
-  const errorMessage = result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ');
+  const errorMessage = result.error.errors
+    .map((e) => `${e.path.join('.')}: ${e.message}`)
+    .join('; ');
   return { success: false, error: errorMessage };
 }

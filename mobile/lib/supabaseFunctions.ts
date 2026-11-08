@@ -31,26 +31,16 @@ export const stripeCheckout = async (priceId: 'monthly' | 'yearly' | 'team', use
   }
 }
 
-export const sendEmail = async (to: string, subject: string, html: string, pdfBase64?: string, pdfFilename?: string) => {
-  try {
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
-      method: 'POST',
-      headers: await getFunctionHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({
-        to,
-        subject,
-        html,
-        pdfBase64,
-        pdfFilename,
-      }),
-    })
-
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error || 'Email failed')
-    return data
-  } catch (err) {
-    throw err
-  }
+/** The server loads the saved revision and its recipient: the client sends only the reference. */
+export const sendQuoteEmail = async (lavoroId: string, revision: number, pdfBase64?: string) => {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+    method: 'POST',
+    headers: await getFunctionHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ lavoroId, revision, pdfBase64 }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || 'Invio email non riuscito')
+  return data
 }
 
 export const stripePortal = async (customerId: string) => {

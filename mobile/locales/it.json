@@ -10,7 +10,7 @@
     "password": "Password",
     "confirmPassword": "Conferma Password",
     "passwordMismatch": "Le password non coincidono",
-    "registrationComplete": "Registrazione completata. Controlla la tua email per la conferma."
+    "registrationComplete": "Ti abbiamo inviato un'email: apri il link per confermare l'indirizzo, poi accedi."
   },
   "legal": {
     "title": "Documenti Legali",

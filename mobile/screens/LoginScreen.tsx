@@ -18,7 +18,13 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
+      if (error) {
+        throw new Error(
+          error.code === 'email_not_confirmed'
+            ? "Conferma prima il tuo indirizzo: apri il link che ti abbiamo inviato via email."
+            : 'Email o password non corrette.'
+        );
+      }
       const { data: profile } = await supabase.from('profiles').select('onboarding_completed').eq('id', data.user.id).single();
       if (profile?.onboarding_completed) {
         (navigation as any).reset({ index: 0, routes: [{ name: 'Dashboard' }] });

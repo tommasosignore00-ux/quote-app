@@ -8,12 +8,20 @@ import { LEGAL_FRAMEWORKS } from '@/lib/constants';
 type LegalModuleProps = {
   countryCode: string;
   onAccept: (accepted: Record<string, boolean>) => void;
+  onDocumentsLoaded?: (documents: { id: string; version: string }[]) => void;
   accepted: Record<string, boolean>;
 };
 
-export default function LegalModule({ countryCode, onAccept, accepted }: LegalModuleProps) {
+export default function LegalModule({
+  countryCode,
+  onAccept,
+  onDocumentsLoaded,
+  accepted,
+}: LegalModuleProps) {
   const { t } = useTranslation();
-  const [documents, setDocuments] = useState<{ id: string; type: string; version: string; content: string }[]>([]);
+  const [documents, setDocuments] = useState<
+    { id: string; type: string; version: string; content: string }[]
+  >([]);
 
   useEffect(() => {
     const fetchDocs = async () => {
@@ -22,9 +30,14 @@ export default function LegalModule({ countryCode, onAccept, accepted }: LegalMo
         .select('id, type, version, content')
         .eq('country_code', countryCode)
         .order('type');
-      if (data) setDocuments(data);
+      if (data) {
+        setDocuments(data);
+        onDocumentsLoaded?.(data.map(({ id, version }) => ({ id, version })));
+      }
     };
     fetchDocs();
+    // Only the country decides which documents are shown.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [countryCode]);
 
   const toggle = (id: string, checked: boolean) => {
@@ -35,10 +48,13 @@ export default function LegalModule({ countryCode, onAccept, accepted }: LegalMo
 
   return (
     <div className="border rounded-lg p-4 space-y-3">
-      <h3 className="font-medium">{t('legal.title')} ({framework})</h3>
+      <h3 className="font-medium">
+        {t('legal.title')} ({framework})
+      </h3>
       {documents.length === 0 ? (
         <p className="text-sm text-slate-500">
-          Documenti legali per {countryCode}. In assenza di documenti nel DB, accetta genericamente:
+          Documenti legali per {countryCode}. In assenza di documenti nel DB, accetta
+          genericamente:
         </p>
       ) : null}
       {documents.map((doc) => (
@@ -55,7 +71,9 @@ export default function LegalModule({ countryCode, onAccept, accepted }: LegalMo
               {doc.type === 'terms_of_service' && t('legal.terms')}
               {doc.type === 'security_policy' && t('legal.security')}
             </span>
-            <span className="text-xs text-slate-500 ml-2">({t('legal.version')} {doc.version})</span>
+            <span className="text-xs text-slate-500 ml-2">
+              ({t('legal.version')} {doc.version})
+            </span>
             {doc.content && (
               <div className="mt-1 text-xs text-slate-600 max-h-20 overflow-y-auto border rounded p-2 bg-slate-50">
                 {doc.content.slice(0, 300)}...

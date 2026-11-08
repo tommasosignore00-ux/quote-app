@@ -1,16 +1,15 @@
-import { buildWebApiUrl, isWebApiConfigured } from '../lib/webApi';
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, TextInput, Alert, SafeAreaView, ActivityIndicator, ScrollView } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
 import { normalizeCountryCode, resolveVatPercent } from '../lib/market';
-import { sendEmail, getFunctionHeaders } from '../lib/supabaseFunctions';
+import { sendQuoteEmail, getFunctionHeaders } from '../lib/supabaseFunctions';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import { WebView } from 'react-native-webview';
-import { ACCEPTANCE_LINK_MARKER, ACCEPTANCE_URL_MARKER, generateQuoteHTML, QuoteData, quoteLineExtras } from '../lib/QuoteTemplate';
+import { generateQuoteHTML, QuoteData, quoteLineExtras } from '../lib/QuoteTemplate';
 import { validateQuote, formatValidationMessage } from '../lib/quoteValidation';
 import { injectWatermark, shouldShowWatermark } from '../lib/watermark';
 import { exportAsJSON, exportAsXML, exportAsCSV } from '../lib/exportFormats';
@@ -23,20 +22,6 @@ import SignaturePad from '../components/SignaturePad';
 type Lavoro = { id: string; title: string; clienti?: { name?: string; email?: string } };
 
 // Button added to the email only: the document itself stays the plain quote.
-function withAcceptanceLink(html: string, token?: string | null): string {
-  if (!token || !isWebApiConfigured()) return html;
-  const url = buildWebApiUrl(`/q/${token}`);
-  const block = `<div style="margin:24px 0;text-align:center;font-family:Arial,sans-serif">
-    <a href="${url}" style="display:inline-block;background:#15803d;color:#ffffff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">Visualizza e accetta il preventivo</a>
-    <p style="color:#64748b;font-size:12px;margin-top:8px">Puoi accettarlo o rifiutarlo online, senza registrarti.</p>
-  </div>`;
-  // The company's template decides where the link goes ({{acceptanceLink}} / {{acceptanceUrl}}).
-  if (html.includes(ACCEPTANCE_LINK_MARKER) || html.includes(ACCEPTANCE_URL_MARKER)) {
-    return html.split(ACCEPTANCE_LINK_MARKER).join(block).split(ACCEPTANCE_URL_MARKER).join(url);
-  }
-  return html.includes('</body>') ? html.replace('</body>', `${block}</body>`) : `${html}${block}`;
-}
-
 export default function QuoteScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation();
@@ -229,20 +214,12 @@ export default function QuoteScreen() {
       if (saveError) throw saveError;
 
       try {
-        await sendEmail(
-          recipientEmail,
-          `Preventivo - ${lavoro.title}`,
-          withAcceptanceLink(preview || '<p>Quote</p>', version.public_token)
-        );
+        await sendQuoteEmail(lavoro.id, revision);
       } catch (sendError) {
         await supabase.from('preventivi_versioni').delete().eq('id', version.id);
         throw sendError;
       }
 
-      await supabase
-        .from('preventivi_versioni')
-        .update({ sent_via_email: true, sent_at: new Date().toISOString() })
-        .eq('id', version.id);
       await supabase.from('lavori').update({ current_revision: revision + 1 }).eq('id', lavoro.id);
       setRevision(revision + 1);
 

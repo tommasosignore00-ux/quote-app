@@ -4,13 +4,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
 import { normalizeCountryCode, resolveVatPercent } from '@/lib/constants';
-import {
-  ACCEPTANCE_LINK_MARKER,
-  ACCEPTANCE_URL_MARKER,
-  generateQuoteHTML,
-  QuoteData,
-  quoteLineExtras,
-} from '@/lib/QuoteTemplate';
+import { generateQuoteHTML, QuoteData, quoteLineExtras } from '@/lib/QuoteTemplate';
 import toast from 'react-hot-toast';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -26,27 +20,6 @@ type QuotePreviewProps = {
   lavoroId: string;
   lavoro: Lavoro;
 };
-
-// Button added to the email only: the document itself stays the plain quote.
-function withAcceptanceLink(html: string, token?: string | null): string {
-  if (!token || typeof window === 'undefined') return html;
-  const url = `${window.location.origin}/q/${token}`;
-  const block = `<div style="margin:24px 0;text-align:center;font-family:Arial,sans-serif">
-    <a href="${url}" style="display:inline-block;background:#15803d;color:#ffffff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">Visualizza e accetta il preventivo</a>
-    <p style="color:#64748b;font-size:12px;margin-top:8px">Puoi accettarlo o rifiutarlo online, senza registrarti.</p>
-  </div>`;
-  // The company's template decides where the link goes ({{acceptanceLink}} / {{acceptanceUrl}}).
-  if (html.includes(ACCEPTANCE_LINK_MARKER) || html.includes(ACCEPTANCE_URL_MARKER)) {
-    return html
-      .split(ACCEPTANCE_LINK_MARKER)
-      .join(block)
-      .split(ACCEPTANCE_URL_MARKER)
-      .join(url);
-  }
-  return html.includes('</body>')
-    ? html.replace('</body>', `${block}</body>`)
-    : `${html}${block}`;
-}
 
 export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
   const { t } = useTranslation();
@@ -243,11 +216,7 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
       const { data: sent, error: sendError } = await supabase.functions.invoke(
         'send-email',
         {
-          body: {
-            to: recipientEmail,
-            subject: `Preventivo - ${lavoro.title}`,
-            html: withAcceptanceLink(htmlContent, version.public_token),
-          },
+          body: { lavoroId, revision },
         }
       );
       if (sendError || sent?.error) {
@@ -266,10 +235,6 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
         );
       }
 
-      await supabase
-        .from('preventivi_versioni')
-        .update({ sent_via_email: true, sent_at: new Date().toISOString() })
-        .eq('id', version.id);
       await supabase
         .from('lavori')
         .update({ current_revision: revision + 1 })
@@ -365,7 +330,7 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
               placeholder="email@example.com"
             />
             <p className="text-xs text-slate-500 mb-4">
-              Subject: Preventivo - {lavoro.title} (Rev.{' '}
+              Oggetto: Preventivo - {lavoro.title} (Rev.{' '}
               {String(revision).padStart(2, '0')})
             </p>
             <div className="flex gap-2">

@@ -8,49 +8,9 @@ import { rateLimitAuth } from '../../../../lib/rate-limit';
 
 const supabase = supabaseAdmin;
 
-async function sendWelcomeEmail(email: string, name?: string) {
-  // Try Resend API first
-  if (
-    process.env.RESEND_API_KEY &&
-    process.env.RESEND_API_KEY !== 're_test_key_optional'
-  ) {
-    try {
-      const html = `
-        <h2 style="color: #dc2626;">Benvenuto in Mastrovoce!</h2>
-        <p>Ciao ${name || 'utente'},</p>
-        <p>Grazie per esserti registrato. Il tuo account è stato creato con successo e puoi iniziare a creare preventivi subito.</p>
-        <p><strong>Prossimi passi:</strong></p>
-        <ul>
-          <li>Completa il tuo profilo aziendale</li>
-          <li>Carica i tuoi listini prezzi</li>
-          <li>Inizia a creare preventivi</li>
-        </ul>
-        <p>Se hai domande, contattaci pure!</p>
-        <p>Cordiali saluti,<br>Il team di Mastrovoce</p>
-      `;
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-        },
-        body: JSON.stringify({
-          from: process.env.EMAIL_FROM || 'noreply@quoteapp.it',
-          to: email,
-          subject: 'Benvenuto su Mastrovoce - Account creato',
-          html,
-        }),
-      });
-      if (response.ok) {
-        return;
-      }
-    } catch (e) {
-      console.warn('Resend email failed, skipping:', e);
-    }
-  }
-
-  // Log that email sending was skipped (development mode)
-  console.log('Welcome email skipped (RESEND_API_KEY not configured or dev mode)');
+// Same answer for new and existing addresses, so the form cannot probe for accounts.
+function acceptedResponse() {
+  return NextResponse.json({ ok: true, verificationRequired: true });
 }
 
 export async function POST(req: Request) {
@@ -75,39 +35,42 @@ export async function POST(req: Request) {
     }
     const { email, password, country_code, language, legalAccepted } = validation.data;
 
-    // Create user via admin API and mark email confirmed so user can log in immediately
-    const { data, error: createErr } = await supabase.auth.admin.createUser({
+    // signUp sends the verification email and, with confirmations on, gives the same
+    // answer for addresses that already exist (a user with no identities).
+    const publicClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { auth: { persistSession: false, autoRefreshToken: false } }
+    );
+    const { data, error: signUpError } = await publicClient.auth.signUp({
       email,
       password,
-      email_confirm: true,
-    } as any);
-
-    if (createErr) {
-      console.error('createUser error', createErr);
-      return NextResponse.json(
-        { error: createErr.message || 'Failed to create user' },
-        { status: 500 }
-      );
-    }
-
-    const user = (data as any)?.user;
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User creation returned no user' },
-        { status: 500 }
-      );
-    }
-
-    // Upsert profile
-    await supabase.from('profiles').upsert({
-      id: user.id,
-      email,
-      // App disponibile solo in Italia
-      country_code: normalizeCountryCode(country_code),
-      language: normalizeLanguage(language),
-      onboarding_completed: false,
-      material_markup_vat_percent: 0,
+      options: {
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/login?verified=1`,
+      },
     });
+
+    if (signUpError) {
+      console.error('signUp failed:', signUpError.status);
+      return acceptedResponse();
+    }
+
+    const user = data.user;
+    if (!user || (user.identities?.length ?? 0) === 0) {
+      return acceptedResponse();
+    }
+
+    // The profile row comes from the signup trigger.
+    await supabase
+      .from('profiles')
+      .update({
+        // App disponibile solo in Italia
+        country_code: normalizeCountryCode(country_code),
+        language: normalizeLanguage(language),
+        onboarding_completed: false,
+        material_markup_vat_percent: 0,
+      })
+      .eq('id', user.id);
 
     // Record legal acceptances if provided
     if (Array.isArray(legalAccepted)) {
@@ -124,16 +87,12 @@ export async function POST(req: Request) {
       }
     }
 
-    // Send welcome email if possible
-    try {
-      await sendWelcomeEmail(email);
-    } catch (e) {
-      console.warn('welcome email failed', e);
-    }
-
-    return NextResponse.json({ ok: true, user: { id: user.id, email: user.email } });
-  } catch (err: any) {
-    console.error('register error', err);
-    return NextResponse.json({ error: err.message || 'internal' }, { status: 500 });
+    return acceptedResponse();
+  } catch {
+    console.error('register failed');
+    return NextResponse.json(
+      { error: 'Registrazione non riuscita. Riprova tra poco.' },
+      { status: 500 }
+    );
   }
 }

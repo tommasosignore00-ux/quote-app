@@ -19,6 +19,9 @@ export default function RegisterPage() {
   const countryCode = DEFAULT_COUNTRY_CODE;
   const language = DEFAULT_LANGUAGE;
   const [legalAccepted, setLegalAccepted] = useState<Record<string, boolean>>({});
+  const [legalDocuments, setLegalDocuments] = useState<{ id: string; version: string }[]>(
+    []
+  );
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -27,21 +30,29 @@ export default function RegisterPage() {
       toast.error('Le password non coincidono');
       return;
     }
-    if (Object.values(legalAccepted).some(v => !v)) {
+    if (Object.values(legalAccepted).some((v) => !v)) {
       toast.error('Devi accettare tutti i documenti legali');
       return;
     }
     setLoading(true);
     try {
-      // Use server-side registration to ensure email sent and immediate confirmation
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, country_code: countryCode, language, legalAccepted: Object.values(legalAccepted) }),
+        body: JSON.stringify({
+          email,
+          password,
+          country_code: countryCode,
+          language,
+          legalAccepted: legalDocuments.filter((doc) => legalAccepted[doc.id]),
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Registration failed');
-      toast.success('Registrazione completata. Puoi accedere ora.');
+      if (!res.ok) throw new Error(data.error || 'Registrazione non riuscita');
+      toast.success(
+        "Ti abbiamo inviato un'email: apri il link per confermare l'indirizzo.",
+        { duration: 8000 }
+      );
       router.push('/auth/login');
     } catch (err: unknown) {
       toast.error((err as Error).message);
@@ -52,33 +63,70 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
-      <form onSubmit={handleRegister} className="w-full max-w-md bg-white rounded-xl shadow-lg p-6">
+      <form
+        onSubmit={handleRegister}
+        className="w-full max-w-md bg-white rounded-xl shadow-lg p-6"
+      >
         <h1 className="text-2xl font-bold mb-6">{t('auth.register')}</h1>
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">{t('auth.email')}</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required className="w-full border rounded-lg px-3 py-2" />
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full border rounded-lg px-3 py-2"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">{t('auth.password')}</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} className="w-full border rounded-lg px-3 py-2" />
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={8}
+              className="w-full border rounded-lg px-3 py-2"
+            />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">{t('auth.confirmPassword')}</label>
-            <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required className="w-full border rounded-lg px-3 py-2" />
+            <label className="block text-sm font-medium mb-1">
+              {t('auth.confirmPassword')}
+            </label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              className="w-full border rounded-lg px-3 py-2"
+            />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">{t('profile.country')}</label>
-            <div className="w-full border rounded-lg px-3 py-2 bg-slate-50 text-slate-600">🇮🇹 Italia</div>
-            <p className="mt-1 text-xs text-slate-500">Al momento il servizio è disponibile solo in Italia.</p>
+            <label className="block text-sm font-medium mb-1">
+              {t('profile.country')}
+            </label>
+            <div className="w-full border rounded-lg px-3 py-2 bg-slate-50 text-slate-600">
+              🇮🇹 Italia
+            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              Al momento il servizio è disponibile solo in Italia.
+            </p>
           </div>
-          <LegalModule countryCode={countryCode} onAccept={setLegalAccepted} accepted={legalAccepted} />
+          <LegalModule
+            countryCode={countryCode}
+            onAccept={setLegalAccepted}
+            onDocumentsLoaded={setLegalDocuments}
+            accepted={legalAccepted}
+          />
           <button type="submit" disabled={loading} className="w-full btn-primary">
             {loading ? '...' : t('auth.register')}
           </button>
         </div>
         <p className="mt-4 text-center text-sm text-slate-500">
-          <Link href="/auth/login" className="text-primary hover:underline">{t('auth.login')}</Link>
+          <Link href="/auth/login" className="text-primary hover:underline">
+            {t('auth.login')}
+          </Link>
         </p>
       </form>
     </div>

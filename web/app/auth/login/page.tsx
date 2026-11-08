@@ -19,12 +19,22 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
+      if (error) {
+        throw new Error(
+          error.code === 'email_not_confirmed'
+            ? 'Conferma prima il tuo indirizzo: apri il link che ti abbiamo inviato via email.'
+            : 'Email o password non corrette.'
+        );
+      }
 
       // Supabase automatically handles session cookies
       // Check onboarding status and redirect
-      const { data: profile } = await supabase.from('profiles').select('onboarding_completed').eq('id', data.user.id).single();
-      
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('onboarding_completed')
+        .eq('id', data.user.id)
+        .single();
+
       // Force a hard navigation to ensure middleware picks up the new session
       if (profile?.onboarding_completed) {
         window.location.href = '/dashboard';
@@ -39,7 +49,9 @@ export default function LoginPage() {
         msg.includes('NetworkError') ||
         msg.includes('fetch')
       ) {
-        toast.error('Errore di connessione al server. Verifica la tua connessione e riprova.');
+        toast.error(
+          'Errore di connessione al server. Verifica la tua connessione e riprova.'
+        );
       } else {
         toast.error(msg || 'Errore durante il login');
       }
@@ -50,18 +62,36 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
-      <form onSubmit={handleLogin} className="w-full max-w-md bg-white rounded-xl shadow-lg p-6">
+      <form
+        onSubmit={handleLogin}
+        className="w-full max-w-md bg-white rounded-xl shadow-lg p-6"
+      >
         <h1 className="text-2xl font-bold mb-6">{t('auth.login')}</h1>
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">{t('auth.email')}</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required className="w-full border rounded-lg px-3 py-2" />
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full border rounded-lg px-3 py-2"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">{t('auth.password')}</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required className="w-full border rounded-lg px-3 py-2" />
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="w-full border rounded-lg px-3 py-2"
+            />
             <div className="mt-2 text-right">
-              <Link href="/auth/forgot-password" className="text-sm text-blue-600 hover:underline">
+              <Link
+                href="/auth/forgot-password"
+                className="text-sm text-blue-600 hover:underline"
+              >
                 Forgot password?
               </Link>
             </div>
@@ -71,7 +101,9 @@ export default function LoginPage() {
           </button>
         </div>
         <p className="mt-4 text-center text-sm text-slate-500">
-          <Link href="/auth/register" className="text-primary hover:underline">{t('auth.register')}</Link>
+          <Link href="/auth/register" className="text-primary hover:underline">
+            {t('auth.register')}
+          </Link>
         </p>
       </form>
     </div>
