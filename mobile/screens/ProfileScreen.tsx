@@ -13,6 +13,7 @@ import { validateIBAN, formatIBAN } from '../lib/ibanValidation';
 import { getFiscalConfig, FiscalField, US_STATE_TAX_RATES } from '../lib/fiscalSwitch';
 import { getTimeSavingsStats } from '../lib/timeSavings';
 import { useTheme } from '../lib/darkMode';
+import { clearOfflineRecordings } from '../lib/offlineRecording';
 
 export default function ProfileScreen() {
   const { t } = useTranslation();
@@ -274,9 +275,15 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const { data: { user } } = await supabase.auth.getUser();
-              if (!user) return;
-              await supabase.from('profiles').delete().eq('id', user.id);
+              const response = await fetch(buildWebApiUrl('/api/account/delete'), {
+                method: 'POST',
+                headers: await getWebApiAuthHeaders(),
+              });
+              if (!response.ok) {
+                const body = await response.json().catch(() => ({}));
+                throw new Error(body.error || 'Non è stato possibile eliminare l\'account.');
+              }
+              await clearOfflineRecordings();
               await supabase.auth.signOut();
               (navigation as any).reset({ index: 0, routes: [{ name: 'Auth' }] });
             } catch (err) {

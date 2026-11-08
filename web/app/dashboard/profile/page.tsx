@@ -5,11 +5,21 @@ import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
-import { COUNTRIES, DEFAULT_LANGUAGE, LEGAL_FRAMEWORKS, normalizeCountryCode } from '@/lib/constants';
+import {
+  COUNTRIES,
+  DEFAULT_LANGUAGE,
+  LEGAL_FRAMEWORKS,
+  normalizeCountryCode,
+} from '@/lib/constants';
 import toast from 'react-hot-toast';
 import { setLanguage } from '@/lib/language';
 import TemplateUploader from '@/components/TemplateUploader';
-import { formatIBAN, getFiscalConfig, US_STATE_TAX_RATES, validateIBAN } from '@/lib/fiscal-utils';
+import {
+  formatIBAN,
+  getFiscalConfig,
+  US_STATE_TAX_RATES,
+  validateIBAN,
+} from '@/lib/fiscal-utils';
 
 type ProfileData = Record<string, any>;
 type CommandMapping = Record<string, any>;
@@ -88,40 +98,47 @@ export default function ProfilePage() {
   const [usState, setUsState] = useState('');
 
   // App disponibile solo in Italia: qualsiasi paese salvato viene ricondotto a IT
-  const countryCode = normalizeCountryCode(profile.country_code as string | null | undefined);
-  const fiscalConfig = useMemo(
-    () => getFiscalConfig(countryCode),
-    [countryCode]
+  const countryCode = normalizeCountryCode(
+    profile.country_code as string | null | undefined
   );
+  const fiscalConfig = useMemo(() => getFiscalConfig(countryCode), [countryCode]);
 
   const subscriptionStatus = String(profile.subscription_status || 'inactive');
-  const hasWebhookAccess = subscriptionStatus === 'active' || subscriptionStatus === 'team';
+  const hasWebhookAccess =
+    subscriptionStatus === 'active' || subscriptionStatus === 'team';
   const isTeamPlan = subscriptionStatus === 'team' || Boolean(profile.team_plan);
   const legalFramework = LEGAL_FRAMEWORKS[countryCode] || 'GDPR';
 
   useEffect(() => {
     const load = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) {
         router.push('/auth/login');
         return;
       }
 
-      const [profileResult, mappingsResult, teamResult, webhooksResult] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', user.id).single(),
-        supabase
-          .from('user_command_mappings')
-          .select('*')
-          .eq('profile_id', user.id)
-          .order('usage_count', { ascending: false })
-          .limit(50),
-        supabase
-          .from('team_members')
-          .select('*, member:member_id(email, company_name)')
-          .eq('team_owner_id', user.id)
-          .eq('active', true),
-        supabase.from('webhook_endpoints').select('*').eq('profile_id', user.id).order('created_at', { ascending: false }),
-      ]);
+      const [profileResult, mappingsResult, teamResult, webhooksResult] =
+        await Promise.all([
+          supabase.from('profiles').select('*').eq('id', user.id).single(),
+          supabase
+            .from('user_command_mappings')
+            .select('*')
+            .eq('profile_id', user.id)
+            .order('usage_count', { ascending: false })
+            .limit(50),
+          supabase
+            .from('team_members')
+            .select('*, member:member_id(email, company_name)')
+            .eq('team_owner_id', user.id)
+            .eq('active', true),
+          supabase
+            .from('webhook_endpoints')
+            .select('*')
+            .eq('profile_id', user.id)
+            .order('created_at', { ascending: false }),
+        ]);
 
       if (profileResult.error) {
         toast.error(profileResult.error.message);
@@ -156,30 +173,35 @@ export default function ProfilePage() {
 
     setSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error(t('messages.notAuthenticated'));
 
       const fiscalFieldValues = Object.fromEntries(
         fiscalConfig.fields.map((field) => [field.key, profile[field.key] || null])
       );
 
-      const { error } = await supabase.from('profiles').update({
-        company_name: profile.company_name,
-        vat_number: profile.vat_number,
-        vat_percent: profile.vat_percent ?? 22,
-        material_markup_vat_percent: profile.material_markup_vat_percent || 0,
-        fiscal_code: profile.fiscal_code,
-        country_code: countryCode,
-        language: DEFAULT_LANGUAGE,
-        address: profile.address,
-        city: profile.city,
-        postal_code: profile.postal_code,
-        iban: iban ? formatIBAN(iban) : null,
-        swift_bic: profile.swift_bic,
-        us_state: usState || null,
-        ...fiscalFieldValues,
-        updated_at: new Date().toISOString(),
-      }).eq('id', user.id);
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          company_name: profile.company_name,
+          vat_number: profile.vat_number,
+          vat_percent: profile.vat_percent ?? 22,
+          material_markup_vat_percent: profile.material_markup_vat_percent || 0,
+          fiscal_code: profile.fiscal_code,
+          country_code: countryCode,
+          language: DEFAULT_LANGUAGE,
+          address: profile.address,
+          city: profile.city,
+          postal_code: profile.postal_code,
+          iban: iban ? formatIBAN(iban) : null,
+          swift_bic: profile.swift_bic,
+          us_state: usState || null,
+          ...fiscalFieldValues,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
 
       if (error) throw error;
 
@@ -203,7 +225,9 @@ export default function ProfilePage() {
   const handleAddMapping = async () => {
     if (!newMappingInput.trim() || !newMappingOutput.trim()) return;
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error(t('messages.notAuthenticated'));
 
       const payload = {
@@ -222,8 +246,12 @@ export default function ProfilePage() {
       if (error) throw error;
 
       setCommandMappings((current) => {
-        const next = current.filter((item) => item.id !== data.id && item.input_text !== data.input_text);
-        return [data, ...next].sort((left, right) => (right.usage_count || 0) - (left.usage_count || 0));
+        const next = current.filter(
+          (item) => item.id !== data.id && item.input_text !== data.input_text
+        );
+        return [data, ...next].sort(
+          (left, right) => (right.usage_count || 0) - (left.usage_count || 0)
+        );
       });
       setNewMappingInput('');
       setNewMappingOutput('');
@@ -245,7 +273,9 @@ export default function ProfilePage() {
   const handleInviteMember = async () => {
     if (!inviteEmail.trim()) return;
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error(t('messages.notAuthenticated'));
 
       const { data: invitedProfile, error: invitedProfileError } = await supabase
@@ -255,7 +285,7 @@ export default function ProfilePage() {
         .maybeSingle();
 
       if (invitedProfileError) throw invitedProfileError;
-      if (!invitedProfile) throw new Error('L\'utente deve prima registrarsi');
+      if (!invitedProfile) throw new Error("L'utente deve prima registrarsi");
 
       const { data, error } = await supabase
         .from('team_members')
@@ -290,10 +320,15 @@ export default function ProfilePage() {
 
   const handleRemoveTeamMember = async (id: string) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error(t('messages.notAuthenticated'));
 
-      const { error } = await supabase.from('team_members').update({ active: false }).eq('id', id);
+      const { error } = await supabase
+        .from('team_members')
+        .update({ active: false })
+        .eq('id', id);
       if (error) throw error;
 
       const nextTeamMembers = teamMembers.filter((member) => member.id !== id);
@@ -315,14 +350,18 @@ export default function ProfilePage() {
 
   const toggleWebhookEvent = (event: string) => {
     setNewWebhookEvents((current) =>
-      current.includes(event) ? current.filter((item) => item !== event) : [...current, event]
+      current.includes(event)
+        ? current.filter((item) => item !== event)
+        : [...current, event]
     );
   };
 
   const handleAddWebhook = async () => {
     if (!newWebhookUrl.trim()) return;
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error(t('messages.notAuthenticated'));
 
       const { data, error } = await supabase
@@ -361,12 +400,24 @@ export default function ProfilePage() {
 
   const handleExportMyData = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error(t('messages.notAuthenticated'));
 
-      const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-      const { data: clients } = await supabase.from('clienti').select('*').eq('profile_id', user.id);
-      const { data: jobs } = await supabase.from('lavori').select('*').eq('profile_id', user.id);
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      const { data: clients } = await supabase
+        .from('clienti')
+        .select('*')
+        .eq('profile_id', user.id);
+      const { data: jobs } = await supabase
+        .from('lavori')
+        .select('*')
+        .eq('profile_id', user.id);
       const jobIds = (jobs || []).map((job) => job.id);
       const { data: quotes } = jobIds.length
         ? await supabase.from('preventivi_dettaglio').select('*').in('lavoro_id', jobIds)
@@ -380,7 +431,9 @@ export default function ProfilePage() {
         quotes: quotes || [],
       };
 
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: 'application/json',
+      });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
@@ -394,15 +447,17 @@ export default function ProfilePage() {
   };
 
   const handleDeleteAccount = async () => {
-    const confirmed = window.confirm('Tutti i dati verranno cancellati in modo permanente. Continuare?');
+    const confirmed = window.confirm(
+      'Tutti i dati verranno cancellati in modo permanente. Continuare?'
+    );
     if (!confirmed) return;
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error(t('messages.notAuthenticated'));
-
-      const { error } = await supabase.from('profiles').delete().eq('id', user.id);
-      if (error) throw error;
+      const response = await fetch('/api/account/delete', { method: 'POST' });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error || "Non è stato possibile eliminare l'account.");
+      }
 
       await supabase.auth.signOut();
       router.push('/auth/login');
@@ -419,10 +474,15 @@ export default function ProfilePage() {
   const renderProfilo = () => (
     <div className="space-y-6">
       {/* Dati aziendali */}
-      <form onSubmit={handleSave} className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <form
+        onSubmit={handleSave}
+        className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+      >
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Dati aziendali</h2>
-          <p className="mt-1 text-sm text-slate-500">Informazioni usate nei preventivi e nelle fatture.</p>
+          <p className="mt-1 text-sm text-slate-500">
+            Informazioni usate nei preventivi e nelle fatture.
+          </p>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
@@ -439,9 +499,13 @@ export default function ProfilePage() {
           <label className="space-y-1 text-sm font-medium text-slate-700">
             <span>{t('profile.country')}</span>
             <div className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-600">
-              🇮🇹 {COUNTRIES.find((country) => country.code === countryCode)?.name || 'Italia'}
+              🇮🇹{' '}
+              {COUNTRIES.find((country) => country.code === countryCode)?.name ||
+                'Italia'}
             </div>
-            <span className="block text-xs font-normal text-slate-500">Al momento il servizio è disponibile solo in Italia.</span>
+            <span className="block text-xs font-normal text-slate-500">
+              Al momento il servizio è disponibile solo in Italia.
+            </span>
           </label>
 
           <label className="space-y-1 text-sm font-medium text-slate-700">
@@ -452,7 +516,9 @@ export default function ProfilePage() {
               min="0"
               max="100"
               value={String(profile.vat_percent ?? fiscalConfig.defaultVatRate)}
-              onChange={(e) => setProfile({ ...profile, vat_percent: parseFloat(e.target.value || '0') })}
+              onChange={(e) =>
+                setProfile({ ...profile, vat_percent: parseFloat(e.target.value || '0') })
+              }
               className="w-full rounded-lg border border-slate-200 px-3 py-2"
             />
           </label>
@@ -465,7 +531,12 @@ export default function ProfilePage() {
               min="0"
               max="100"
               value={String(profile.material_markup_vat_percent || 0)}
-              onChange={(e) => setProfile({ ...profile, material_markup_vat_percent: parseFloat(e.target.value || '0') })}
+              onChange={(e) =>
+                setProfile({
+                  ...profile,
+                  material_markup_vat_percent: parseFloat(e.target.value || '0'),
+                })
+              }
               className="w-full rounded-lg border border-slate-200 px-3 py-2"
             />
           </label>
@@ -475,17 +546,27 @@ export default function ProfilePage() {
         {fiscalConfig.fields.length > 0 && (
           <>
             <div className="border-t border-slate-100 pt-4">
-              <h3 className="text-sm font-semibold text-slate-700">Dati fiscali ({countryCode})</h3>
+              <h3 className="text-sm font-semibold text-slate-700">
+                Dati fiscali ({countryCode})
+              </h3>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               {fiscalConfig.fields.map((field) => (
-                <label key={field.key} className="space-y-1 text-sm font-medium text-slate-700">
-                  <span>{field.label}{field.required ? ' *' : ''}</span>
+                <label
+                  key={field.key}
+                  className="space-y-1 text-sm font-medium text-slate-700"
+                >
+                  <span>
+                    {field.label}
+                    {field.required ? ' *' : ''}
+                  </span>
                   <input
                     type="text"
                     value={String(profile[field.key] || '')}
                     placeholder={field.placeholder}
-                    onChange={(e) => setProfile({ ...profile, [field.key]: e.target.value })}
+                    onChange={(e) =>
+                      setProfile({ ...profile, [field.key]: e.target.value })
+                    }
                     className="w-full rounded-lg border border-slate-200 px-3 py-2"
                   />
                 </label>
@@ -506,12 +587,15 @@ export default function ProfilePage() {
                 >
                   <option value="">Seleziona uno stato</option>
                   {Object.entries(US_STATE_TAX_RATES).map(([stateCode, taxRate]) => (
-                    <option key={stateCode} value={stateCode}>{stateCode} • {taxRate}%</option>
+                    <option key={stateCode} value={stateCode}>
+                      {stateCode} • {taxRate}%
+                    </option>
                   ))}
                 </select>
               </label>
               <div className="rounded-lg bg-white p-3 text-sm text-slate-600">
-                L&apos;aliquota predefinita dipende dallo stato selezionato e viene usata nei preventivi web.
+                L&apos;aliquota predefinita dipende dallo stato selezionato e viene usata
+                nei preventivi web.
               </div>
             </div>
           </div>
@@ -525,7 +609,9 @@ export default function ProfilePage() {
 
         {/* Indirizzo e pagamento */}
         <div className="border-t border-slate-100 pt-4">
-          <h3 className="text-sm font-semibold text-slate-700">Indirizzo e dati bancari</h3>
+          <h3 className="text-sm font-semibold text-slate-700">
+            Indirizzo e dati bancari
+          </h3>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <label className="space-y-1 text-sm font-medium text-slate-700 md:col-span-2">
@@ -589,7 +675,9 @@ export default function ProfilePage() {
       {/* Template */}
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Template preventivo</h2>
-        <p className="mt-1 text-sm text-slate-500">Template HTML personalizzato per le esportazioni.</p>
+        <p className="mt-1 text-sm text-slate-500">
+          Template HTML personalizzato per le esportazioni.
+        </p>
         <div className="mt-4">
           <TemplateUploader />
         </div>
@@ -603,8 +691,12 @@ export default function ProfilePage() {
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">{t('automations.commandMappings')}</h2>
-            <p className="text-sm text-slate-500">{t('automations.commandMappingsDesc')}</p>
+            <h2 className="text-lg font-semibold text-slate-900">
+              {t('automations.commandMappings')}
+            </h2>
+            <p className="text-sm text-slate-500">
+              {t('automations.commandMappingsDesc')}
+            </p>
           </div>
           <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
             {commandMappings.length} {t('automations.saved')}
@@ -626,20 +718,39 @@ export default function ProfilePage() {
             placeholder={t('automations.correctedText')}
             className="w-full rounded-lg border border-slate-200 px-3 py-2"
           />
-          <button type="button" onClick={handleAddMapping} className="btn-primary whitespace-nowrap">{t('automations.add')}</button>
+          <button
+            type="button"
+            onClick={handleAddMapping}
+            className="btn-primary whitespace-nowrap"
+          >
+            {t('automations.add')}
+          </button>
         </div>
 
         <div className="mt-4 space-y-3">
           {commandMappings.length === 0 && (
-            <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-sm text-slate-500">{t('automations.noMappings')}</div>
+            <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-sm text-slate-500">
+              {t('automations.noMappings')}
+            </div>
           )}
           {commandMappings.map((mapping) => (
-            <div key={mapping.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 p-4 md:flex-row md:items-center md:justify-between">
+            <div
+              key={mapping.id}
+              className="flex flex-col gap-3 rounded-xl border border-slate-200 p-4 md:flex-row md:items-center md:justify-between"
+            >
               <div>
-                <p className="text-sm font-medium text-slate-900">{mapping.input_text} → {mapping.mapped_text}</p>
-                <p className="text-xs text-slate-500">{t('automations.usedTimes', { count: mapping.usage_count || 0 })}</p>
+                <p className="text-sm font-medium text-slate-900">
+                  {mapping.input_text} → {mapping.mapped_text}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {t('automations.usedTimes', { count: mapping.usage_count || 0 })}
+                </p>
               </div>
-              <button type="button" onClick={() => handleDeleteMapping(mapping.id)} className="rounded-lg border border-rose-200 px-3 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50">
+              <button
+                type="button"
+                onClick={() => handleDeleteMapping(mapping.id)}
+                className="rounded-lg border border-rose-200 px-3 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50"
+              >
                 {t('dashboard.delete')}
               </button>
             </div>
@@ -650,7 +761,9 @@ export default function ProfilePage() {
       {/* Webhooks */}
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">{t('automations.webhooks')}</h2>
+          <h2 className="text-lg font-semibold text-slate-900">
+            {t('automations.webhooks')}
+          </h2>
           <p className="mt-1 text-sm text-slate-500">{t('automations.webhooksDesc')}</p>
         </div>
 
@@ -686,28 +799,50 @@ export default function ProfilePage() {
                   );
                 })}
               </div>
-              <button type="button" onClick={handleAddWebhook} className="btn-primary">{t('automations.addWebhook')}</button>
+              <button type="button" onClick={handleAddWebhook} className="btn-primary">
+                {t('automations.addWebhook')}
+              </button>
             </div>
 
             <div className="mt-4 space-y-3">
               {webhooks.length === 0 && (
-                <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-sm text-slate-500">{t('automations.noWebhooks')}</div>
+                <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-sm text-slate-500">
+                  {t('automations.noWebhooks')}
+                </div>
               )}
               {webhooks.map((webhook) => (
                 <div key={webhook.id} className="rounded-xl border border-slate-200 p-4">
                   <div className="flex flex-col gap-3">
                     <div>
-                      <p className="text-sm font-medium break-all text-slate-900">{webhook.url}</p>
-                      <p className="mt-1 text-xs text-slate-500">{webhook.description || 'Senza descrizione'}</p>
+                      <p className="text-sm font-medium break-all text-slate-900">
+                        {webhook.url}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {webhook.description || 'Senza descrizione'}
+                      </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {(webhook.events || []).map((event: string) => (
-                        <span key={event} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">{event}</span>
+                        <span
+                          key={event}
+                          className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600"
+                        >
+                          {event}
+                        </span>
                       ))}
                     </div>
                     <div className="flex items-center justify-between">
-                      <p className="text-xs text-slate-500">{t('automations.secret')} {webhook.secret ? `${String(webhook.secret).slice(0, 8)}…` : t('automations.notSet')}</p>
-                      <button type="button" onClick={() => handleDeleteWebhook(webhook.id)} className="rounded-lg border border-rose-200 px-3 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50">
+                      <p className="text-xs text-slate-500">
+                        {t('automations.secret')}{' '}
+                        {webhook.secret
+                          ? `${String(webhook.secret).slice(0, 8)}…`
+                          : t('automations.notSet')}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteWebhook(webhook.id)}
+                        className="rounded-lg border border-rose-200 px-3 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50"
+                      >
                         {t('dashboard.delete')}
                       </button>
                     </div>
@@ -719,7 +854,11 @@ export default function ProfilePage() {
         ) : (
           <div className="mt-4 rounded-xl border border-dashed border-slate-200 p-6 text-center">
             <p className="text-sm text-slate-500">{t('automations.unlockWebhooks')}</p>
-            <button type="button" onClick={() => router.push('/dashboard/subscription')} className="mt-3 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50">
+            <button
+              type="button"
+              onClick={() => router.push('/dashboard/subscription')}
+              className="mt-3 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
+            >
               {t('automations.goToSubscription')}
             </button>
           </div>
@@ -733,10 +872,18 @@ export default function ProfilePage() {
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">{t('team.teamManagement')}</h2>
+            <h2 className="text-lg font-semibold text-slate-900">
+              {t('team.teamManagement')}
+            </h2>
             <p className="mt-1 text-sm text-slate-500">
               {isTeamPlan
-                ? t('team.membersIncluded', { count: teamMembers.length, total: TEAM_MEMBERS_INCLUDED }) + (teamMembers.length > TEAM_MEMBERS_INCLUDED ? ` · ${t('team.extraMembers', { count: teamMembers.length - TEAM_MEMBERS_INCLUDED, price: EXTRA_MEMBER_PRICE })}` : '')
+                ? t('team.membersIncluded', {
+                    count: teamMembers.length,
+                    total: TEAM_MEMBERS_INCLUDED,
+                  }) +
+                  (teamMembers.length > TEAM_MEMBERS_INCLUDED
+                    ? ` · ${t('team.extraMembers', { count: teamMembers.length - TEAM_MEMBERS_INCLUDED, price: EXTRA_MEMBER_PRICE })}`
+                    : '')
                 : t('team.upgradeToPro')}
             </p>
           </div>
@@ -745,7 +892,9 @@ export default function ProfilePage() {
         {isTeamPlan ? (
           <>
             <div className="mt-6 rounded-xl border border-slate-100 bg-slate-50 p-4">
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">{t('team.inviteLabel')}</h3>
+              <h3 className="text-sm font-semibold text-slate-700 mb-3">
+                {t('team.inviteLabel')}
+              </h3>
               <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto]">
                 <input
                   type="email"
@@ -763,27 +912,53 @@ export default function ProfilePage() {
                   <option value="technician">{t('team.roleTechnician')}</option>
                   <option value="readonly">{t('team.roleReadonly')}</option>
                 </select>
-                <button type="button" onClick={handleInviteMember} className="btn-primary whitespace-nowrap">{t('team.invite')}</button>
+                <button
+                  type="button"
+                  onClick={handleInviteMember}
+                  className="btn-primary whitespace-nowrap"
+                >
+                  {t('team.invite')}
+                </button>
               </div>
             </div>
 
             {teamMembers.length > TEAM_MEMBERS_INCLUDED && (
               <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                {t('team.teamCost', { cost: ((teamMembers.length - TEAM_MEMBERS_INCLUDED) * EXTRA_MEMBER_PRICE).toFixed(2) })}
+                {t('team.teamCost', {
+                  cost: (
+                    (teamMembers.length - TEAM_MEMBERS_INCLUDED) *
+                    EXTRA_MEMBER_PRICE
+                  ).toFixed(2),
+                })}
               </div>
             )}
 
             <div className="mt-4 space-y-3">
               {teamMembers.length === 0 && (
-                <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">Nessun membro attivo nel team.</div>
+                <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
+                  Nessun membro attivo nel team.
+                </div>
               )}
               {teamMembers.map((member) => (
-                <div key={member.id} className="flex items-center justify-between rounded-xl border border-slate-200 p-4">
+                <div
+                  key={member.id}
+                  className="flex items-center justify-between rounded-xl border border-slate-200 p-4"
+                >
                   <div>
-                    <p className="text-sm font-medium text-slate-900">{member.member?.company_name || member.member?.email || 'Utente team'}</p>
-                    <p className="text-xs uppercase tracking-wide text-slate-500">{member.role}</p>
+                    <p className="text-sm font-medium text-slate-900">
+                      {member.member?.company_name ||
+                        member.member?.email ||
+                        'Utente team'}
+                    </p>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">
+                      {member.role}
+                    </p>
                   </div>
-                  <button type="button" onClick={() => handleRemoveTeamMember(member.id)} className="rounded-lg border border-rose-200 px-3 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50">
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTeamMember(member.id)}
+                    className="rounded-lg border border-rose-200 px-3 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50"
+                  >
                     {t('team.remove')}
                   </button>
                 </div>
@@ -792,8 +967,14 @@ export default function ProfilePage() {
           </>
         ) : (
           <div className="mt-4 rounded-xl border border-dashed border-slate-200 p-6 text-center">
-            <p className="text-sm text-slate-500">Attiva il piano Team per invitare collaboratori.</p>
-            <button type="button" onClick={() => router.push('/dashboard/subscription')} className="mt-3 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50">
+            <p className="text-sm text-slate-500">
+              Attiva il piano Team per invitare collaboratori.
+            </p>
+            <button
+              type="button"
+              onClick={() => router.push('/dashboard/subscription')}
+              className="mt-3 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
+            >
               {t('automations.goToSubscription')}
             </button>
           </div>
@@ -806,18 +987,38 @@ export default function ProfilePage() {
     <div className="space-y-6">
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">{t('privacy.title')} e dati personali</h2>
-          <p className="mt-1 text-sm text-slate-500">Framework legale attivo: <span className="font-medium">{legalFramework}</span></p>
+          <h2 className="text-lg font-semibold text-slate-900">
+            {t('privacy.title')} e dati personali
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Framework legale attivo: <span className="font-medium">{legalFramework}</span>
+          </p>
         </div>
 
         <div className="mt-6 grid gap-4 md:grid-cols-2">
-          <button type="button" onClick={handleExportMyData} className="rounded-xl border border-slate-200 p-5 text-left transition hover:border-slate-300 hover:shadow-sm">
-            <span className="block text-sm font-semibold text-slate-900">📦 {t('privacy.exportMyData')}</span>
-            <span className="mt-2 block text-sm text-slate-500">Scarica profilo, clienti, lavori e righe di preventivo in formato JSON.</span>
+          <button
+            type="button"
+            onClick={handleExportMyData}
+            className="rounded-xl border border-slate-200 p-5 text-left transition hover:border-slate-300 hover:shadow-sm"
+          >
+            <span className="block text-sm font-semibold text-slate-900">
+              📦 {t('privacy.exportMyData')}
+            </span>
+            <span className="mt-2 block text-sm text-slate-500">
+              Scarica profilo, clienti, lavori e righe di preventivo in formato JSON.
+            </span>
           </button>
-          <button type="button" onClick={handleDeleteAccount} className="rounded-xl border border-rose-200 bg-rose-50 p-5 text-left transition hover:border-rose-300 hover:shadow-sm">
-            <span className="block text-sm font-semibold text-rose-700">🗑️ {t('privacy.deleteMyAccount')}</span>
-            <span className="mt-2 block text-sm text-rose-600">Rimuove definitivamente il profilo e tutti i dati associati.</span>
+          <button
+            type="button"
+            onClick={handleDeleteAccount}
+            className="rounded-xl border border-rose-200 bg-rose-50 p-5 text-left transition hover:border-rose-300 hover:shadow-sm"
+          >
+            <span className="block text-sm font-semibold text-rose-700">
+              🗑️ {t('privacy.deleteMyAccount')}
+            </span>
+            <span className="mt-2 block text-sm text-rose-600">
+              Rimuove definitivamente il profilo e tutti i dati associati.
+            </span>
           </button>
         </div>
       </section>
@@ -829,7 +1030,9 @@ export default function ProfilePage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-slate-900">{t('main.profile')}</h1>
-        <p className="mt-1 text-sm text-slate-500">Gestisci dati aziendali, automazioni, team e privacy.</p>
+        <p className="mt-1 text-sm text-slate-500">
+          Gestisci dati aziendali, automazioni, team e privacy.
+        </p>
       </div>
 
       {/* Tabs */}
