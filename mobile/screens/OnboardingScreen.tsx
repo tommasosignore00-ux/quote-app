@@ -47,7 +47,7 @@ export default function OnboardingScreen() {
 
   const content: Record<string, { title: string; desc: string; tips?: string[] }> = {
     welcome: {
-      title: '🚀 Benvenuto in QuoteApp!',
+      title: '🚀 Benvenuto in Mastrovoce!',
       desc: 'Imposta il nome della tua azienda per iniziare. Potrai completare il profilo in seguito.',
       tips: ['⚡ Setup in meno di 2 minuti', '🎯 Personalizza tutto dal Profilo'],
     },

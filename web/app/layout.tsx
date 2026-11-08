@@ -10,11 +10,7 @@ import { DEFAULT_LANGUAGE } from '@/lib/constants';
 import { PostHogProvider } from '@/lib/analytics';
 import WebVitals from '@/components/WebVitals';
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // App disponibile solo in Italia: interfaccia sempre in italiano.
     setLanguage(DEFAULT_LANGUAGE);
@@ -25,39 +21,56 @@ export default function RootLayout({
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="description" content="QuoteApp - Gestione preventivi con AI vocale, ricerca semantica e sincronizzazione real-time. Crea preventivi professionali in pochi secondi." />
-        <meta name="keywords" content="preventivi, quote, AI, vocale, gestione preventivi, fatturazione, invoice, Stripe" />
-        <meta name="author" content="QuoteApp" />
+        <meta
+          name="description"
+          content="Mastrovoce - Gestione preventivi con AI vocale, ricerca semantica e sincronizzazione real-time. Crea preventivi professionali in pochi secondi."
+        />
+        <meta
+          name="keywords"
+          content="preventivi, quote, AI, vocale, gestione preventivi, fatturazione, invoice, Stripe"
+        />
+        <meta name="author" content="Mastrovoce" />
         <meta name="theme-color" content="#dc2626" />
 
         {/* Open Graph */}
         <meta property="og:type" content="website" />
-        <meta property="og:title" content="QuoteApp - Preventivi con AI Vocale" />
-        <meta property="og:description" content="Crea preventivi professionali con input vocale, ricerca semantica e sincronizzazione real-time." />
-        <meta property="og:site_name" content="QuoteApp" />
+        <meta property="og:title" content="Mastrovoce - Preventivi con AI Vocale" />
+        <meta
+          property="og:description"
+          content="Crea preventivi professionali con input vocale, ricerca semantica e sincronizzazione real-time."
+        />
+        <meta property="og:site_name" content="Mastrovoce" />
         <meta property="og:locale" content="it_IT" />
 
         {/* Twitter Card */}
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="QuoteApp - Preventivi con AI Vocale" />
-        <meta name="twitter:description" content="Crea preventivi professionali con input vocale e AI." />
+        <meta name="twitter:title" content="Mastrovoce - Preventivi con AI Vocale" />
+        <meta
+          name="twitter:description"
+          content="Crea preventivi professionali con input vocale e AI."
+        />
 
         {/* Favicon */}
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/manifest.json" />
 
-        <title>QuoteApp - Preventivi con AI Vocale</title>
+        <title>Mastrovoce - Preventivi con AI Vocale</title>
       </head>
       <body suppressHydrationWarning>
-        <a href="#main-content" className="skip-to-content">Vai al contenuto principale</a>
+        <a href="#main-content" className="skip-to-content">
+          Vai al contenuto principale
+        </a>
         <PostHogProvider>
           <I18nextProvider i18n={i18n}>
             <WebVitals />
             <main id="main-content" role="main">
               {children}
             </main>
-            <Toaster position="top-right" toastOptions={{ ariaProps: { role: 'status', 'aria-live': 'polite' } }} />
+            <Toaster
+              position="top-right"
+              toastOptions={{ ariaProps: { role: 'status', 'aria-live': 'polite' } }}
+            />
           </I18nextProvider>
         </PostHogProvider>
       </body>

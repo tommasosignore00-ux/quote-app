@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Quote App",
+    "name": "Mastrovoce",
     "slug": "quote-app-mobile",
     "scheme": "quoteapp",
     "version": "1.0.0",
@@ -23,7 +23,7 @@
       "expo-web-browser"
     ],
     "ios": {
-      "bundleIdentifier": "com.quoteapp.mobile",
+      "bundleIdentifier": "com.mastrovoce.app",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Permetti l'accesso al microfono per registrare comandi vocali.",
         "NSSpeechRecognitionUsageDescription": "Permetti il riconoscimento vocale per i comandi.",
@@ -31,7 +31,7 @@
       }
     },
     "android": {
-      "package": "com.quoteapp.mobile",
+      "package": "com.mastrovoce.app",
       "permissions": [
         "RECORD_AUDIO",
         "android.permission.RECORD_AUDIO",

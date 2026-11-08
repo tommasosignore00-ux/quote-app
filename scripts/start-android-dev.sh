@@ -8,7 +8,7 @@ SDK_DIR="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"
 ADB_BIN="$SDK_DIR/platform-tools/adb"
 EMULATOR_BIN="$SDK_DIR/emulator/emulator"
 JAVA_HOME_DEFAULT="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
-APP_ID="com.quoteapp.mobile"
+APP_ID="com.mastrovoce.app"
 BOOT_TIMEOUT_SECONDS="${ANDROID_BOOT_TIMEOUT_SECONDS:-180}"
 
 cd "$ROOT_DIR"

@@ -27,7 +27,9 @@ function SubscriptionSuccessContent() {
         setLoading(true);
 
         // Get current user
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         if (!user) {
           // User session lost, redirect to login with return URL
           toast.error('Please log in to activate your subscription');
@@ -49,9 +51,15 @@ function SubscriptionSuccessContent() {
             .eq('id', user.id)
             .single();
 
-          if (profile?.subscription_status === 'active' || profile?.subscription_status === 'trialing') {
+          if (
+            profile?.subscription_status === 'active' ||
+            profile?.subscription_status === 'trialing'
+          ) {
             subscriptionActive = true;
-            toast.success(t('subscription.successMessage') || 'Subscription activated! Welcome to QuoteApp');
+            toast.success(
+              t('subscription.successMessage') ||
+                'Subscription activated! Welcome to Mastrovoce'
+            );
             setTimeout(() => {
               router.push('/dashboard');
             }, 1500);
@@ -59,7 +67,7 @@ function SubscriptionSuccessContent() {
           }
 
           if (attempts < maxAttempts - 1) {
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            await new Promise((resolve) => setTimeout(resolve, 2000));
           }
           attempts++;
         }
@@ -96,14 +104,22 @@ function SubscriptionSuccessContent() {
           {loading ? 'Processing your subscription...' : 'Subscription Confirmed!'}
         </h1>
         <p className="text-slate-300 mb-8">
-          {loading ? 'Please wait while we confirm your subscription.' : 'You now have access to all features!'}
+          {loading
+            ? 'Please wait while we confirm your subscription.'
+            : 'You now have access to all features!'}
         </p>
-        
+
         {loading && (
           <div className="flex justify-center gap-2 mb-8">
-            <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></div>
-            <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-            <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+            <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse" />
+            <div
+              className="w-2 h-2 bg-red-600 rounded-full animate-pulse"
+              style={{ animationDelay: '0.2s' }}
+             />
+            <div
+              className="w-2 h-2 bg-red-600 rounded-full animate-pulse"
+              style={{ animationDelay: '0.4s' }}
+             />
           </div>
         )}
 
@@ -120,7 +136,11 @@ function SubscriptionSuccessContent() {
 
 export default function SubscriptionSuccessPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800" />}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800" />
+      }
+    >
       <SubscriptionSuccessContent />
     </Suspense>
   );

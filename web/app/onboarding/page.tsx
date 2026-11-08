@@ -225,7 +225,7 @@ export default function OnboardingPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-6">
         <div className="max-w-lg w-full bg-white/10 backdrop-blur rounded-2xl p-8 text-white text-center">
           <div className="text-6xl mb-6">🚀</div>
-          <h1 className="text-4xl font-bold mb-4">Welcome to QuoteApp!</h1>
+          <h1 className="text-4xl font-bold mb-4">Welcome to Mastrovoce!</h1>
           <p className="text-slate-200 mb-8 text-lg">
             Create professional quotes and manage your clients with ease.
           </p>

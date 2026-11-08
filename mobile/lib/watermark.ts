@@ -1,12 +1,12 @@
 /**
  * Watermark for trial/free quotes.
- * Punto 32: Free Trial con Watermark - quotes with "Created with QuoteApp" branding.
+ * Punto 32: Free Trial con Watermark - quotes with "Created with Mastrovoce" branding.
  */
 
 /**
  * Inject watermark into quote HTML for trial users.
  */
-export function injectWatermark(html: string, appName = 'QuoteApp'): string {
+export function injectWatermark(html: string, appName = 'Mastrovoce'): string {
   const watermarkHtml = `
     <div style="
       position: fixed;
@@ -22,7 +22,7 @@ export function injectWatermark(html: string, appName = 'QuoteApp'): string {
       z-index: 9999;
       box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     ">
-      Creato con ${appName} — quoteapp.it
+      Creato con ${appName}
     </div>
     <div style="
       position: fixed;

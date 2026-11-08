@@ -1,6 +1,6 @@
 {
-  "name": "QuoteApp - Preventivi con AI Vocale",
-  "short_name": "QuoteApp",
+  "name": "Mastrovoce - Preventivi con AI Vocale",
+  "short_name": "Mastrovoce",
   "description": "Gestione preventivi con input vocale, ricerca semantica e sincronizzazione real-time.",
   "start_url": "/",
   "display": "standalone",

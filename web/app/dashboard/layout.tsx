@@ -56,12 +56,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     window.location.href = '/auth/login';
   };
 
-  if (loading)
-    {return (
+  if (loading) {
+    return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         {t('messages.loading')}
       </div>
-    );}
+    );
+  }
 
   return (
     <div className="min-h-screen flex">
@@ -70,7 +71,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <aside className="w-64 bg-slate-900 text-white flex flex-col">
         <div className="p-4 border-b border-slate-700">
           <Link href="/dashboard" className="font-bold text-lg">
-            Quote App
+            Mastrovoce
           </Link>
         </div>
         <nav className="flex-1 p-4 space-y-2">

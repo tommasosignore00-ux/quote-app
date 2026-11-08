@@ -5,7 +5,7 @@ import { ACTIVE_LANGUAGE_CODES, DEFAULT_LANGUAGE } from './constants';
 const resources = {
   it: {
     translation: {
-      app: { title: 'Quote App', subtitle: 'Preventivi con IA vocale' },
+      app: { title: 'Mastrovoce', subtitle: 'Preventivi con IA vocale' },
       auth: {
         register: 'Registrati',
         login: 'Accedi',
@@ -225,7 +225,7 @@ const resources = {
   },
   en: {
     translation: {
-      app: { title: 'Quote App', subtitle: 'Quotes with voice AI' },
+      app: { title: 'Mastrovoce', subtitle: 'Quotes with voice AI' },
       auth: {
         register: 'Sign up',
         login: 'Log in',
@@ -444,7 +444,7 @@ const resources = {
   },
   de: {
     translation: {
-      app: { title: 'Quote App', subtitle: 'Angebote mit Sprach-KI' },
+      app: { title: 'Mastrovoce', subtitle: 'Angebote mit Sprach-KI' },
       auth: {
         register: 'Registrieren',
         login: 'Anmelden',
@@ -667,7 +667,7 @@ const resources = {
   },
   fr: {
     translation: {
-      app: { title: 'Quote App', subtitle: 'Devis avec IA vocale' },
+      app: { title: 'Mastrovoce', subtitle: 'Devis avec IA vocale' },
       auth: {
         register: "S'inscrire",
         login: 'Connexion',
@@ -889,7 +889,7 @@ const resources = {
   },
   es: {
     translation: {
-      app: { title: 'Quote App', subtitle: 'Presupuestos con IA vocal' },
+      app: { title: 'Mastrovoce', subtitle: 'Presupuestos con IA vocal' },
       auth: {
         register: 'Registrarse',
         login: 'Iniciar sesión',
@@ -1109,7 +1109,7 @@ const resources = {
   },
   pt: {
     translation: {
-      app: { title: 'Quote App', subtitle: 'Orçamentos com IA vocal' },
+      app: { title: 'Mastrovoce', subtitle: 'Orçamentos com IA vocal' },
       auth: {
         register: 'Registar',
         login: 'Entrar',
@@ -1330,7 +1330,7 @@ const resources = {
   },
   pl: {
     translation: {
-      app: { title: 'Quote App', subtitle: 'Wycenienia z AI głosowym' },
+      app: { title: 'Mastrovoce', subtitle: 'Wycenienia z AI głosowym' },
       auth: {
         register: 'Zarejestruj się',
         login: 'Zaloguj',
@@ -1550,7 +1550,7 @@ const resources = {
   },
   nl: {
     translation: {
-      app: { title: 'Quote App', subtitle: 'Offertes met stem AI' },
+      app: { title: 'Mastrovoce', subtitle: 'Offertes met stem AI' },
       auth: {
         register: 'Registreren',
         login: 'Inloggen',
@@ -1769,7 +1769,7 @@ const resources = {
   },
   zh: {
     translation: {
-      app: { title: 'Quote App', subtitle: '语音AI报价' },
+      app: { title: 'Mastrovoce', subtitle: '语音AI报价' },
       auth: {
         register: '注册',
         login: '登录',
@@ -1983,7 +1983,7 @@ const resources = {
   },
   ru: {
     translation: {
-      app: { title: 'Quote App', subtitle: 'Сметы с голосовым ИИ' },
+      app: { title: 'Mastrovoce', subtitle: 'Сметы с голосовым ИИ' },
       auth: {
         register: 'Регистрация',
         login: 'Вход',
@@ -2200,7 +2200,7 @@ const resources = {
   },
   cs: {
     translation: {
-      app: { title: 'Quote App', subtitle: 'Nabídky s hlasovým AI' },
+      app: { title: 'Mastrovoce', subtitle: 'Nabídky s hlasovým AI' },
       auth: {
         register: 'Registrace',
         login: 'Přihlásit',
@@ -2356,7 +2356,7 @@ const resources = {
   },
   hu: {
     translation: {
-      app: { title: 'Quote App', subtitle: 'Árajánlatok hangos AI-val' },
+      app: { title: 'Mastrovoce', subtitle: 'Árajánlatok hangos AI-val' },
       auth: {
         register: 'Regisztráció',
         login: 'Bejelentkezés',
@@ -2514,7 +2514,7 @@ const resources = {
   },
   ro: {
     translation: {
-      app: { title: 'Quote App', subtitle: 'Oferte cu AI vocal' },
+      app: { title: 'Mastrovoce', subtitle: 'Oferte cu AI vocal' },
       auth: {
         register: 'Înregistrare',
         login: 'Autentificare',
@@ -2671,7 +2671,7 @@ const resources = {
   },
   uk: {
     translation: {
-      app: { title: 'Quote App', subtitle: 'Кошториси з голосовим ШІ' },
+      app: { title: 'Mastrovoce', subtitle: 'Кошториси з голосовим ШІ' },
       auth: {
         register: 'Реєстрація',
         login: 'Вхід',
@@ -2826,7 +2826,7 @@ const resources = {
   },
   hr: {
     translation: {
-      app: { title: 'Quote App', subtitle: 'Ponude s glasovnim AI' },
+      app: { title: 'Mastrovoce', subtitle: 'Ponude s glasovnim AI' },
       auth: {
         register: 'Registracija',
         login: 'Prijava',
@@ -2983,7 +2983,7 @@ const resources = {
   },
   sk: {
     translation: {
-      app: { title: 'Quote App', subtitle: 'Ponuky s hlasovým AI' },
+      app: { title: 'Mastrovoce', subtitle: 'Ponuky s hlasovým AI' },
       auth: {
         register: 'Registrácia',
         login: 'Prihlásenie',
@@ -3138,7 +3138,7 @@ const resources = {
   },
   bg: {
     translation: {
-      app: { title: 'Quote App', subtitle: 'Оферти с гласов AI' },
+      app: { title: 'Mastrovoce', subtitle: 'Оферти с гласов AI' },
       auth: {
         register: 'Регистрация',
         login: 'Вход',
@@ -3294,7 +3294,7 @@ const resources = {
   },
   sl: {
     translation: {
-      app: { title: 'Quote App', subtitle: 'Ponudbe z govornim AI' },
+      app: { title: 'Mastrovoce', subtitle: 'Ponudbe z govornim AI' },
       auth: {
         register: 'Registracija',
         login: 'Prijava',
@@ -3451,7 +3451,7 @@ const resources = {
   },
   el: {
     translation: {
-      app: { title: 'Quote App', subtitle: 'Προσφορές με φωνητικό AI' },
+      app: { title: 'Mastrovoce', subtitle: 'Προσφορές με φωνητικό AI' },
       auth: {
         register: 'Εγγραφή',
         login: 'Σύνδεση',
@@ -3609,7 +3609,7 @@ const resources = {
   },
   ja: {
     translation: {
-      app: { title: 'Quote App', subtitle: '音声AIで見積もり' },
+      app: { title: 'Mastrovoce', subtitle: '音声AIで見積もり' },
       auth: {
         register: '登録',
         login: 'ログイン',
@@ -3763,7 +3763,7 @@ const resources = {
   },
   ko: {
     translation: {
-      app: { title: 'Quote App', subtitle: '음성 AI 견적' },
+      app: { title: 'Mastrovoce', subtitle: '음성 AI 견적' },
       auth: {
         register: '가입',
         login: '로그인',
