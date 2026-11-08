@@ -40,7 +40,7 @@ const supabase = supabaseAdmin;
 
 type AiCategoryResponse = {
   items?: Array<{
-    id?: string;
+    ref?: number | string;
     category?: string;
   }>;
 };
@@ -90,8 +90,12 @@ async function categorizeChunk(params: {
         content:
           'Sei un assistente che organizza voci di prezzari. Per ogni voce devi restituire una categoria breve e coerente in italiano. ' +
           'Usa categorie di 1-4 parole, senza codici, senza spiegazioni, senza inventare dettagli tecnici. ' +
-          'Se esiste gia una categoria valida, puoi mantenerla o migliorarla leggermente. ' +
-          'Restituisci solo JSON nel formato {"items":[{"id":"...","category":"..."}]}.',
+          'Per ogni voce scegli in questo ordine: 1) una known_categories adatta, riscritta identica (stesse parole e maiuscole); ' +
+          '2) altrimenti current_category se e valida, senza ritoccarla; 3) solo se nessuna va bene, una categoria nuova. ' +
+          'Restituisci una riga per ogni ref ricevuto, solo JSON nel formato {"items":[{"ref":1,"category":"..."}]}. ' +
+          'Esempi. known_categories ["Travi","Viti e bulloni"]: "IPE 120 S275" -> "Travi"; "Bullone M8x40 zincato" -> "Viti e bulloni". ' +
+          'Nessuna adatta e current_category "Idraulica": "Raccordo a gomito 1/2" -> "Idraulica". ' +
+          'Nessuna adatta e current_category null: "Guaina bituminosa 4 mm" -> "Impermeabilizzanti".',
       },
       {
         role: 'user',
@@ -101,11 +105,11 @@ async function categorizeChunk(params: {
             'Raggruppa le voci in categorie utili per un utente che deve scegliere materiali durante un lavoro.',
             'Mantieni categorie coerenti tra voci simili.',
             'Se il listino suggerisce un dominio specifico, usalo come contesto.',
-            'Se una delle known_categories va bene, riusala identica (stesse parole e maiuscole) invece di crearne una nuova simile.',
           ],
           known_categories: params.knownCategories || [],
-          items: params.chunk.map((item) => ({
-            id: item.id,
+          // Short numbers: ids are long, cost tokens and get copied back wrong.
+          items: params.chunk.map((item, index) => ({
+            ref: index + 1,
             description: item.description,
             current_category: item.category,
           })),
@@ -122,13 +126,12 @@ async function categorizeChunk(params: {
     throw new Error(`AI ha restituito JSON non valido: ${String(error)}`);
   }
 
-  const allowedIds = new Set(params.chunk.map((item) => item.id));
   return (parsed.items || [])
     .map((item) => ({
-      id: String(item.id || ''),
+      id: params.chunk[Number(item.ref) - 1]?.id || '',
       category: normalizeCategory(item.category) || '',
     }))
-    .filter((item) => item.id && item.category && allowedIds.has(item.id));
+    .filter((item) => item.id && item.category);
 }
 
 function mostUsedCategories(
@@ -238,7 +241,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'listinoId è obbligatorio' }, { status: 400 });
     }
     const access = await getListinoAccess(user.id, listinoId);
-    if (!access) return NextResponse.json({ error: 'Listino non trovato' }, { status: 404 });
+    if (!access)
+      {return NextResponse.json({ error: 'Listino non trovato' }, { status: 404 });}
     if (!access.canEdit) return forbiddenResponse();
     const profileId = access.ownerProfileId;
 

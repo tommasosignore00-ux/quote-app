@@ -145,6 +145,9 @@ export async function canonicalizeGroupNames(
             '4) Se il titolo contiene due titoli incollati per errore dal layout del PDF, usa il primo. ' +
             '5) Se un titolo inizia con una parola generica (es. "Zincato", "Serie media zincati"), completalo ' +
             'con il prodotto che si capisce dal contesto degli altri titoli solo se è evidente, altrimenti lascialo. ' +
+            'Esempi: "TONDI LAMINATI" e "Tondo laminato" -> entrambi "Tondi laminati". ' +
+            '"Tubi saldati zincati" e "Tubi saldati neri" restano distinti. ' +
+            '"Travi HEA Travi HEB" (incollati) -> "Travi HEA". ' +
             'Rispondi solo JSON: {"groups":[{"title":"<titolo ricevuto>","name":"<nome forma>"}]}',
         },
         { role: 'user', content: JSON.stringify({ titles: unique }) },
