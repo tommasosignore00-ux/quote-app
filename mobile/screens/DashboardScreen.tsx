@@ -5,11 +5,23 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { DEFAULT_COUNTRY_CODE, DEFAULT_CURRENCY, DEFAULT_LANGUAGE, DEFAULT_LOCALE, resolveVatPercent } from '../lib/market';
 import VoiceButton from '../components/VoiceButton';
+import VoiceConfirmSheet, { type DraftItem } from '../components/VoiceConfirmSheet';
+import {
+  extractVoiceItems,
+  isSessionActive,
+  matchByName,
+  resolveSpokenTarget,
+  type JobRecord,
+  type VoiceItem,
+  type VoiceResult,
+  type VoiceSession,
+} from '../lib/voiceDraft';
 import { useFocusEffect } from '@react-navigation/native';
 import { trackTimeSaving, getTimeSavingsStats } from '../lib/timeSavings';
 import { findCrossSellInListino } from '../lib/crossSelling';
 import { startNetworkListener, stopNetworkListener } from '../lib/offline';
 import { useTheme } from '../lib/darkMode';
+import { triggerHaptic } from '../lib/haptics';
 
 type Cliente = { id: string; name: string };
 type Lavoro = { id: string; title: string; cliente_id: string; clienti?: any };
@@ -69,6 +81,18 @@ export default function DashboardScreen() {
   const [crossSellItems, setCrossSellItems] = useState<any[]>([]);
   const [showCrossSell, setShowCrossSell] = useState(false);
   const [timeSaved, setTimeSaved] = useState<string>('');
+
+  // Voice: draft waiting for confirmation, and the job dictations go to for a while.
+  const [voiceDraft, setVoiceDraft] = useState<{
+    transcript: string;
+    items: DraftItem[];
+    clienteId: string | null;
+    lavoroId: string | null;
+    jobTitle: string | null;
+  } | null>(null);
+  const [savingVoiceDraft, setSavingVoiceDraft] = useState(false);
+  const [voiceSession, setVoiceSession] = useState<VoiceSession | null>(null);
+  const [lastVoiceAdd, setLastVoiceAdd] = useState<string | null>(null);
 
   // Punto 4: Carousel Fallback state
   const [showFallbackCarousel, setShowFallbackCarousel] = useState(false);
@@ -140,7 +164,7 @@ export default function DashboardScreen() {
     if (cErr) console.warn('clienti error', cErr);
     setClienti(c || []);
 
-    const { data: l, error: lErr } = await supabase.from('lavori').select('id, title, cliente_id, clienti(name)').eq('profile_id', pid);
+    const { data: l, error: lErr } = await supabase.from('lavori').select('id, title, cliente_id, clienti(name)').eq('profile_id', pid).order('updated_at', { ascending: false });
     if (lErr) console.warn('lavori error', lErr);
     setLavori(l || []);
 
@@ -178,6 +202,7 @@ export default function DashboardScreen() {
 
   // Gating: AI/cross-selling solo Pro/Team
   const canUseAI = isProOrTeam;
+  const canUseVoice = isProOrTeam;
   const canUseCrossSelling = isProOrTeam;
   const canUseBranding = isProOrTeam;
   const canUseAdvancedNotifications = isProOrTeam;
@@ -300,86 +325,238 @@ export default function DashboardScreen() {
     })),
   };
 
-  const handleVoiceResult = async (result: { action: string; data?: Record<string, unknown> }) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).single();
-    if (!profile) return;
-
-    if (result.action === 'create_cliente' && result.data?.name) {
-      const payload = { profile_id: profile.id, name: String(result.data.name) };
-      const { data: created, error } = await supabase.from('clienti').insert(payload).select('*');
-      if (error) console.warn('clienti insert error', error);
-      if (created && created[0]) setClienti((p) => [...p, created[0]]);
-    } else if (result.action === 'create_lavoro' && result.data?.title && (result.data?.cliente_id || result.data?.cliente_name)) {
-      let clienteId = result.data.cliente_id as string | undefined;
-      if (!clienteId && result.data.cliente_name) {
-        const match = clienti.find((client) => client.name.toLowerCase().includes(String(result.data?.cliente_name).toLowerCase()));
-        clienteId = match?.id;
-      }
-      if (clienteId) {
-        await supabase.from('lavori').insert({
-          profile_id: profile.id,
-          cliente_id: String(clienteId),
-          title: String(result.data.title),
-        });
-      }
-    } else if (result.action === 'add_costo' && result.data?.description && selectedLavoro) {
-      // Cerca nel listino prima di aggiungere
-      const { data: items } = await supabase
-        .from('listini_vettoriali')
-        .select('*')
-        .eq('profile_id', profile.id)
-        .ilike('description', `%${result.data.description}%`)
-        .limit(1);
-      
-      if (items && items.length > 0) {
-        const item = items[0];
-        const { data: created, error } = await supabase.from('preventivi_dettaglio').insert({
-          lavoro_id: selectedLavoro.id,
-          description: item.description,
-          quantity: 1,
-          unit_price: Number(item.unit_price),
-          tax_rate: Number(item.markup_percent) || profileMaterialMarkup,
-          listino_item_id: item.id,
-        }).select('*');
-        if (error) console.warn('preventivi_dettaglio insert error', error);
-        if (created && created[0]) setCosti((prev) => [created[0], ...prev]);
-      } else {
-        const { data: created, error } = await supabase.from('preventivi_dettaglio').insert({
-          lavoro_id: selectedLavoro.id,
-          description: String(result.data.description),
-          quantity: 1,
-          unit_price: 0,
-          tax_rate: profileMaterialMarkup,
-        }).select('*');
-        if (error) console.warn('preventivi_dettaglio insert error', error);
-        if (created && created[0]) setCosti((prev) => [created[0], ...prev]);
-      }
-    }
-    fetchData();
-    // Punto 44: Track time savings for voice actions
-    if (result.action === 'create_cliente') await trackTimeSaving('create_cliente');
-    else if (result.action === 'create_lavoro') await trackTimeSaving('create_lavoro');
-    else if (result.action === 'add_costo') {
-      await trackTimeSaving('add_costo');
-          // Punto 13: Cross-selling suggestions
-          if (result.data?.description && profileId) {
-            if (canUseCrossSelling) {
-              const crossItems = await findCrossSellInListino(supabase, profileId, String(result.data.description));
-              if (crossItems.length > 0) {
-                setCrossSellItems(crossItems);
-                setShowCrossSell(true);
-              }
-            } else {
-              showUpgradeAlert('Suggerimenti AI e cross-selling');
-            }
-          }
-    }
-    // Refresh time savings display
+  const refreshTimeSaved = () => {
     getTimeSavingsStats().then((stats) => {
       if (stats.totalHoursSaved > 0) setTimeSaved(`⏱ ${stats.totalHoursSaved}h risparmiate`);
     });
+  };
+
+  // The session ends after a while without dictations, or when another job is opened.
+  useEffect(() => {
+    if (!voiceSession) return;
+    const timer = setInterval(() => {
+      if (!isSessionActive(voiceSession)) {
+        setVoiceSession(null);
+        setLastVoiceAdd(null);
+      }
+    }, 60 * 1000);
+    return () => clearInterval(timer);
+  }, [voiceSession]);
+
+  useEffect(() => {
+    if (selectedLavoro && voiceSession && voiceSession.lavoroId !== selectedLavoro.id) {
+      setVoiceSession(null);
+      setLastVoiceAdd(null);
+    }
+  }, [selectedLavoro?.id]);
+
+  const activeSession = isSessionActive(voiceSession) ? voiceSession : null;
+  const sessionLavoro = activeSession ? lavori.find((lavoro) => lavoro.id === activeSession.lavoroId) || null : null;
+  const sessionCliente = activeSession ? clienti.find((cliente) => cliente.id === activeSession.clienteId) || null : null;
+
+  const closeVoiceSession = () => {
+    setVoiceSession(null);
+    setLastVoiceAdd(null);
+  };
+
+  /** Price list candidates for every spoken item; the first one is preselected. */
+  const buildDraftItems = async (spoken: VoiceItem[], mappedItemId?: string | null): Promise<DraftItem[]> => {
+    const stamp = Date.now();
+    return Promise.all(
+      spoken.map(async (item, index) => {
+        let matches: DraftItem['matches'] = [];
+        try {
+          matches = await findListinoMatches(item.description);
+        } catch (err) {
+          console.warn('listino search error', err);
+        }
+        // A correction the user saved earlier for this sentence wins.
+        if (mappedItemId && index === 0) {
+          const { data: mapped } = await supabase
+            .from('listini_vettoriali')
+            .select('id, description, unit_price, markup_percent, unit')
+            .eq('id', mappedItemId)
+            .maybeSingle();
+          if (mapped) matches = [mapped, ...matches.filter((match) => match.id !== mapped.id)];
+        }
+        return {
+          key: `${stamp}-${index}`,
+          spoken: item.description,
+          quantity: item.quantity,
+          unit: item.unit,
+          matches,
+          choice: matches.length ? 0 : -1,
+        };
+      })
+    );
+  };
+
+  const handleVoiceResult = async (result: VoiceResult) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const ownerId = profileId || user.id;
+
+    // New customer: always asked before creating it.
+    if (result.action === 'create_cliente' && result.data?.name) {
+      const name = String(result.data.name).trim();
+      Alert.alert('Nuovo cliente', `Creo il cliente «${name}»?`, [
+        { text: 'Annulla', style: 'cancel' },
+        {
+          text: 'Crea',
+          onPress: async () => {
+            const { data: created, error } = await supabase
+              .from('clienti')
+              .insert({ profile_id: ownerId, name, country_code: newClientCountry, preferred_language: newClientLanguage })
+              .select('*');
+            if (error) {
+              Alert.alert(t('messages.error'), error.message);
+              return;
+            }
+            if (created?.[0]) setClienti((prev) => [...prev, created[0]]);
+            await trackTimeSaving('create_cliente');
+            refreshTimeSaved();
+            fetchData();
+          },
+        },
+      ]);
+      return;
+    }
+
+    // New job: the customer must be one that exists, and the user confirms.
+    if (result.action === 'create_lavoro' && result.data?.title) {
+      const title = String(result.data.title).trim();
+      let cliente = clienti.find((record) => record.id === result.data?.cliente_id) || null;
+      if (!cliente && result.data?.cliente_name) {
+        const matches = matchByName(clienti, result.data.cliente_name, (record) => record.name);
+        if (matches.length === 1) cliente = matches[0];
+      }
+      if (!cliente && selectedCliente) cliente = selectedCliente;
+      if (!cliente) {
+        Alert.alert('Cliente non trovato', `Per creare il lavoro «${title}» scegli prima il cliente nell'elenco, poi riprova.`);
+        return;
+      }
+      const target = cliente;
+      Alert.alert('Nuovo lavoro', `Creo il lavoro «${title}» per ${target.name}?`, [
+        { text: 'Annulla', style: 'cancel' },
+        {
+          text: 'Crea',
+          onPress: async () => {
+            const { error } = await supabase.from('lavori').insert({ profile_id: ownerId, cliente_id: target.id, title });
+            if (error) {
+              Alert.alert(t('messages.error'), error.message);
+              return;
+            }
+            await trackTimeSaving('create_lavoro');
+            refreshTimeSaved();
+            fetchData();
+          },
+        },
+      ]);
+      return;
+    }
+
+    // Items to add: they go to a draft the user confirms.
+    const spokenItems = extractVoiceItems(result);
+    if (!spokenItems.length) {
+      Alert.alert('Non ho capito cosa aggiungere', result.text ? `Ho sentito: "${result.text}". Riprova.` : 'Riprova.');
+      return;
+    }
+
+    // Who gets the items: what was said, else the open job, else the session, else ask.
+    const spoken = resolveSpokenTarget(result, clienti, lavori);
+    let clienteId = spoken.clienteId;
+    let lavoroId = spoken.lavoroId;
+    const fallbackJob = selectedLavoro
+      ? { clienteId: selectedLavoro.cliente_id, lavoroId: selectedLavoro.id }
+      : activeSession
+        ? { clienteId: activeSession.clienteId, lavoroId: activeSession.lavoroId }
+        : null;
+    if (!clienteId && !lavoroId) {
+      if (fallbackJob) {
+        clienteId = fallbackJob.clienteId;
+        lavoroId = fallbackJob.lavoroId;
+      } else if (selectedClienteId) {
+        clienteId = selectedClienteId;
+      }
+    } else if (clienteId && !lavoroId && fallbackJob?.clienteId === clienteId) {
+      lavoroId = fallbackJob.lavoroId;
+    }
+
+    const items = await buildDraftItems(spokenItems, (result.data?.listino_item_id as string) || null);
+    setVoiceDraft({
+      transcript: result.text || '',
+      items,
+      clienteId,
+      lavoroId,
+      jobTitle: spoken.jobTitle,
+    });
+  };
+
+  const handleCreateLavoroFromVoice = async (clienteId: string, title: string): Promise<JobRecord | null> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+    const { data: created, error } = await supabase
+      .from('lavori')
+      .insert({ profile_id: profileId || user.id, cliente_id: clienteId, title, original_currency: 'EUR', exchange_rate: 1 })
+      .select('id, title, cliente_id, clienti(name)')
+      .single();
+    if (error || !created) {
+      Alert.alert(t('messages.error'), error?.message || 'Lavoro non creato');
+      return null;
+    }
+    setLavori((prev) => [created as Lavoro, ...prev]);
+    await trackTimeSaving('create_lavoro');
+    return created as JobRecord;
+  };
+
+  const handleConfirmVoiceDraft = async (lavoro: JobRecord) => {
+    if (!voiceDraft) return;
+    setSavingVoiceDraft(true);
+    try {
+      const rows = voiceDraft.items.map((item) => {
+        const match = item.matches[item.choice];
+        return {
+          lavoro_id: lavoro.id,
+          description: match?.description || item.spoken,
+          quantity: item.quantity,
+          unit_price: match ? Number(match.unit_price) : 0,
+          tax_rate: match ? Number(match.markup_percent) || profileMaterialMarkup : profileMaterialMarkup,
+          listino_item_id: match?.id || null,
+          // Empty: the database copies the unit of the price list item.
+          unit: item.unit || null,
+        };
+      });
+      const { data: created, error } = await supabase.from('preventivi_dettaglio').insert(rows).select('*');
+      if (error) throw error;
+
+      // Jobs used last come first in the pop-up.
+      supabase.from('lavori').update({ updated_at: new Date().toISOString() }).eq('id', lavoro.id).then(() => {});
+      if (selectedLavoro?.id === lavoro.id && created) setCosti((prev) => [...created, ...prev]);
+
+      setVoiceSession({ clienteId: lavoro.cliente_id, lavoroId: lavoro.id, lastUsedAt: Date.now() });
+      setLastVoiceAdd(rows.length === 1 ? `Aggiunta: ${rows[0].description}` : `Aggiunte ${rows.length} voci`);
+      setVoiceDraft(null);
+      triggerHaptic('aiSuccess');
+
+      for (let i = 0; i < rows.length; i++) await trackTimeSaving('add_costo');
+      refreshTimeSaved();
+
+      // Punto 13: Cross-selling suggestions
+      if (profileId && rows[0]) {
+        if (canUseCrossSelling) {
+          const crossItems = await findCrossSellInListino(supabase, profileId, rows[0].description);
+          if (crossItems.length > 0) {
+            setCrossSellItems(crossItems);
+            setShowCrossSell(true);
+          }
+        }
+      }
+      fetchData();
+    } catch (err) {
+      Alert.alert(t('messages.error'), (err as Error).message);
+    } finally {
+      setSavingVoiceDraft(false);
+    }
   };
 
   const handleCreateClient = async () => {
@@ -514,7 +691,7 @@ export default function DashboardScreen() {
 
     const { data: items, error } = await supabase
       .from('listini_vettoriali')
-      .select('id, description, unit_price, markup_percent, sku, category, listino_id')
+      .select('id, description, unit_price, markup_percent, unit, sku, category, listino_id')
       .eq('profile_id', profileId)
       .ilike('description', `%${trimmed}%`)
       .limit(5);
@@ -530,11 +707,21 @@ export default function DashboardScreen() {
         const orFilter = words.map((w) => `description.ilike.%${w}%`).join(',');
         const { data: wordItems, error: wordError } = await supabase
           .from('listini_vettoriali')
-          .select('id, description, unit_price, markup_percent, sku, category, listino_id')
+          .select('id, description, unit_price, markup_percent, unit, sku, category, listino_id')
           .eq('profile_id', profileId)
           .or(orFilter)
-          .limit(5);
-        if (!wordError && wordItems) resultItems = wordItems;
+          .limit(40);
+        // Articles containing more of the spoken words first ("tubo multistrato 20").
+        if (!wordError && wordItems) {
+          const lowerWords = words.map((word) => word.toLowerCase());
+          const hits = (description: string) => {
+            const text = String(description || '').toLowerCase();
+            return lowerWords.filter((word) => text.includes(word)).length;
+          };
+          resultItems = [...wordItems]
+            .sort((a: any, b: any) => hits(b.description) - hits(a.description))
+            .slice(0, 5);
+        }
       }
     }
 
@@ -706,7 +893,7 @@ export default function DashboardScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16 }} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: selectedClienteId ? 140 : 16 }} showsVerticalScrollIndicator={false} nestedScrollEnabled>
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.text }]}>{t('main.jobs')}</Text>
         {timeSaved ? <Text style={styles.timeSavedBadge}>{timeSaved}</Text> : null}
@@ -773,10 +960,27 @@ export default function DashboardScreen() {
         </View>
       </View>
 
+      {canUseVoice && activeSession && sessionLavoro ? (
+        <View style={[styles.sessionBar, { backgroundColor: colors.card, borderColor: '#16a34a' }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.sessionLabel, { color: colors.textSecondary }]}>Stai aggiungendo a</Text>
+            <Text style={[styles.sessionTarget, { color: colors.text }]} numberOfLines={2}>
+              {sessionCliente?.name || '—'} · {sessionLavoro.title}
+            </Text>
+            {lastVoiceAdd ? (
+              <Text style={styles.sessionLast} numberOfLines={1}>✓ {lastVoiceAdd}</Text>
+            ) : null}
+          </View>
+          <TouchableOpacity style={styles.sessionClose} onPress={closeVoiceSession} accessibilityLabel="Chiudi: le prossime voci chiederanno cliente e lavoro">
+            <Text style={styles.sessionCloseText}>✕ Chiudi</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
       {!selectedClienteId && (
         <View style={styles.voiceCenterWrap}>
-          {subscriptionStatus === 'active' && (
-            <VoiceButton onResult={handleVoiceResult} clienti={clienti} context={voiceContext} size={260} onMicDenied={handleMicDenied} />
+          {canUseVoice && (
+            <VoiceButton onResult={handleVoiceResult} clienti={clienti} context={voiceContext} size={220} onMicDenied={handleMicDenied} showLabel />
           )}
         </View>
       )}
@@ -983,6 +1187,28 @@ export default function DashboardScreen() {
 
       </ScrollView>
 
+      {/* Inside a customer or job the big microphone stays reachable, bottom right. */}
+      {canUseVoice && selectedClienteId ? (
+        <VoiceButton onResult={handleVoiceResult} clienti={clienti} context={voiceContext} size={84} floating onMicDenied={handleMicDenied} />
+      ) : null}
+
+      <VoiceConfirmSheet
+        visible={Boolean(voiceDraft)}
+        transcript={voiceDraft?.transcript || ''}
+        items={voiceDraft?.items || []}
+        clienti={clienti}
+        lavori={lavori}
+        initialClienteId={voiceDraft?.clienteId || null}
+        initialLavoroId={voiceDraft?.lavoroId || null}
+        suggestedJobTitle={voiceDraft?.jobTitle || null}
+        saving={savingVoiceDraft}
+        defaultMarkup={profileMaterialMarkup}
+        onChangeItems={(items) => setVoiceDraft((draft) => (draft ? { ...draft, items } : draft))}
+        onCreateLavoro={handleCreateLavoroFromVoice}
+        onConfirm={handleConfirmVoiceDraft}
+        onCancel={() => setVoiceDraft(null)}
+      />
+
       <View style={[styles.nav, { borderTopColor: colors.border, backgroundColor: colors.navBg }]}>
         <TouchableOpacity style={styles.navBtn} onPress={() => (navigation as any).navigate('Dashboard')}>
           <Text style={[styles.navText, { color: colors.textSecondary }]}>🏠 {t('main.jobs')}</Text>
@@ -1041,6 +1267,12 @@ const styles = StyleSheet.create({
   navBtn: { padding: 10 },
   navText: { fontSize: 14, color: '#64748b', fontWeight: '600' },
   voiceCenterWrap: { alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  sessionBar: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 3, borderRadius: 18, padding: 14, marginBottom: 16 },
+  sessionLabel: { fontSize: 16, fontWeight: '600' },
+  sessionTarget: { fontSize: 22, fontWeight: '800' },
+  sessionLast: { fontSize: 16, fontWeight: '700', color: '#16a34a', marginTop: 2 },
+  sessionClose: { minHeight: 64, minWidth: 110, borderRadius: 16, backgroundColor: '#fee2e2', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  sessionCloseText: { fontSize: 19, fontWeight: '800', color: '#b91c1c' },
   clienteSelectBtn: { flex: 1, padding: 10, borderRadius: 10, backgroundColor: '#f8fafc' },
   clienteSelected: { backgroundColor: '#dc2626' },
   clienteSelectedText: { color: '#fff', fontWeight: '700' },

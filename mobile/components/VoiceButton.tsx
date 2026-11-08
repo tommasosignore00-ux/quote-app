@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { getFunctionHeaders } from '../lib/supabaseFunctions';
-import { TouchableOpacity, Text, StyleSheet, Alert, View, Animated, DeviceEventEmitter } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, Alert, View, Animated, DeviceEventEmitter, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import {
   RecordingPresets,
@@ -13,7 +13,7 @@ import { saveOfflineRecording, syncOfflineRecordings, getPendingRecordingsCount 
 import NetInfo from '@react-native-community/netinfo';
 
 type VoiceButtonProps = {
-  onResult: (result: { action: string; data?: Record<string, unknown> }) => void;
+  onResult: (result: { action: string; data?: Record<string, unknown>; text?: string; agent?: any }) => void;
   clienti?: { id: string; name: string }[];
   context?: Record<string, unknown>;
   size?: number;
@@ -23,11 +23,15 @@ type VoiceButtonProps = {
   onMicDenied?: () => void;
   /** Enable start/stop control from watch bridge events */
   listenToWatchEvents?: boolean;
+  /** Text under the button ("Tocca e parla"); hidden in floating mode. */
+  showLabel?: boolean;
 };
 
-export default function VoiceButton({ onResult, clienti = [], context, size = 64, floating = false, onMicDenied, listenToWatchEvents = false }: VoiceButtonProps) {
+export default function VoiceButton({ onResult, clienti = [], context, size = 64, floating = false, onMicDenied, listenToWatchEvents = false, showLabel = false }: VoiceButtonProps) {
   const { t } = useTranslation();
   const [recording, setRecording] = useState(false);
+  // Waiting for the transcription: further taps are ignored.
+  const [processing, setProcessing] = useState(false);
   const [pendingOffline, setPendingOffline] = useState(0);
   // expo-audio recorder (expo-av is deprecated and removed in the next Expo SDKs).
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -112,6 +116,7 @@ export default function VoiceButton({ onResult, clienti = [], context, size = 64
       triggerHaptic('recordingStop');
 
       if (!uri) return;
+      setProcessing(true);
 
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
       const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -142,18 +147,27 @@ export default function VoiceButton({ onResult, clienti = [], context, size = 64
         body: formData,
       });
       const result = await res.json();
+      if (!res.ok || result?.error) {
+        throw new Error(result?.error || 'Elaborazione non riuscita, riprova');
+      }
       if (result.action) {
         triggerHaptic('aiSuccess');
         onResult(result);
+      } else {
+        triggerHaptic('aiError');
+        Alert.alert('Non ho capito', result.text ? `Ho sentito: "${result.text}". Riprova parlando più vicino al telefono.` : 'Non ho sentito niente. Riprova parlando più vicino al telefono.');
       }
     } catch (err) {
       triggerHaptic('aiError');
       // Punto 1: On error, try saving offline
       Alert.alert(t('messages.error'), (err as Error).message);
+    } finally {
+      setProcessing(false);
     }
   };
 
   const handlePress = () => {
+    if (processing) return;
     triggerHaptic('buttonTap');
     if (recording) stopRecording();
     else startRecording();
@@ -183,15 +197,25 @@ export default function VoiceButton({ onResult, clienti = [], context, size = 64
           styles.button,
           { width: size, height: size, borderRadius: size / 2 },
           recording && styles.recording,
+          processing && styles.processing,
         ]}
         activeOpacity={0.8}
+        disabled={processing}
+        accessibilityRole="button"
+        accessibilityLabel={processing ? 'Sto capendo' : recording ? 'Ferma la registrazione' : 'Parla'}
       >
-        <Text style={[styles.icon, { fontSize: Math.max(28, Math.round(size * 0.42)) }]}>
-          {recording ? '⏹' : '🎤'}
-        </Text>
+        {processing ? (
+          <ActivityIndicator color="#fff" size="large" />
+        ) : (
+          <Text style={[styles.icon, { fontSize: Math.max(28, Math.round(size * 0.42)) }]}>
+            {recording ? '⏹' : '🎤'}
+          </Text>
+        )}
       </TouchableOpacity>
     </Animated.View>
   );
+
+  const label = processing ? 'Sto capendo…' : recording ? 'Sto ascoltando: tocca per finire' : 'Tocca e di\' cosa aggiungere';
 
   // Punto 2: Pulsante Rosso "Sticky" (FAB)
   if (floating) {
@@ -215,6 +239,7 @@ export default function VoiceButton({ onResult, clienti = [], context, size = 64
         </Text>
       )}
       {buttonContent}
+      {showLabel ? <Text style={[styles.label, recording && styles.labelRecording]}>{label}</Text> : null}
     </View>
   );
 }
@@ -231,6 +256,9 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   recording: { backgroundColor: '#b91c1c' },
+  processing: { backgroundColor: '#64748b' },
+  label: { marginTop: 14, fontSize: 20, fontWeight: '700', textAlign: 'center', color: '#475569' },
+  labelRecording: { color: '#b91c1c' },
   icon: { fontSize: 28 },
   // FAB positioning
   fabContainer: {
