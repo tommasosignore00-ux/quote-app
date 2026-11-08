@@ -171,7 +171,8 @@ export default function DashboardScreen() {
 
     const { data: l, error: lErr } = await supabase.from('lavori').select('id, title, cliente_id, status, clienti(name)').eq('profile_id', pid).order('updated_at', { ascending: false });
     if (lErr) console.warn('lavori error', lErr);
-    setLavori(l || []);
+    // Accepted quotes are final: they live only in the Preventivi section.
+    setLavori((l || []).filter((job: Lavoro) => job.status !== 'approved'));
 
     if (selectedLavoro) {
       const { data: costiData, error: costiErr } = await supabase.from('preventivi_dettaglio').select('id, description, quantity, unit_price, tax_rate').eq('lavoro_id', selectedLavoro.id);
@@ -226,10 +227,6 @@ export default function DashboardScreen() {
       Alert.alert(t('messages.error'), t('sections.selectClientToViewJobs') || 'Seleziona prima un lavoro');
       return;
     }
-    if (selectedLavoro.status === 'approved') {
-      Alert.alert('Preventivo accettato', 'Questo preventivo non si può più modificare.');
-      return;
-    }
     const { data: created, error } = await supabase.from('preventivi_dettaglio').insert({
       lavoro_id: selectedLavoro.id,
       description: item.description,
@@ -280,9 +277,12 @@ export default function DashboardScreen() {
     };
   }, [profileId, selectedLavoro?.id, fetchData]);
 
-  // A quote accepted by the client is final: its job takes no more changes.
-  const selectedLavoroLocked = selectedLavoro?.status === 'approved';
-  const openLavori = lavori.filter((lavoro) => lavoro.status !== 'approved');
+  // The open job was accepted meanwhile: it has left this page.
+  useEffect(() => {
+    if (selectedLavoro && !lavori.some((job) => job.id === selectedLavoro.id)) {
+      setSelectedLavoro(null);
+    }
+  }, [lavori, selectedLavoro]);
 
   const selectedCliente = clienti.find((cliente) => cliente.id === selectedClienteId) || null;
   const voiceContext = {
@@ -477,12 +477,12 @@ export default function DashboardScreen() {
     }
 
     // Who gets the items: what was said, else the open job, else the session, else ask.
-    const spoken = resolveSpokenTarget(result, clienti, openLavori);
+    const spoken = resolveSpokenTarget(result, clienti, lavori);
     let clienteId = spoken.clienteId;
     let lavoroId = spoken.lavoroId;
-    const fallbackJob = selectedLavoro && !selectedLavoroLocked
+    const fallbackJob = selectedLavoro
       ? { clienteId: selectedLavoro.cliente_id, lavoroId: selectedLavoro.id }
-      : activeSession && openLavori.some((lavoro) => lavoro.id === activeSession.lavoroId)
+      : activeSession && lavori.some((lavoro) => lavoro.id === activeSession.lavoroId)
         ? { clienteId: activeSession.clienteId, lavoroId: activeSession.lavoroId }
         : null;
     if (!clienteId && !lavoroId) {
@@ -956,13 +956,9 @@ export default function DashboardScreen() {
                     {(item.clienti as { name?: string })?.name} - {item.title}
                   </Text>
                 </TouchableOpacity>
-                {item.status === 'approved' ? (
-                  <Text style={styles.deleteBtn} accessibilityLabel="Preventivo accettato: non modificabile">🔒</Text>
-                ) : (
-                  <TouchableOpacity onPress={() => handleDeleteJob(item.id)} style={styles.deleteBtnContainer}>
-                    <Text style={styles.deleteBtn}>🗑️</Text>
-                  </TouchableOpacity>
-                )}
+                <TouchableOpacity onPress={() => handleDeleteJob(item.id)} style={styles.deleteBtnContainer}>
+                  <Text style={styles.deleteBtn}>🗑️</Text>
+                </TouchableOpacity>
               </View>
             ))}
           </ScrollView>
@@ -1037,7 +1033,7 @@ export default function DashboardScreen() {
                   key={`cross-${item.id}-${idx}`}
                   style={styles.crossSellCard}
                   onPress={async () => {
-                    if (selectedLavoro && !selectedLavoroLocked) {
+                    if (selectedLavoro) {
                       const { data: created } = await supabase.from('preventivi_dettaglio').insert({
                         lavoro_id: selectedLavoro.id,
                         description: item.description,
@@ -1068,31 +1064,24 @@ export default function DashboardScreen() {
         <View style={[styles.card, { backgroundColor: colors.card, shadowColor: colors.cardShadow }]}>
           <View style={styles.cardHeader}>
             <Text style={[styles.cardTitle, { color: colors.text }]}>{t('sections.detailsLabel')} {selectedLavoro.title}</Text>
-            {selectedLavoroLocked ? null : <View style={{ flexDirection: 'row', gap: 8 }}>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
               <TouchableOpacity style={styles.smallBtn} onPress={() => setShowCostoModal(true)}>
                 <Text style={styles.smallBtnText}>+ {t('actions.add')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.btnQuote} onPress={() => (navigation as any).navigate('Quote', { lavoro: selectedLavoro })}>
                 <Text style={styles.btnQuoteText}>{t('main.generateQuote')}</Text>
               </TouchableOpacity>
-            </View>}
+            </View>
           </View>
-          {selectedLavoroLocked ? (
-            <TouchableOpacity style={styles.lockedBanner} onPress={() => (navigation as any).navigate('Preventivi')} accessibilityRole="button">
-              <Text style={styles.lockedBannerText}>🔒 Preventivo accettato dal cliente: non si può più modificare. Tocca per vederlo.</Text>
-            </TouchableOpacity>
-          ) : null}
           {costi.map((item) => (
             <View key={item.id} style={styles.costoRowContainer}>
               <View style={[styles.costoRow, { borderBottomColor: colors.border }]}>
                 <Text style={[styles.costoDesc, { color: colors.text }]}>{item.description}</Text>
                 <Text style={[styles.costoPrice, { color: colors.primary }]}>€{(item.quantity * item.unit_price * (1 + (Number(item.tax_rate) || 0) / 100)).toFixed(2)}</Text>
               </View>
-              {selectedLavoroLocked ? null : (
-                <TouchableOpacity onPress={() => handleDeleteCosto(item.id)} style={styles.deleteBtnContainer}>
-                  <Text style={styles.deleteBtn}>🗑️</Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity onPress={() => handleDeleteCosto(item.id)} style={styles.deleteBtnContainer}>
+                <Text style={styles.deleteBtn}>🗑️</Text>
+              </TouchableOpacity>
             </View>
           ))}
         </View>
@@ -1215,7 +1204,7 @@ export default function DashboardScreen() {
         transcript={voiceDraft?.transcript || ''}
         items={voiceDraft?.items || []}
         clienti={clienti}
-        lavori={openLavori}
+        lavori={lavori}
         initialClienteId={voiceDraft?.clienteId || null}
         initialLavoroId={voiceDraft?.lavoroId || null}
         suggestedJobTitle={voiceDraft?.jobTitle || null}
@@ -1288,8 +1277,6 @@ const styles = StyleSheet.create({
   nav: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 18, borderTopWidth: 1, borderTopColor: '#e2e8f0', marginTop: 'auto' },
   navScroll: { flexGrow: 0, borderTopWidth: 1, marginTop: 'auto' },
   navContent: { paddingVertical: 18, gap: 4 },
-  lockedBanner: { minHeight: 64, justifyContent: 'center', backgroundColor: '#dcfce7', borderRadius: 14, padding: 14, marginBottom: 12 },
-  lockedBannerText: { color: '#166534', fontSize: 17, fontWeight: '700' },
   navBtn: { padding: 10 },
   navText: { fontSize: 14, color: '#64748b', fontWeight: '600' },
   voiceCenterWrap: { alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
