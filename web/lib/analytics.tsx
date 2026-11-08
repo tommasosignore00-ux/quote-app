@@ -29,8 +29,9 @@ function storeConsent(value: Consent | null) {
   }
 }
 
-// The quote link carries the client's credential and the client gave no consent.
-const isPrivatePath = (path: string | null) => !!path && path.startsWith('/q/');
+// Quote links and password reset links carry a credential in the URL.
+const isPrivatePath = (path: string | null) =>
+  !!path && (path.startsWith('/q/') || path.startsWith('/auth/reset-password'));
 
 let started = false;
 

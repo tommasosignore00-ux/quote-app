@@ -2,8 +2,12 @@ const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const QUOTE_LINK = new RegExp(`/q/${UUID}`, 'gi');
 const QUOTE_API = new RegExp(`/api/public/quote/${UUID}`, 'gi');
 
+// Reset links carry the token and the address in the query string.
+const RESET_QUERY = /(\/auth\/reset-password)\?[^\s"']*/gi;
+
 export function scrubText(value: string): string {
   return value
+    .replace(RESET_QUERY, '$1')
     .replace(QUOTE_LINK, '/q/[token]')
     .replace(QUOTE_API, '/api/public/quote/[token]');
 }

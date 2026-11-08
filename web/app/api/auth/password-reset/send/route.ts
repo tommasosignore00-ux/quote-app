@@ -1,9 +1,11 @@
-import { rateLimitAuth } from '../../../../../lib/rate-limit';
+import { rateLimit, rateLimitAuth } from '../../../../../lib/rate-limit';
 import { supabaseAdmin } from '../../../../../lib/supabase-server';
 import { createHash, randomBytes } from 'crypto';
 import { NextResponse } from 'next/server';
 
 const supabase = supabaseAdmin;
+const GENERIC_MESSAGE =
+  "Se l'indirizzo è registrato, riceverai un'email con il link per reimpostare la password.";
 
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
@@ -23,21 +25,21 @@ async function sendResetEmail(email: string, resetUrl: string): Promise<void> {
       body: JSON.stringify({
         from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
         to: email,
-        subject: 'Password Reset Request',
+        subject: 'Reimposta la password di Mastrovoce',
         html: `
-          <h2>Password Reset Request</h2>
-          <p>Click the link below to reset your password. This link expires in 1 hour.</p>
+          <h2>Reimposta la password</h2>
+          <p>Apri il link per scegliere una nuova password. Il link vale per un'ora.</p>
           <a href="${resetUrl}" style="
             display: inline-block;
             padding: 10px 20px;
-            background-color: #007bff;
+            background-color: #c2410c;
             color: white;
             text-decoration: none;
             border-radius: 5px;
             margin: 10px 0;
-          ">Reset Password</a>
-          <p>Or visit: ${resetUrl}</p>
-          <p>If you did not request this, ignore this email.</p>
+          ">Reimposta la password</a>
+          <p>Oppure apri: ${resetUrl}</p>
+          <p>Se non l'hai chiesto tu, ignora questa email.</p>
         `,
       }),
     });
@@ -79,6 +81,18 @@ export async function POST(req: Request) {
       .toLowerCase()
       .replace(/[\\%_]/g, (c) => `\\${c}`);
 
+    // Per-address limit, keyed by hash: the same generic answer is returned when reached.
+    const perEmail = await rateLimit(
+      `reset-email:${hashToken(email.trim().toLowerCase())}`,
+      {
+        maxRequests: 3,
+        windowMs: 60 * 60 * 1000,
+      }
+    );
+    if (!perEmail.success) {
+      return NextResponse.json({ message: GENERIC_MESSAGE }, { status: 200 });
+    }
+
     // Find user by email
     // listUsers() restituisce solo la prima pagina (50 utenti): cerchiamo nel profilo
     const { data: profileRow, error: userError } = await supabase
@@ -87,17 +101,14 @@ export async function POST(req: Request) {
       .ilike('email', normalizedEmail)
       .maybeSingle();
     if (userError) {
-      console.error('Failed to look up user:', userError);
+      console.error('Failed to look up user:', userError.code);
       return NextResponse.json({ error: 'Failed to process request' }, { status: 500 });
     }
 
     const user = profileRow ? { id: profileRow.id as string } : null;
     if (!user) {
       // Don't reveal if email exists (security)
-      return NextResponse.json(
-        { message: 'If this email exists, a password reset link has been sent' },
-        { status: 200 }
-      );
+      return NextResponse.json({ message: GENERIC_MESSAGE }, { status: 200 });
     }
 
     // Generate reset token
@@ -113,7 +124,7 @@ export async function POST(req: Request) {
     });
 
     if (insertError) {
-      console.error('Failed to insert reset token:', insertError);
+      console.error('Failed to insert reset token:', insertError.code);
       return NextResponse.json({ error: 'Failed to process request' }, { status: 500 });
     }
 
@@ -140,10 +151,7 @@ export async function POST(req: Request) {
       created_at: new Date(),
     });
 
-    return NextResponse.json(
-      { message: 'If this email exists, a password reset link has been sent' },
-      { status: 200 }
-    );
+    return NextResponse.json({ message: GENERIC_MESSAGE }, { status: 200 });
   } catch (err: any) {
     console.error('Password reset error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

@@ -25,6 +25,8 @@ const publicRoutes = [
 
 // Session timeout in milliseconds (30 minutes)
 const SESSION_TIMEOUT = 30 * 60 * 1000;
+// Must outlive the timeout: a cookie that expires with it can never detect idleness.
+const LAST_ACTIVITY_COOKIE_SECONDS = 30 * 24 * 60 * 60;
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
@@ -78,28 +80,32 @@ export async function middleware(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      console.log('Middleware: no valid user, redirecting to login', { pathname });
       return NextResponse.redirect(new URL('/auth/login', request.url));
     }
 
     // Session exists - check last activity for timeout
-    const lastActivityCookie = request.cookies.get('last-activity')?.value;
-    const lastActivity = lastActivityCookie ? parseInt(lastActivityCookie) : Date.now();
+    const lastActivity = Number(request.cookies.get('last-activity')?.value);
     const now = Date.now();
+    const idleTooLong =
+      Number.isFinite(lastActivity) &&
+      lastActivity > 0 &&
+      now - lastActivity > SESSION_TIMEOUT;
 
-    if (now - lastActivity > SESSION_TIMEOUT) {
+    // Phase 1: the cookie now outlives the timeout. Enforcement starts when
+    // SESSION_IDLE_ENFORCE=true is set, so deploying this logs nobody out.
+    if (idleTooLong && process.env.SESSION_IDLE_ENFORCE === 'true') {
       await supabase.auth.signOut();
       const redirectResponse = NextResponse.redirect(new URL('/auth/login', request.url));
       redirectResponse.cookies.delete('last-activity');
       return redirectResponse;
     }
 
-    // Update last activity timestamp
     response.cookies.set('last-activity', now.toString(), {
-      maxAge: SESSION_TIMEOUT / 1000,
-      httpOnly: false,
+      maxAge: LAST_ACTIVITY_COOKIE_SECONDS,
+      httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
+      path: '/',
     });
 
     return response;

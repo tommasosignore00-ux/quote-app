@@ -4,6 +4,7 @@ import { createHash } from 'crypto';
 import { NextResponse } from 'next/server';
 
 const supabase = supabaseAdmin;
+const INVALID_LINK = 'Il link non è valido o è scaduto. Richiedine uno nuovo.';
 
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
@@ -15,104 +16,64 @@ export async function POST(req: Request) {
     const { token, email, newPassword } = body;
 
     if (!token || !email || !newPassword) {
-      return NextResponse.json(
-        { error: 'Token, email, and new password are required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Dati mancanti' }, { status: 400 });
     }
 
     const ip =
       req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
       req.headers.get('x-real-ip') ||
       'unknown';
-    const rl = await rateLimitAuth(`password-reset-confirm:${ip}`);
+    const rl = await rateLimitAuth(`reset-confirm:${ip}`);
     if (!rl.success) {
       return NextResponse.json(
         { error: 'Troppe richieste. Riprova tra poco.' },
         { status: 429, headers: rl.headers }
       );
     }
-    const normalizedEmail = String(email)
-      .trim()
-      .toLowerCase()
-      .replace(/[\\%_]/g, (c) => `\\${c}`);
-
     if (typeof newPassword !== 'string' || newPassword.length < 8) {
       return NextResponse.json(
-        { error: 'Password must be at least 8 characters' },
+        { error: 'La password deve avere almeno 8 caratteri' },
         { status: 400 }
       );
     }
 
-    // Hash the token for lookup
-    const tokenHash = hashToken(token);
+    if (typeof token !== 'string' || typeof email !== 'string') {
+      return NextResponse.json({ error: INVALID_LINK }, { status: 400 });
+    }
 
-    // Find the reset token
-    const { data: resetTokens, error: queryError } = await supabase
-      .from('password_reset_tokens')
-      .select('user_id, expires_at, used_at')
-      .eq('token_hash', tokenHash)
-      .single();
-
-    if (queryError || !resetTokens) {
-      console.error('Reset token not found:', queryError);
+    // Atomic: of two concurrent requests with the same token, only one gets a user.
+    const { data: userId, error: consumeError } = await supabase.rpc(
+      'consume_password_reset_token',
+      { p_token_hash: hashToken(token), p_email: email.trim() }
+    );
+    if (consumeError) {
+      console.error('Reset token check failed:', consumeError.code);
       return NextResponse.json(
-        { error: 'Invalid or expired reset token' },
-        { status: 400 }
+        { error: 'Operazione non riuscita. Riprova.' },
+        { status: 500 }
       );
     }
-
-    // Check expiration
-    if (new Date(resetTokens.expires_at) < new Date()) {
-      return NextResponse.json({ error: 'Reset token has expired' }, { status: 400 });
+    if (!userId) {
+      return NextResponse.json({ error: INVALID_LINK }, { status: 400 });
     }
+    const user = { id: userId as string };
 
-    // Check if already used
-    if (resetTokens.used_at) {
-      return NextResponse.json(
-        { error: 'Reset token has already been used' },
-        { status: 400 }
-      );
-    }
-
-    // Find user by email
-    // listUsers() restituisce solo la prima pagina (50 utenti): cerchiamo nel profilo
-    const { data: profileRow, error: userError } = await supabase
-      .from('profiles')
-      .select('id, email')
-      .ilike('email', normalizedEmail)
-      .maybeSingle();
-    if (userError) {
-      console.error('Failed to look up user:', userError);
-      return NextResponse.json({ error: 'Failed to process request' }, { status: 500 });
-    }
-
-    const user = profileRow ? { id: profileRow.id as string } : null;
-    if (!user || user.id !== resetTokens.user_id) {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 400 });
-    }
-
-    // Update user password
     const { error: updateError } = await supabase.auth.admin.updateUserById(user.id, {
       password: newPassword,
     });
-
     if (updateError) {
-      console.error('Failed to update password:', updateError);
-      return NextResponse.json({ error: 'Failed to update password' }, { status: 500 });
+      console.error('Failed to update password:', updateError.status);
+      return NextResponse.json(
+        { error: 'Operazione non riuscita. Richiedi un nuovo link.' },
+        { status: 500 }
+      );
     }
 
-    // Mark token as used
-    const { error: markError } = await supabase
-      .from('password_reset_tokens')
-      .update({
-        used_at: new Date(),
-      })
-      .eq('token_hash', tokenHash);
-
-    if (markError) {
-      console.error('Failed to mark token as used:', markError);
-    }
+    // A stolen session must not survive a password reset.
+    const { error: revokeError } = await supabase.rpc('revoke_user_sessions', {
+      p_user_id: user.id,
+    });
+    if (revokeError) console.error('Could not revoke sessions:', revokeError.code);
 
     // Update password_changed_at on profile
     await supabase
@@ -130,12 +91,12 @@ export async function POST(req: Request) {
       created_at: new Date(),
     });
 
-    return NextResponse.json(
-      { message: 'Password has been reset successfully' },
-      { status: 200 }
-    );
+    return NextResponse.json({ message: 'Password aggiornata' }, { status: 200 });
   } catch (err: any) {
-    console.error('Password reset confirmation error:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('Password reset confirmation failed');
+    return NextResponse.json(
+      { error: 'Operazione non riuscita. Riprova.' },
+      { status: 500 }
+    );
   }
 }
