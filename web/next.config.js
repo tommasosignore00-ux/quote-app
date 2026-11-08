@@ -8,6 +8,20 @@ const PDF_RUNTIME_FILES = [
   './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
 ];
 
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://js.stripe.com https://*.posthog.com",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data:",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.posthog.com https://*.ingest.sentry.io https://*.ingest.de.sentry.io https://api.stripe.com",
+  "frame-src 'self' https://js.stripe.com https://checkout.stripe.com",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "object-src 'none'",
+].join('; ');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -45,6 +59,9 @@ const nextConfig = {
         { key: 'X-Content-Type-Options', value: 'nosniff' },
         { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
         { key: 'Permissions-Policy', value: 'camera=(), microphone=(self), geolocation=()' },
+        { key: 'Strict-Transport-Security', value: 'max-age=15552000' },
+        // Report-Only for now: read the violations before enforcing it.
+        { key: 'Content-Security-Policy-Report-Only', value: CONTENT_SECURITY_POLICY },
       ],
     },
   ],

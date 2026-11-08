@@ -165,7 +165,10 @@ export async function saveListinoItems(params: {
   const now = new Date().toISOString();
 
   for (const item of params.items) {
-    const description = String(item.description || '').trim();
+    const description = String(item.description || '')
+      .replace(/<\/?[a-z!][^>]*>/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
     const key = normalizeListinoDescriptionKey(description);
     if (!key) continue;
     if (seen.has(key)) {

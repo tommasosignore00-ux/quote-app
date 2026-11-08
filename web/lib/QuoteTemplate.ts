@@ -1,3 +1,5 @@
+import sanitizeHtml from 'sanitize-html';
+
 export interface QuoteData {
   lavoroTitle: string;
   clienteName: string;
@@ -192,7 +194,8 @@ function escapeTemplateValue(value: string): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 /**
@@ -234,8 +237,9 @@ function renderItemRows(
             vat: `${vatPercent}%`,
             total: formatMoney(currency, quantity * price * lineDiscountFactor(item), cc),
           };
-          return row.replace(/\{\{\s*item\.(\w+)\s*\}\}/g, (_m, field: string) =>
-            escapeTemplateValue(fields[field] ?? '')
+          return row.replace(
+            /\{\{\s*item\.(\w+)\s*\}\}/g,
+            (_m, field: string) => fields[field] ?? ''
           );
         })
         .join('\n');
@@ -243,28 +247,111 @@ function renderItemRows(
   );
 }
 
+const TEMPLATE_ALLOWED_TAGS = [
+  'html',
+  'head',
+  'body',
+  'meta',
+  'title',
+  'style',
+  'div',
+  'span',
+  'p',
+  'br',
+  'hr',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'strong',
+  'b',
+  'em',
+  'i',
+  'u',
+  'small',
+  'sub',
+  'sup',
+  'ul',
+  'ol',
+  'li',
+  'table',
+  'thead',
+  'tbody',
+  'tfoot',
+  'tr',
+  'th',
+  'td',
+  'caption',
+  'colgroup',
+  'col',
+  'img',
+  'a',
+  'center',
+  'font',
+  'section',
+  'header',
+  'footer',
+  'main',
+  'article',
+  'blockquote',
+  'pre',
+  'code',
+];
+
 /**
  * Removes from a template anything that could run code, load external content or
  * submit data: templates come from user files and AI output, and end up in the app,
  * in emails and on the client's public page.
  */
 export function sanitizeTemplateMarkup(html: string): string {
-  return html
-    .replace(
-      /<\s*(script|iframe|object|embed|form|frameset|frame|applet)\b[\s\S]*?<\s*\/\s*\1\s*>/gi,
-      ''
-    )
-    .replace(
-      /<\s*(script|iframe|object|embed|form|input|button|textarea|select|link|base|frame|applet)\b[^>]*>/gi,
-      ''
-    )
-    .replace(/<\s*meta\b(?![^>]*\b(?:name=["']?color-scheme|charset=))[^>]*>/gi, '')
-    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    .replace(
-      /(href|src|action|formaction)\s*=\s*(["'])\s*(?:javascript|vbscript|data:text\/html)[^"']*\2/gi,
-      '$1=$2#$2'
-    )
-    .replace(/\ssrc\s*=\s*(["'])(?!data:image\/|https:\/\/)[^"']*\1/gi, '')
+  const clean = sanitizeHtml(html, {
+    allowedTags: TEMPLATE_ALLOWED_TAGS,
+    allowVulnerableTags: true, // <style> is needed by templates; its content is filtered below
+    allowedAttributes: {
+      '*': [
+        'class',
+        'style',
+        'id',
+        'title',
+        'lang',
+        'dir',
+        'align',
+        'valign',
+        'width',
+        'height',
+        'border',
+        'cellpadding',
+        'cellspacing',
+        'bgcolor',
+        'colspan',
+        'rowspan',
+        'data-*',
+      ],
+      a: ['href', 'target', 'rel'],
+      img: ['src', 'alt'],
+      meta: ['charset', 'name', 'content'],
+    },
+    allowedSchemes: ['https', 'mailto', 'tel'],
+    allowedSchemesByTag: { img: ['https', 'data'] },
+    allowProtocolRelative: false,
+    exclusiveFilter: (frame) =>
+      frame.tag === 'meta' &&
+      !('charset' in frame.attribs) &&
+      frame.attribs.name !== 'color-scheme',
+    transformTags: {
+      img: (tagName, attribs) => {
+        const { src, ...rest } = attribs;
+        const safe =
+          /^\{\{/.test(src || '') ||
+          /^https:\/\//i.test(src || '') ||
+          /^data:image\/(png|jpe?g|gif|webp);/i.test(src || '');
+        return { tagName, attribs: safe ? attribs : rest };
+      },
+    },
+  });
+  return clean
     .replace(/@import[^;]*;?/gi, '')
     .replace(/url\(\s*(["']?)(?!data:image\/)[^)]*\1\s*\)/gi, 'none')
     .replace(/expression\s*\(/gi, '(');
@@ -871,50 +958,84 @@ function processCustomTemplate(template: string, data: QuoteData): string {
       Number(data.vat_percent) || 0
     )
   )
-    .replace(/\{\{lavoroTitle\}\}/g, data.lavoroTitle || '')
-    .replace(/\{\{clienteName\}\}/g, data.clienteName || '')
-    .replace(/\{\{clienteEmail\}\}/g, data.clienteEmail || '')
-    .replace(/\{\{clienteAddress\}\}/g, data.clienteAddress || '')
-    .replace(/\{\{clienteCity\}\}/g, data.clienteCity || '')
-    .replace(/\{\{clientePostalCode\}\}/g, data.clientePostalCode || '')
-    .replace(/\{\{clienteVat\}\}/g, data.clienteVat || '')
-    .replace(/\{\{clienteFiscalCode\}\}/g, data.clienteFiscalCode || '')
-    .replace(/\{\{clientePhone\}\}/g, data.clientePhone || '')
-    .replace(/\{\{vatPercent\}\}/g, `${Number(data.vat_percent) || 0}%`)
-    .replace(/\{\{revision\}\}/g, String(data.revision).padStart(2, '0'))
-    .replace(/\{\{revisionNumber\}\}/g, String(data.revision))
-    .replace(/\{\{companyName\}\}/g, data.companyName || '')
-    .replace(/\{\{vatNumber\}\}/g, data.vatNumber || '')
-    .replace(/\{\{fiscalCode\}\}/g, data.fiscalCode || '')
-    .replace(/\{\{address\}\}/g, data.address || '')
-    .replace(/\{\{city\}\}/g, data.city || '')
-    .replace(/\{\{postalCode\}\}/g, data.postalCode || '')
-    .replace(/\{\{country\}\}/g, data.country || '')
-    .replace(/\{\{iban\}\}/g, data.iban || '')
-    .replace(/\{\{swift\}\}/g, data.swift || '')
-    .replace(/\{\{currency\}\}/g, currency)
-    .replace(/\{\{taxLabel\}\}/g, taxLabel)
-    .replace(/\{\{descriptionLabel\}\}/g, descriptionLabel)
-    .replace(/\{\{quantityLabel\}\}/g, quantityLabel)
-    .replace(/\{\{priceLabel\}\}/g, priceLabel)
-    .replace(/\{\{subtotalColLabel\}\}/g, subtotalColLabel)
-    .replace(/\{\{totalLabel\}\}/g, totalLabel)
-    .replace(/\{\{itemsTable\}\}/g, itemsTableHtml)
-    .replace(/\{\{items\}\}/g, itemsHtml)
-    .replace(/\{\{subtotal\}\}/g, `${formatMoney(currency, subtotal, cc)}`)
-    .replace(/\{\{taxes\}\}/g, `${formatMoney(currency, taxes, cc)}`)
-    .replace(/\{\{total\}\}/g, `${formatMoney(currency, total, cc)}`)
-    .replace(/\{\{date\}\}/g, formatQuoteDate(cc))
-    .replace(/\{\{dateTime\}\}/g, formatQuoteDate(cc, true))
-    .replace(/\{\{acceptanceLink\}\}/g, ACCEPTANCE_LINK_MARKER)
-    .replace(/\{\{acceptanceUrl\}\}/g, ACCEPTANCE_URL_MARKER)
+    .replace(/\{\{lavoroTitle\}\}/g, () => data.lavoroTitle || '')
+    .replace(/\{\{clienteName\}\}/g, () => data.clienteName || '')
+    .replace(/\{\{clienteEmail\}\}/g, () => data.clienteEmail || '')
+    .replace(/\{\{clienteAddress\}\}/g, () => data.clienteAddress || '')
+    .replace(/\{\{clienteCity\}\}/g, () => data.clienteCity || '')
+    .replace(/\{\{clientePostalCode\}\}/g, () => data.clientePostalCode || '')
+    .replace(/\{\{clienteVat\}\}/g, () => data.clienteVat || '')
+    .replace(/\{\{clienteFiscalCode\}\}/g, () => data.clienteFiscalCode || '')
+    .replace(/\{\{clientePhone\}\}/g, () => data.clientePhone || '')
+    .replace(/\{\{vatPercent\}\}/g, () => `${Number(data.vat_percent) || 0}%`)
+    .replace(/\{\{revision\}\}/g, () => String(data.revision).padStart(2, '0'))
+    .replace(/\{\{revisionNumber\}\}/g, () => String(data.revision))
+    .replace(/\{\{companyName\}\}/g, () => data.companyName || '')
+    .replace(/\{\{vatNumber\}\}/g, () => data.vatNumber || '')
+    .replace(/\{\{fiscalCode\}\}/g, () => data.fiscalCode || '')
+    .replace(/\{\{address\}\}/g, () => data.address || '')
+    .replace(/\{\{city\}\}/g, () => data.city || '')
+    .replace(/\{\{postalCode\}\}/g, () => data.postalCode || '')
+    .replace(/\{\{country\}\}/g, () => data.country || '')
+    .replace(/\{\{iban\}\}/g, () => data.iban || '')
+    .replace(/\{\{swift\}\}/g, () => data.swift || '')
+    .replace(/\{\{currency\}\}/g, () => currency)
+    .replace(/\{\{taxLabel\}\}/g, () => taxLabel)
+    .replace(/\{\{descriptionLabel\}\}/g, () => descriptionLabel)
+    .replace(/\{\{quantityLabel\}\}/g, () => quantityLabel)
+    .replace(/\{\{priceLabel\}\}/g, () => priceLabel)
+    .replace(/\{\{subtotalColLabel\}\}/g, () => subtotalColLabel)
+    .replace(/\{\{totalLabel\}\}/g, () => totalLabel)
+    .replace(/\{\{itemsTable\}\}/g, () => itemsTableHtml)
+    .replace(/\{\{items\}\}/g, () => itemsHtml)
+    .replace(/\{\{subtotal\}\}/g, () => `${formatMoney(currency, subtotal, cc)}`)
+    .replace(/\{\{taxes\}\}/g, () => `${formatMoney(currency, taxes, cc)}`)
+    .replace(/\{\{total\}\}/g, () => `${formatMoney(currency, total, cc)}`)
+    .replace(/\{\{date\}\}/g, () => formatQuoteDate(cc))
+    .replace(/\{\{dateTime\}\}/g, () => formatQuoteDate(cc, true))
+    .replace(/\{\{acceptanceLink\}\}/g, () => ACCEPTANCE_LINK_MARKER)
+    .replace(/\{\{acceptanceUrl\}\}/g, () => ACCEPTANCE_URL_MARKER)
     // Placeholders with no value (or misspelt) must not reach the client as "{{...}}".
     .replace(/\{\{[^{}]*\}\}/g, '');
 
   return html;
 }
 
-export function generateQuoteHTML(data: QuoteData): string {
+/** Every text that reaches the document is escaped once, here, at the entrance. */
+function escapeQuoteData(data: QuoteData): QuoteData {
+  const text = <T extends string | undefined | null>(value: T): T =>
+    (typeof value === 'string' ? escapeTemplateValue(value) : value) as T;
+  return {
+    ...data,
+    lavoroTitle: text(data.lavoroTitle),
+    clienteName: text(data.clienteName),
+    clienteEmail: text(data.clienteEmail),
+    clienteAddress: text(data.clienteAddress),
+    clienteCity: text(data.clienteCity),
+    clientePostalCode: text(data.clientePostalCode),
+    clienteVat: text(data.clienteVat),
+    clienteFiscalCode: text(data.clienteFiscalCode),
+    clientePhone: text(data.clientePhone),
+    companyName: text(data.companyName),
+    vatNumber: text(data.vatNumber),
+    fiscalCode: text(data.fiscalCode),
+    address: text(data.address),
+    city: text(data.city),
+    postalCode: text(data.postalCode),
+    country: text(data.country),
+    iban: text(data.iban),
+    swift: text(data.swift),
+    items: data.items.map((item) => ({
+      ...item,
+      description: text(item.description),
+      code: text(item.code),
+      unit: text(item.unit),
+    })),
+  };
+}
+
+export function generateQuoteHTML(rawData: QuoteData): string {
+  const data = escapeQuoteData(rawData);
   // Use custom template if provided
   if (data.templateType === 'custom' && data.customTemplateHtml) {
     return processCustomTemplate(data.customTemplateHtml, data);

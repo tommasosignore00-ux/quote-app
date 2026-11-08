@@ -126,6 +126,15 @@ export default function ProfileScreen() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error(t('messages.notAuthenticated'));
+      const { data: stored } = await supabase.from('profiles').select('custom_template_html').eq('id', user.id).single();
+      if ((stored?.custom_template_html ?? null) !== (profile.custom_template_html ?? null)) {
+        const templateRes = await fetch(buildWebApiUrl('/api/templates/save'), {
+          method: 'POST',
+          headers: await getWebApiAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ template: profile.custom_template_html ?? null }),
+        });
+        if (!templateRes.ok) throw new Error('Salvataggio del template non riuscito');
+      }
       await supabase.from('profiles').update({
         company_name: profile.company_name,
         vat_number: profile.vat_number,
@@ -141,7 +150,6 @@ export default function ProfileScreen() {
         postal_code: profile.postal_code,
         iban: profile.iban,
         swift_bic: profile.swift_bic,
-        custom_template_html: profile.custom_template_html,
         us_state: usState || null,
         updated_at: new Date().toISOString(),
       }).eq('id', user.id);

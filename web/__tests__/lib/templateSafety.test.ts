@@ -48,8 +48,8 @@ describe('template safety and robustness', () => {
       /<script|<iframe|<form|<input|<link|http-equiv|onclick|javascript:|tracker\.example|@import/i
     );
     expect(clean).toContain('<p>ok</p>');
-    expect(clean).toContain('<img src="https://cdn.example/logo.png">');
-    expect(clean).toContain('<meta charset="utf-8">');
+    expect(clean).toContain('<img src="https://cdn.example/logo.png" />');
+    expect(clean).toContain('<meta charset="utf-8" />');
   });
 
   it('hides optional client data with its label when it is missing', () => {

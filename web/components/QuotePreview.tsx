@@ -21,6 +21,22 @@ type QuotePreviewProps = {
   lavoro: Lavoro;
 };
 
+/**
+ * Off-screen copy for the PDF. allow-same-origin lets html2canvas read the document;
+ * without allow-scripts nothing inside it can run.
+ */
+function renderForCapture(html: string): Promise<HTMLIFrameElement> {
+  return new Promise((resolve) => {
+    const frame = document.createElement('iframe');
+    frame.setAttribute('sandbox', 'allow-same-origin');
+    frame.style.cssText =
+      'position:fixed;left:-10000px;top:0;width:800px;height:1200px;border:0';
+    frame.onload = () => resolve(frame);
+    frame.srcdoc = html;
+    document.body.appendChild(frame);
+  });
+}
+
 export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
   const { t } = useTranslation();
   const [showPreview, setShowPreview] = useState(false);
@@ -151,7 +167,8 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
     const rev = String(revision).padStart(2, '0');
 
     if (asPdf) {
-      const el = document.getElementById('quote-preview-content');
+      const frame = await renderForCapture(htmlContent);
+      const el = frame.contentDocument?.body;
       if (el) {
         const canvas = await html2canvas(el, { scale: 2 });
         const pdf = new jsPDF({ format: 'a4' });
@@ -161,6 +178,7 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
         pdf.addImage(imgData, 'PNG', 0, 0, pdfW, Math.min(pdfH, 297));
         pdf.save(`Preventivo-${lavoro.title}-Rev${rev}.pdf`);
       }
+      frame.remove();
     } else {
       const blob = new Blob([htmlContent], { type: 'text/html' });
       const url = URL.createObjectURL(blob);
@@ -281,10 +299,12 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
                 ✕
               </button>
             </div>
-            <div
-              id="quote-preview-content"
-              className="flex-1 overflow-auto p-4"
-              dangerouslySetInnerHTML={{ __html: htmlContent }}
+            <iframe
+              title={t('quote.preview')}
+              sandbox=""
+              srcDoc={htmlContent}
+              className="flex-1 w-full border-0"
+              style={{ minHeight: '60vh' }}
             />
             <div className="p-4 border-t flex gap-2 flex-wrap">
               {!approved ? (

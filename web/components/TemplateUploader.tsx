@@ -55,17 +55,18 @@ export default function TemplateUploader() {
     );
   };
 
-  const saveTemplate = async (content: string) => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) throw new Error('Non autenticato');
+  // Saved through the server, which sanitizes the markup.
+  const storeTemplate = async (content: string | null) => {
+    const res = await fetch('/api/templates/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ template: content }),
+    });
+    if (!res.ok) throw new Error('Salvataggio del template non riuscito');
+  };
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({ custom_template_html: content })
-      .eq('id', user.id);
-    if (error) throw error;
+  const saveTemplate = async (content: string) => {
+    await storeTemplate(content);
 
     setHasTemplate(true);
     setTemplateSize(new Blob([content]).size);
@@ -186,15 +187,7 @@ export default function TemplateUploader() {
     if (!confirm('Vuoi rimuovere il template personalizzato?')) return;
 
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error('Non autenticato');
-
-      await supabase
-        .from('profiles')
-        .update({ custom_template_html: null })
-        .eq('id', user.id);
+      await storeTemplate(null);
 
       setHasTemplate(false);
       setTemplateSize(0);
