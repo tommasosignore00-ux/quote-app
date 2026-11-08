@@ -31,7 +31,7 @@ async function senderFor(userId: string): Promise<string> {
  */
 async function inlineCss(html: string): Promise<string> {
   try {
-    const { default: juice } = await import('npm:juice@11')
+    const { default: juice } = await import('npm:juice@11.1.1')
     return juice(html, {
       removeStyleTags: false,
       preserveMediaQueries: true,
@@ -82,6 +82,11 @@ function withAcceptanceLink(html: string, token: string | null, appUrl: string):
     return html.split(ACCEPTANCE_LINK_MARKER).join(block).split(ACCEPTANCE_URL_MARKER).join(url)
   }
   return html.includes('</body>') ? html.replace('</body>', `${block}</body>`) : `${html}${block}`
+}
+
+async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
 function validPdf(base64: unknown): string | null {
@@ -201,7 +206,11 @@ serve(async (req) => {
 
     const { error: markError } = await admin
       .from('preventivi_versioni')
-      .update({ sent_via_email: true, sent_at: new Date().toISOString() })
+      .update({
+        sent_via_email: true,
+        sent_at: new Date().toISOString(),
+        content_sha256: await sha256Hex(version.html_content),
+      })
       .eq('id', version.id)
     if (markError) console.error('Could not mark the version as sent:', markError.code)
 

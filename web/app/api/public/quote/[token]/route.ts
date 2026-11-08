@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '../../../../../lib/supabase-server';
 import { rateLimit } from '../../../../../lib/rate-limit';
@@ -59,7 +60,9 @@ export async function POST(req: Request, { params }: { params: { token: string }
 
     const { data: version, error } = await supabaseAdmin
       .from('preventivi_versioni')
-      .select('id, lavoro_id, revision, client_decision, public_token_expires_at')
+      .select(
+        'id, lavoro_id, revision, client_decision, public_token_expires_at, html_content'
+      )
       .eq('public_token', params.token)
       .maybeSingle();
     if (error) throw new Error(error.message);
@@ -85,6 +88,10 @@ export async function POST(req: Request, { params }: { params: { token: string }
       .update({
         client_decision: decision,
         client_decision_at: decidedAt,
+        // Which exact document this answer refers to.
+        decision_content_sha256: createHash('sha256')
+          .update(version.html_content ?? '')
+          .digest('hex'),
         client_signer_name: name || null,
         client_note: note || null,
         client_ip: ip,
