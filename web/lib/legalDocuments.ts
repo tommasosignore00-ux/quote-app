@@ -186,7 +186,7 @@ Contatto privacy e supporto: [${LEGAL_SUPPORT_EMAIL}](mailto:${LEGAL_SUPPORT_EMA
 
 Responsabile della protezione dei dati: **[DPO, SE NOMINATO — DA COMPILARE]**.
 
-Per i dati dei propri clienti inseriti nell'app, l'impresa che usa il servizio e' titolare e Quote App agisce come responsabile del trattamento **[RUOLI E ACCORDO EX ART. 28 — DA CONFERMARE CON IL LEGALE]**.
+Per i dati dei propri clienti inseriti nell'app, l'impresa che usa il servizio e' titolare e Mastrovoce agisce come responsabile del trattamento **[RUOLI E ACCORDO EX ART. 28 — DA CONFERMARE CON IL LEGALE]**.
 
 ## 2. Dati trattati
 - dati di registrazione e profilo, come email, dati aziendali e preferenze;
@@ -195,7 +195,7 @@ Per i dati dei propri clienti inseriti nell'app, l'impresa che usa il servizio e
 - modelli di preventivo caricati, da usare senza dati reali di clienti;
 - per chi risponde a un preventivo tramite link: nome, eventuale nota, data, indirizzo IP e browser;
 - dati tecnici e di sicurezza, come log ed errori applicativi;
-- dati di pagamento e abbonamento, gestiti tramite Stripe; Quote App non memorizza i dati completi della carta;
+- dati di pagamento e abbonamento, gestiti tramite Stripe; Mastrovoce non memorizza i dati completi della carta;
 - comunicazioni inviate al supporto;
 - statistiche di utilizzo, solo con il consenso dell'utente.
 
