@@ -12,7 +12,7 @@
     "plugins": [
       "expo-dev-client",
       [
-        "expo-av",
+        "expo-audio",
         {
           "microphonePermission": "Permetti l'accesso al microfono per registrare comandi vocali."
         }

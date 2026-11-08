@@ -3,7 +3,15 @@ import { StatusBar } from 'expo-status-bar';
 import { View, Text, StyleSheet, DeviceEventEmitter, Platform } from 'react-native';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { watchEvents } from 'react-native-watch-connectivity';
+// Optional: the Apple Watch module is missing in Expo Go and on Android builds, and
+// a top-level import would crash the app at start there.
+let watchEvents: any = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  watchEvents = require('react-native-watch-connectivity').watchEvents;
+} catch {
+  watchEvents = null;
+}
 import i18n from './lib/i18n';
 import { isSupabaseConfigured } from './lib/supabase';
 import { ThemeProvider, useTheme } from './lib/darkMode';

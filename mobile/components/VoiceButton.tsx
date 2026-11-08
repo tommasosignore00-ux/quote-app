@@ -2,7 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import { getFunctionHeaders } from '../lib/supabaseFunctions';
 import { TouchableOpacity, Text, StyleSheet, Alert, View, Animated, DeviceEventEmitter } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Audio } from 'expo-av';
+import {
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder,
+} from 'expo-audio';
 import { triggerHaptic } from '../lib/haptics';
 import { saveOfflineRecording, syncOfflineRecordings, getPendingRecordingsCount } from '../lib/offlineRecording';
 import NetInfo from '@react-native-community/netinfo';
@@ -24,7 +29,9 @@ export default function VoiceButton({ onResult, clienti = [], context, size = 64
   const { t } = useTranslation();
   const [recording, setRecording] = useState(false);
   const [pendingOffline, setPendingOffline] = useState(0);
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  // expo-audio recorder (expo-av is deprecated and removed in the next Expo SDKs).
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const isRecordingRef = useRef(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   // Pulse animation while recording
@@ -68,7 +75,7 @@ export default function VoiceButton({ onResult, clienti = [], context, size = 64
 
   const startRecording = async () => {
     try {
-      const { granted } = await Audio.requestPermissionsAsync();
+      const { granted } = await requestRecordingPermissionsAsync();
       if (!granted) {
         if (onMicDenied) {
           onMicDenied();
@@ -77,14 +84,13 @@ export default function VoiceButton({ onResult, clienti = [], context, size = 64
         }
         return;
       }
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
       });
-      const rec = new Audio.Recording();
-      await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await rec.startAsync();
-      recordingRef.current = rec;
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      isRecordingRef.current = true;
       setRecording(true);
       // Punto 10: Feedback Aptico
       triggerHaptic('recordingStart');
@@ -95,12 +101,14 @@ export default function VoiceButton({ onResult, clienti = [], context, size = 64
   };
 
   const stopRecording = async () => {
-    if (!recordingRef.current) return;
+    if (!isRecordingRef.current) return;
     try {
-      await recordingRef.current.stopAndUnloadAsync();
-      const uri = recordingRef.current.getURI();
-      recordingRef.current = null;
+      await recorder.stop();
+      const uri = recorder.uri;
+      isRecordingRef.current = false;
       setRecording(false);
+      // Back to playback mode, so other audio is not routed as a recording session.
+      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
       triggerHaptic('recordingStop');
 
       if (!uri) return;
