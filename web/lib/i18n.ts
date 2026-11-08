@@ -5,7 +5,7 @@ import { ACTIVE_LANGUAGE_CODES, DEFAULT_LANGUAGE } from './constants';
 const resources = {
   it: {
     translation: {
-      app: { title: 'Mastrovoce', subtitle: 'Preventivi con IA vocale' },
+      app: { title: 'Mastrovoce', subtitle: 'Il tuo preventivo, dettato in cantiere' },
       auth: {
         register: 'Registrati',
         login: 'Accedi',

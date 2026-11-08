@@ -1,7 +1,7 @@
 {
-  "name": "Mastrovoce - Preventivi con AI Vocale",
+  "name": "Mastrovoce - Il tuo preventivo, dettato in cantiere",
   "short_name": "Mastrovoce",
-  "description": "Gestione preventivi con input vocale, ricerca semantica e sincronizzazione real-time.",
+  "description": "Detti le voci in cantiere e il preventivo esce con i tuoi prezzi, il tuo formato e il nome della tua azienda.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",

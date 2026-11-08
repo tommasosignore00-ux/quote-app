@@ -53,19 +53,20 @@ export default function HomePage() {
           <section className="grid items-center gap-10 lg:grid-cols-[1.1fr_0.9fr]">
             <div>
               <div className="mb-4 inline-flex rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1 text-sm text-emerald-300">
-                Per idraulici, elettricisti e artigiani
+                Per fabbri, idraulici, elettricisti e piccole imprese edili
               </div>
               <h2 className="max-w-3xl text-4xl font-bold leading-tight sm:text-6xl">
-                Detta le voci dal cantiere. Il preventivo lo mandi tu.
+                Detti le voci in cantiere. Il preventivo esce con i tuoi prezzi.
               </h2>
               <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300">
-                Parli al telefono, controlli quello che hai detto e prepari il preventivo
-                con i tuoi prezzi. Niente viene salvato senza la tua conferma.
+                Carichi il tuo listino in PDF, Excel o METEL. Detti materiali e
+                lavorazioni, controlli le righe e mandi il preventivo a nome della tua
+                azienda.
               </p>
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <Link href="/auth/register" className="btn-primary text-center">
-                  {t('auth.register')}
+                  Prova con il tuo listino
                 </Link>
                 <Link
                   href="/auth/login"
@@ -77,21 +78,27 @@ export default function HomePage() {
 
               <div className="mt-8 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-sm font-semibold text-white">Preventivi e fatture</p>
+                  <p className="text-sm font-semibold text-white">I prezzi sono i tuoi</p>
                   <p className="mt-2 text-sm text-slate-300">
-                    Con il nome della tua azienda, da scaricare o inviare al cliente.
+                    Dici la voce, il prezzo arriva dal tuo listino. Se il PDF non ha
+                    prezzi, li indichi tu per forma.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-sm font-semibold text-white">Detti le voci</p>
+                  <p className="text-sm font-semibold text-white">
+                    Il documento è il tuo
+                  </p>
                   <p className="mt-2 text-sm text-slate-300">
-                    Materiali e lavorazioni a voce, con i prezzi del tuo listino.
+                    Il tuo modello Word o HTML, il tuo logo, il nome della tua azienda.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-sm font-semibold text-white">Web e mobile</p>
+                  <p className="text-sm font-semibold text-white">
+                    Il cliente accetta online
+                  </p>
                   <p className="mt-2 text-sm text-slate-300">
-                    In cantiere dal telefono, in ufficio dal computer.
+                    Scrive nome e cognome dal link. La risposta non si cambia più e resta
+                    registrata con data e ora.
                   </p>
                 </div>
               </div>
@@ -103,27 +110,99 @@ export default function HomePage() {
               </p>
               <div className="mt-6 space-y-4">
                 <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
-                  <p className="font-semibold text-white">1. Crea cliente e lavoro</p>
+                  <p className="font-semibold text-white">1. Carica listino e modello</p>
                   <p className="mt-1 text-sm text-slate-300">
-                    Organizza clienti, lavori, listini e dettagli fiscali in un solo
-                    posto.
+                    Il listino in PDF, Excel o METEL. Per il tuo formato, un tuo
+                    preventivo in Word o HTML, senza dati di clienti veri.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
-                  <p className="font-semibold text-white">2. Genera il documento</p>
+                  <p className="font-semibold text-white">2. Detta le voci in cantiere</p>
                   <p className="mt-1 text-sm text-slate-300">
-                    Prepara preventivi o fatture con totali, IVA, note e righe
-                    personalizzate.
+                    Dal telefono dici materiali e lavorazioni. Controlli le righe: niente
+                    viene salvato senza la tua conferma.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
-                  <p className="font-semibold text-white">3. Scarica o invia</p>
+                  <p className="font-semibold text-white">3. Mandalo al cliente</p>
                   <p className="mt-1 text-sm text-slate-300">
-                    Mandi il PDF o il link: il cliente accetta o rifiuta online.
+                    Mandi il PDF o il link a nome della tua azienda. Dal link il cliente
+                    accetta o rifiuta online.
                   </p>
                 </div>
               </div>
             </div>
+          </section>
+
+          <section className="mt-12">
+            <h2 className="text-2xl font-bold sm:text-3xl">
+              Quello che ti stai chiedendo
+            </h2>
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                <p className="text-lg font-semibold text-white">
+                  &ldquo;Non ho tempo di stare dietro a un&apos;altra app.&rdquo;
+                </p>
+                <p className="mt-3 text-sm leading-7 text-slate-300">
+                  Prepari listino e modello all&apos;inizio. Dopo, sul lavoro, a te resta
+                  parlare e controllare.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                <p className="text-lg font-semibold text-white">
+                  &ldquo;Ho già il mio Excel.&rdquo;
+                </p>
+                <p className="mt-3 text-sm leading-7 text-slate-300">
+                  Tienilo: lo carichi come listino. Cambia che non ricopi più i prezzi a
+                  mano.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                <p className="text-lg font-semibold text-white">
+                  &ldquo;Non mi fido di un&apos;app.&rdquo;
+                </p>
+                <p className="mt-3 text-sm leading-7 text-slate-300">
+                  Niente viene salvato senza la tua conferma, e il cliente vede il tuo
+                  nome. L&apos;accettazione è una registrazione di quello che il cliente
+                  ha risposto, non una garanzia legale.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                <p className="text-lg font-semibold text-white">
+                  &ldquo;Quanto mi costa?&rdquo;
+                </p>
+                <p className="mt-3 text-sm leading-7 text-slate-300">
+                  €29,99 al mese, con 7 giorni di prova per provarlo con i tuoi prezzi.
+                  Disdici quando vuoi dalla tua area account.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section className="mt-12">
+            <h2 className="text-2xl font-bold sm:text-3xl">Prezzi chiari</h2>
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                <p className="text-lg font-semibold text-white">Mensile</p>
+                <p className="mt-3 text-3xl font-bold text-white">€29,99</p>
+                <p className="text-sm text-slate-300">al mese</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                <p className="text-lg font-semibold text-white">Annuale</p>
+                <p className="mt-3 text-3xl font-bold text-white">€299,99</p>
+                <p className="text-sm text-slate-300">all&apos;anno</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                <p className="text-lg font-semibold text-white">Team</p>
+                <p className="mt-3 text-3xl font-bold text-white">€79,99</p>
+                <p className="text-sm text-slate-300">al mese, per lavorare in squadra</p>
+              </div>
+            </div>
+            <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-300">
+              I 7 giorni di prova valgono per il primo abbonamento. Al momento
+              dell&apos;attivazione serve la carta: se non disdici entro la fine della
+              prova, parte il piano che hai scelto.
+            </p>
           </section>
 
           <section className="mt-12 grid gap-4 md:grid-cols-2">
@@ -139,8 +218,7 @@ export default function HomePage() {
                 </a>
               </p>
               <p className="text-sm leading-7 text-slate-300">
-                Il servizio e&apos; accessibile da web app pubblica e area autenticata per
-                l&apos;utilizzo operativo.
+                In cantiere lo usi dal telefono, in ufficio dal computer.
               </p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
@@ -160,8 +238,7 @@ export default function HomePage() {
                 </Link>
               </div>
               <p className="mt-3 text-sm leading-7 text-slate-300">
-                La piattaforma supporta la gestione di preventivi, fatture e dati cliente
-                per attivita&apos; professionali.
+                Qui trovi come trattiamo i dati e le condizioni del servizio.
               </p>
             </div>
           </section>

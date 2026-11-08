@@ -23,7 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta
           name="description"
-          content="Mastrovoce - Detta le voci dal cantiere e prepara il preventivo per il cliente."
+          content="Detti le voci in cantiere e il preventivo esce con i tuoi prezzi, il tuo formato e il nome della tua azienda."
         />
         <meta
           name="keywords"
@@ -36,11 +36,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta property="og:type" content="website" />
         <meta
           property="og:title"
-          content="Mastrovoce - Preventivi a voce per artigiani"
+          content="Mastrovoce - Il tuo preventivo, dettato in cantiere"
         />
         <meta
           property="og:description"
-          content="Crea preventivi professionali con input vocale, ricerca semantica e sincronizzazione real-time."
+          content="Detti le voci in cantiere e il preventivo esce con i tuoi prezzi, il tuo formato e il nome della tua azienda."
         />
         <meta property="og:site_name" content="Mastrovoce" />
         <meta property="og:locale" content="it_IT" />
@@ -49,11 +49,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="twitter:card" content="summary_large_image" />
         <meta
           name="twitter:title"
-          content="Mastrovoce - Preventivi a voce per artigiani"
+          content="Mastrovoce - Il tuo preventivo, dettato in cantiere"
         />
         <meta
           name="twitter:description"
-          content="Detta le voci dal cantiere e prepara il preventivo per il cliente."
+          content="Detti le voci in cantiere e il preventivo esce con i tuoi prezzi, il tuo formato e il nome della tua azienda."
         />
 
         <meta
@@ -69,7 +69,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/manifest.json" />
 
-        <title>Mastrovoce - Preventivi a voce per artigiani</title>
+        <title>Mastrovoce - Il tuo preventivo, dettato in cantiere</title>
       </head>
       <body suppressHydrationWarning>
         <a href="#main-content" className="skip-to-content">
