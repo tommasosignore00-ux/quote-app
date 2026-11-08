@@ -37,7 +37,6 @@ let attentionPromptOpen = false;
 
 type VoiceButtonProps = {
   onResult: (result: { action: string; data?: Record<string, unknown>; text?: string; agent?: any }) => void;
-  clienti?: { id: string; name: string }[];
   context?: Record<string, unknown>;
   size?: number;
   /** Punto 2: FAB mode - position fixed bottom-right */
@@ -50,7 +49,7 @@ type VoiceButtonProps = {
   showLabel?: boolean;
 };
 
-export default function VoiceButton({ onResult, clienti = [], context, size = 64, floating = false, onMicDenied, listenToWatchEvents = false, showLabel = false }: VoiceButtonProps) {
+export default function VoiceButton({ onResult, context, size = 64, floating = false, onMicDenied, listenToWatchEvents = false, showLabel = false }: VoiceButtonProps) {
   const { t } = useTranslation();
   const [recording, setRecording] = useState(false);
   // Waiting for the transcription: further taps are ignored.
@@ -119,11 +118,14 @@ export default function VoiceButton({ onResult, clienti = [], context, size = 64
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
       const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
       if (!supabaseUrl || !supabaseAnonKey) return;
-      const { results, missing } = await syncOfflineRecordings(supabaseUrl, supabaseAnonKey);
+      const { results, missing, expired } = await syncOfflineRecordings(supabaseUrl, supabaseAnonKey);
       for (const result of results) onResultRef.current(result);
       setPendingOffline(await getPendingRecordingsCount());
       if (missing > 0) {
         Alert.alert('Registrazioni perse', missing === 1 ? 'Una registrazione salvata non è più sul telefono.' : `${missing} registrazioni salvate non sono più sul telefono.`);
+      }
+      if (expired > 0) {
+        Alert.alert('Registrazioni eliminate', expired === 1 ? 'Una registrazione non inviata aveva più di 14 giorni ed è stata eliminata.' : `${expired} registrazioni non inviate avevano più di 14 giorni e sono state eliminate.`);
       }
       askAboutStuckRecordings();
     });
@@ -164,7 +166,7 @@ export default function VoiceButton({ onResult, clienti = [], context, size = 64
   };
 
   const saveForLater = async (uri: string, message: string) => {
-    await saveOfflineRecording(uri, clienti, context);
+    await saveOfflineRecording(uri, context);
     setPendingOffline(await getPendingRecordingsCount());
     Alert.alert('📡 Registrazione salvata', message);
   };
@@ -202,7 +204,7 @@ export default function VoiceButton({ onResult, clienti = [], context, size = 64
         return;
       }
 
-      const outcome = await uploadVoiceRecording(supabaseUrl, uri, clienti, context);
+      const outcome = await uploadVoiceRecording(supabaseUrl, uri, context);
       if (outcome.kind === 'transient') {
         triggerHaptic('aiError');
         await saveForLater(uri, 'Il servizio non ha risposto: riprovo da solo appena possibile, non devi ridettare.');

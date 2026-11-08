@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { minimizeVoiceContext } from '../_shared/voiceContext.ts'
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')
 const OPENAI_TRANSCRIBE_MODEL = Deno.env.get('OPENAI_TRANSCRIBE_MODEL') || 'whisper-1'
@@ -299,7 +300,7 @@ serve(async (req) => {
       }
     }
 
-    const context = { ...buildVoiceAgentContext(formData), catalogVocabulary }
+    const context = minimizeVoiceContext({ ...buildVoiceAgentContext(formData), catalogVocabulary }, text)
     const completionRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {

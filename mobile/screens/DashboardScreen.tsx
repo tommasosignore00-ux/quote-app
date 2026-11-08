@@ -1034,7 +1034,7 @@ export default function DashboardScreen() {
       {!selectedClienteId && (
         <View style={styles.voiceCenterWrap}>
           {canUseVoice && (
-            <VoiceButton onResult={handleVoiceResult} clienti={clienti} context={voiceContext} size={220} onMicDenied={handleMicDenied} showLabel />
+            <VoiceButton onResult={handleVoiceResult} context={voiceContext} size={220} onMicDenied={handleMicDenied} showLabel />
           )}
         </View>
       )}
@@ -1243,7 +1243,7 @@ export default function DashboardScreen() {
 
       {/* Inside a customer or job the big microphone stays reachable, bottom right. */}
       {canUseVoice && selectedClienteId ? (
-        <VoiceButton onResult={handleVoiceResult} clienti={clienti} context={voiceContext} size={84} floating onMicDenied={handleMicDenied} />
+        <VoiceButton onResult={handleVoiceResult} context={voiceContext} size={84} floating onMicDenied={handleMicDenied} />
       ) : null}
 
       <QuoteAcceptedPopup />

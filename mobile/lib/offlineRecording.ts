@@ -7,14 +7,24 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { getFunctionHeaders } from './supabaseFunctions';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
+import { supabase } from './supabase';
 
 const OFFLINE_RECORDINGS_KEY = '@quoteapp:offline_recordings';
+
+// TODO(legale): durata PROVVISORIA delle registrazioni non inviate.
+const OFFLINE_RECORDING_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+
+// Caches is outside iOS backups and Android auto-backup. iOS may empty it when the disk
+// is full: the sync then reports the recording as lost.
+const offlineDirectory = () => `${FileSystem.cacheDirectory}offline_recordings/`;
+const legacyOfflineDirectory = () => `${FileSystem.documentDirectory}offline_recordings/`;
 
 export interface OfflineRecording {
   id: string;
   uri: string;
   timestamp: number;
-  clienti: { id: string; name: string }[];
+  /** Missing only on recordings saved by older versions of the app. */
+  userId?: string;
   context?: Record<string, unknown>;
   retries: number;
   /** Automatic retries are over: only the user can retry or delete it. */
@@ -39,7 +49,6 @@ export type VoiceUploadOutcome =
 export async function uploadVoiceRecording(
   supabaseUrl: string,
   uri: string,
-  clienti: { id: string; name: string }[],
   context?: Record<string, unknown>
 ): Promise<VoiceUploadOutcome> {
   let headers: Record<string, string>;
@@ -51,7 +60,6 @@ export async function uploadVoiceRecording(
 
   const formData = new FormData();
   formData.append('audio', { uri, name: 'recording.m4a', type: 'audio/m4a' } as any);
-  formData.append('clienti', JSON.stringify(clienti.map((c) => ({ id: c.id, name: c.name }))));
   if (context) formData.append('context', JSON.stringify(context));
 
   const controller = new AbortController();
@@ -125,7 +133,20 @@ function patchRecording(id: string, patch: Partial<OfflineRecording>): Promise<v
 /** iOS changes the app container path on updates: rebuild the path from the file name. */
 function currentUri(rec: OfflineRecording): string {
   const fileName = rec.uri.split('/').pop();
-  return fileName ? `${FileSystem.documentDirectory}offline_recordings/${fileName}` : rec.uri;
+  return fileName ? `${offlineDirectory()}${fileName}` : rec.uri;
+}
+
+async function currentUserId(): Promise<string | null> {
+  // getSession reads the phone's storage, so it works with no connection.
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user.id ?? null;
+}
+
+/** Only what is needed to place the dictation: never the whole customer list. */
+function minimalContext(context?: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!context) return undefined;
+  const { currentCustomer, currentJob } = context;
+  return { currentCustomer: currentCustomer ?? null, currentJob: currentJob ?? null };
 }
 
 /**
@@ -134,11 +155,13 @@ function currentUri(rec: OfflineRecording): string {
  */
 export async function saveOfflineRecording(
   tempUri: string,
-  clienti: { id: string; name: string }[],
   context?: Record<string, unknown>
 ): Promise<string> {
+  const userId = await currentUserId();
+  if (!userId) throw new Error('Sessione scaduta: effettua di nuovo l\'accesso.');
+
   const id = `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  const persistDir = `${FileSystem.documentDirectory}offline_recordings/`;
+  const persistDir = offlineDirectory();
 
   // Ensure directory exists
   const dirInfo = await FileSystem.getInfoAsync(persistDir);
@@ -151,10 +174,54 @@ export async function saveOfflineRecording(
 
   await updateRecordings((recordings) => [
     ...recordings,
-    { id, uri: persistUri, timestamp: Date.now(), clienti, context, retries: 0 },
+    { id, uri: persistUri, timestamp: Date.now(), userId, context: minimalContext(context), retries: 0 },
   ]);
 
   return id;
+}
+
+/** Recordings of the signed-in user; those of another account on this phone stay hidden. */
+async function ownRecordings(): Promise<OfflineRecording[]> {
+  const userId = await currentUserId();
+  if (!userId) return [];
+  return (await getOfflineRecordings()).filter((rec) => !rec.userId || rec.userId === userId);
+}
+
+/**
+ * Brings recordings saved by older versions under the current rules (no customer list,
+ * out of the backup) and deletes those past the maximum age. Returns how many went.
+ */
+async function applyRetention(): Promise<number> {
+  const recordings = await getOfflineRecordings();
+  const now = Date.now();
+  const expired = recordings.filter((rec) => now - rec.timestamp > OFFLINE_RECORDING_MAX_AGE_MS);
+  if (expired.length) await deleteRecordings(expired.map((rec) => rec.id));
+
+  const userId = await currentUserId();
+  const legacy = recordings.filter(
+    (rec) => !expired.includes(rec) && (!rec.userId || 'clienti' in rec)
+  );
+  if (legacy.length) {
+    await FileSystem.makeDirectoryAsync(offlineDirectory(), { intermediates: true }).catch(() => {});
+    for (const rec of legacy) {
+      const fileName = rec.uri.split('/').pop();
+      if (fileName) {
+        await FileSystem.moveAsync({
+          from: `${legacyOfflineDirectory()}${fileName}`,
+          to: `${offlineDirectory()}${fileName}`,
+        }).catch(() => {});
+      }
+    }
+    const ids = new Set(legacy.map((rec) => rec.id));
+    await updateRecordings((current) =>
+      current.map((rec) => {
+        if (!ids.has(rec.id)) return rec;
+        const { clienti: _dropped, ...kept } = rec as OfflineRecording & { clienti?: unknown };
+        return { ...kept, userId: kept.userId || userId || undefined, context: minimalContext(kept.context) };
+      })
+    );
+  }
+  return expired.length;
 }
 
 export type SyncSummary = {
@@ -164,6 +231,8 @@ export type SyncSummary = {
   results: any[];
   /** Files that disappeared from the device. */
   missing: number;
+  /** Deleted because too old to be kept. */
+  expired: number;
 };
 
 let syncInFlight = false;
@@ -176,14 +245,15 @@ export async function syncOfflineRecordings(
   supabaseUrl: string,
   _supabaseAnonKey: string
 ): Promise<SyncSummary> {
-  const summary: SyncSummary = { synced: 0, failed: 0, results: [], missing: 0 };
+  const summary: SyncSummary = { synced: 0, failed: 0, results: [], missing: 0, expired: 0 };
   if (syncInFlight) return summary;
   syncInFlight = true;
   try {
+    summary.expired = await applyRetention();
     const netState = await NetInfo.fetch();
     if (!netState.isConnected) return summary;
 
-    const recordings = (await getOfflineRecordings()).filter((rec) => !rec.needsAttention);
+    const recordings = (await ownRecordings()).filter((rec) => !rec.needsAttention);
     for (const rec of recordings) {
       const uri = currentUri(rec);
       const fileInfo = await FileSystem.getInfoAsync(uri);
@@ -193,7 +263,7 @@ export async function syncOfflineRecordings(
         continue;
       }
 
-      const outcome = await uploadVoiceRecording(supabaseUrl, uri, rec.clienti, rec.context);
+      const outcome = await uploadVoiceRecording(supabaseUrl, uri, rec.context);
       // No connection, expired session or daily limit: the next ones would fail too.
       if (outcome.kind === 'transient' || outcome.kind === 'blocked') {
         console.warn(`Offline recording sync paused at ${rec.id}: ${outcome.kind}`);
@@ -222,13 +292,13 @@ export async function syncOfflineRecordings(
 }
 
 export async function getPendingRecordingsCount(): Promise<number> {
-  const recordings = await getOfflineRecordings();
+  const recordings = await ownRecordings();
   return recordings.length;
 }
 
 /** Recordings the app could not process and only the user can decide about. */
 export async function getRecordingsNeedingAttention(): Promise<OfflineRecording[]> {
-  return (await getOfflineRecordings()).filter((rec) => rec.needsAttention);
+  return (await ownRecordings()).filter((rec) => rec.needsAttention);
 }
 
 /** Gives these recordings another full round of automatic attempts. */
@@ -245,11 +315,14 @@ export async function deleteRecordings(ids: string[]): Promise<void> {
   const recordings = await getOfflineRecordings();
   await updateRecordings((current) => current.filter((rec) => !wanted.has(rec.id)));
   for (const rec of recordings) {
-    if (wanted.has(rec.id)) await FileSystem.deleteAsync(currentUri(rec), { idempotent: true }).catch(() => {});
+    if (!wanted.has(rec.id)) continue;
+    await FileSystem.deleteAsync(currentUri(rec), { idempotent: true }).catch(() => {});
+    const fileName = rec.uri.split('/').pop();
+    if (fileName) await FileSystem.deleteAsync(`${legacyOfflineDirectory()}${fileName}`, { idempotent: true }).catch(() => {});
   }
 }
 
 export async function clearOfflineRecordings(): Promise<void> {
-  const recordings = await getOfflineRecordings();
+  const recordings = await ownRecordings();
   await deleteRecordings(recordings.map((rec) => rec.id));
 }
