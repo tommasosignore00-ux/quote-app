@@ -107,7 +107,8 @@ export default function LegalConsentPopup() {
         document_version: doc.version,
       }));
 
-      await supabase.from('legal_acceptances').insert(acceptances);
+      const { error } = await supabase.from('legal_acceptances').insert(acceptances);
+      if (error) throw error;
 
       setShowPopup(false);
       toast.success('Consensi salvati con successo');

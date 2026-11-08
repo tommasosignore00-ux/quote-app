@@ -144,11 +144,12 @@ export default function OnboardingPage() {
   };
 
   const handleSkipToTrial = async () => {
-    await handleSaveLegalConsent();
+    if (!(await handleSaveLegalConsent())) return;
     await finishOnboarding();
   };
 
-  const handleSaveLegalConsent = async () => {
+  /** False when the consent was not recorded: the user must not move on. */
+  const handleSaveLegalConsent = async (): Promise<boolean> => {
     try {
       const legalDocs = await Promise.all(
         LEGAL_DOCUMENT_TYPES.map(async (type) => {
@@ -172,13 +173,13 @@ export default function OnboardingPage() {
 
       if (validDocs.length === 0) {
         console.warn('No legal documents found, skipping consent save');
-        return;
+        return true;
       }
 
       const {
         data: { user: currentUser },
       } = await supabase.auth.getUser();
-      if (!currentUser) return;
+      if (!currentUser) return false;
 
       const acceptances = validDocs.map((doc) => ({
         user_id: currentUser.id,
@@ -186,9 +187,13 @@ export default function OnboardingPage() {
         document_version: doc.version,
       }));
 
-      await supabase.from('legal_acceptances').insert(acceptances);
+      const { error } = await supabase.from('legal_acceptances').insert(acceptances);
+      if (error) throw error;
+      return true;
     } catch (err) {
       console.error('Error saving legal consent:', err);
+      toast.error('Non è stato possibile salvare i consensi. Riprova.');
+      return false;
     }
   };
 
@@ -379,7 +384,7 @@ export default function OnboardingPage() {
                   toast.error('Devi accettare entrambi i documenti legali');
                   return;
                 }
-                await handleSaveLegalConsent();
+                if (!(await handleSaveLegalConsent())) return;
                 setMainStep(4);
               }}
               className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition"
