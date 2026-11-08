@@ -7,6 +7,10 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 BASE_URL="http://localhost:3000"
+
+# Credentials come from the environment and are never stored in this file.
+: "${SUPABASE_URL:?Set SUPABASE_URL before running this script}"
+: "${SUPABASE_ANON_KEY:?Set SUPABASE_ANON_KEY before running this script}"
 TEST_EMAIL="testuser_$(date +%s)@example.com"
 TEST_PASSWORD="Test123456"
 
@@ -30,9 +34,9 @@ fi
 
 # Test 2: Login with Supabase
 echo -e "${YELLOW}2. Testing Login (Supabase Auth)...${NC}"
-LOGIN_RESPONSE=$(curl -s -X POST "https://coqfepebhigdeevppdbr.supabase.co/auth/v1/token?grant_type=password" \
+LOGIN_RESPONSE=$(curl -s -X POST "$SUPABASE_URL/auth/v1/token?grant_type=password" \
   -H 'Content-Type: application/json' \
-  -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvcWZlcGViaGlnZGVldnBwZGJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5MDY2MjIsImV4cCI6MjA4NjQ4MjYyMn0.ErWbME_LN6aSYMryJdNMlgAVL-WcmM2hfGLy5hpmZSY' \
+  -H "apikey: $SUPABASE_ANON_KEY" \
   -d "{\"email\":\"$TEST_EMAIL\",\"password\":\"$TEST_PASSWORD\"}" 2>/dev/null)
 
 echo "Response: $LOGIN_RESPONSE"

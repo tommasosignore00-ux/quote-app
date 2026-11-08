@@ -16,6 +16,13 @@ env:
   NODE_VERSION: '20'
 
 jobs:
+  secrets:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/scan-secrets.sh --all
+
   lint:
     name: Lint & Type Check
     runs-on: ubuntu-latest

@@ -7,8 +7,11 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 BASE_URL="http://localhost:3000"
-SUPABASE_URL="https://coqfepebhigdeevppdbr.supabase.co"
-SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvcWZlcGViaGlnZGVldnBwZGJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5MDY2MjIsImV4cCI6MjA4NjQ4MjYyMn0.ErWbME_LN6aSYMryJdNMlgAVL-WcmM2hfGLy5hpmZSY"
+
+# Credentials come from the environment and are never stored in this file.
+: "${SUPABASE_URL:?Set SUPABASE_URL before running this script}"
+: "${SUPABASE_ANON_KEY:?Set SUPABASE_ANON_KEY before running this script}"
+: "${SUPABASE_SERVICE_KEY:?Set SUPABASE_SERVICE_KEY before running this script}"
 
 TEST_EMAIL="trial_test_$(date +%s)@example.com"
 TEST_PASSWORD="Test123456"
@@ -71,7 +74,6 @@ fi
 
 # Check profile has onboarding_completed = false
 echo -e "${YELLOW}6. Checking profile onboarding status...${NC}"
-SUPABASE_SERVICE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvcWZlcGViaGlnZGVldnBwZGJyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDkwNjYyMiwiZXhwIjoyMDg2NDgyNjIyfQ.7NefzfXmaG4xBL0OTbmzwCH9mqBKbd9QMKU7TpL9Wqk"
 PROFILE=$(curl -s -X GET "$SUPABASE_URL/rest/v1/profiles?id=eq.$USER_ID&select=onboarding_completed" \
   -H "Authorization: Bearer $SUPABASE_SERVICE_KEY" \
   -H "apikey: $SUPABASE_ANON_KEY" 2>/dev/null)

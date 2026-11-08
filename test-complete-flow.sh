@@ -8,9 +8,11 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 BASE_URL="http://localhost:3000"
-SUPABASE_URL="https://coqfepebhigdeevppdbr.supabase.co"
-SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvcWZlcGViaGlnZGVldnBwZGJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5MDY2MjIsImV4cCI6MjA4NjQ4MjYyMn0.ErWbME_LN6aSYMryJdNMlgAVL-WcmM2hfGLy5hpmZSY"
-SUPABASE_SERVICE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvcWZlcGViaGlnZGVldnBwZGJyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDkwNjYyMiwiZXhwIjoyMDg2NDgyNjIyfQ.7NefzfXmaG4xBL0OTbmzwCH9mqBKbd9QMKU7TpL9Wqk"
+
+# Credentials come from the environment and are never stored in this file.
+: "${SUPABASE_URL:?Set SUPABASE_URL before running this script}"
+: "${SUPABASE_ANON_KEY:?Set SUPABASE_ANON_KEY before running this script}"
+: "${SUPABASE_SERVICE_KEY:?Set SUPABASE_SERVICE_KEY before running this script}"
 
 TEST_EMAIL="fulltest_$(date +%s)@example.com"
 TEST_PASSWORD="Test123456"
