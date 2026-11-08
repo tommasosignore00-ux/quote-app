@@ -6,7 +6,7 @@
 export const REDACTED = '[DATO RIMOSSO]';
 
 const PATTERNS = [
-  /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{2,4}){3,8}\b/gi, // IBAN
+  /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{2,4}){3,8}\b/g, // IBAN, uppercase only: otherwise it swallows the next word
   /\b[A-Z]{6}\d{2}[A-EHLMPRST]\d{2}[A-Z]\d{3}[A-Z]\b/gi, // codice fiscale
   /\b(?:IT[ ]?)?\d{11}\b/gi, // partita IVA
   /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, // email
