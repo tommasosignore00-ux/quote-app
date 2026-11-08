@@ -400,40 +400,12 @@ export default function ProfilePage() {
 
   const handleExportMyData = async () => {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error(t('messages.notAuthenticated'));
-
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-      const { data: clients } = await supabase
-        .from('clienti')
-        .select('*')
-        .eq('profile_id', user.id);
-      const { data: jobs } = await supabase
-        .from('lavori')
-        .select('*')
-        .eq('profile_id', user.id);
-      const jobIds = (jobs || []).map((job) => job.id);
-      const { data: quotes } = jobIds.length
-        ? await supabase.from('preventivi_dettaglio').select('*').in('lavoro_id', jobIds)
-        : { data: [] };
-
-      const payload = {
-        exportedAt: new Date().toISOString(),
-        profile: profileData,
-        clients: clients || [],
-        jobs: jobs || [],
-        quotes: quotes || [],
-      };
-
-      const blob = new Blob([JSON.stringify(payload, null, 2)], {
-        type: 'application/json',
-      });
+      const response = await fetch('/api/account/export');
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error || 'Esportazione non riuscita');
+      }
+      const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;

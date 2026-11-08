@@ -244,22 +244,18 @@ export default function ProfileScreen() {
 
   // Punto 27: GDPR Export data
   const handleExportMyData = async () => {
+    const path = FileSystem.cacheDirectory + 'my_data_export.json';
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-      const { data: clients } = await supabase.from('clienti').select('*').eq('profile_id', user.id);
-      const { data: jobs } = await supabase.from('lavori').select('*').eq('profile_id', user.id);
-      const jobIds = (jobs || []).map((j: any) => j.id);
-      const { data: quotes } = jobIds.length > 0
-        ? await supabase.from('preventivi_dettaglio').select('*').in('lavoro_id', jobIds)
-        : { data: [] };
-      const exportData = { profile: prof, clients, jobs, quotes, exportedAt: new Date().toISOString() };
-      const path = FileSystem.cacheDirectory + 'my_data_export.json';
-      await FileSystem.writeAsStringAsync(path, JSON.stringify(exportData, null, 2));
+      const download = await FileSystem.downloadAsync(buildWebApiUrl('/api/account/export'), path, {
+        headers: await getWebApiAuthHeaders(),
+      });
+      if (download.status !== 200) throw new Error('Esportazione non riuscita. Riprova tra poco.');
       await Sharing.shareAsync(path);
     } catch (err) {
       Alert.alert('Errore', (err as Error).message);
+    } finally {
+      // The file holds all the account's data: it must not stay in the cache.
+      await FileSystem.deleteAsync(path, { idempotent: true }).catch(() => {});
     }
   };
 
