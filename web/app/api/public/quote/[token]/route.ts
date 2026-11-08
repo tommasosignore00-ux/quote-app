@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '../../../../../lib/supabase-server';
 import { rateLimit } from '../../../../../lib/rate-limit';
+import {
+  LINK_EXPIRED_MESSAGE,
+  NOT_LATEST_MESSAGE,
+  isLatestQuoteVersion,
+  isPublicLinkExpired,
+} from '../../../../../lib/publicQuote';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_NAME_LENGTH = 120;
@@ -51,7 +57,7 @@ export async function POST(req: Request, { params }: { params: { token: string }
 
     const { data: version, error } = await supabaseAdmin
       .from('preventivi_versioni')
-      .select('id, lavoro_id, client_decision')
+      .select('id, lavoro_id, revision, client_decision, public_token_expires_at')
       .eq('public_token', params.token)
       .maybeSingle();
     if (error) throw new Error(error.message);
@@ -61,6 +67,13 @@ export async function POST(req: Request, { params }: { params: { token: string }
         { error: 'Hai già risposto a questo preventivo' },
         { status: 409 }
       );
+    }
+
+    if (isPublicLinkExpired(version.public_token_expires_at)) {
+      return NextResponse.json({ error: LINK_EXPIRED_MESSAGE }, { status: 410 });
+    }
+    if (!(await isLatestQuoteVersion(version.lavoro_id, version.revision))) {
+      return NextResponse.json({ error: NOT_LATEST_MESSAGE }, { status: 409 });
     }
 
     const decidedAt = new Date().toISOString();

@@ -1,18 +1,21 @@
 import * as Sentry from '@sentry/nextjs';
+import { scrubQuoteTokens } from './lib/sentryScrub';
 
 Sentry.init({
+  beforeSend: (event) => scrubQuoteTokens(event),
+  beforeSendTransaction: (event) => scrubQuoteTokens(event),
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN || '',
-  
+
   // Performance monitoring
   tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
-  
+
   // Session replay for debugging (production only)
   replaysSessionSampleRate: 0.1,
   replaysOnErrorSampleRate: 1.0,
-  
+
   // Environment
   environment: process.env.NODE_ENV || 'development',
-  
+
   // Only enable if DSN is configured
   enabled: !!process.env.NEXT_PUBLIC_SENTRY_DSN,
 

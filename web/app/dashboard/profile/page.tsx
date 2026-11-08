@@ -1,5 +1,6 @@
 'use client';
 
+import { reopenAnalyticsConsent } from '@/lib/analytics';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
@@ -968,6 +969,19 @@ export default function ProfilePage() {
         </div>
 
         <div className="mt-6 grid gap-4 md:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => reopenAnalyticsConsent()}
+            className="rounded-xl border border-slate-200 p-5 text-left transition hover:border-slate-300 hover:shadow-sm"
+          >
+            <span className="block text-sm font-semibold text-slate-900">
+              Preferenze statistiche
+            </span>
+            <span className="mt-1 block text-xs text-slate-500">
+              Cambia la scelta su PostHog.
+            </span>
+          </button>
+
           <button
             type="button"
             onClick={handleExportMyData}

@@ -2,6 +2,12 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { supabaseAdmin } from '../../../lib/supabase-server';
 import DecisionForm from './DecisionForm';
+import {
+  LINK_EXPIRED_MESSAGE,
+  NOT_LATEST_MESSAGE,
+  isLatestQuoteVersion,
+  isPublicLinkExpired,
+} from '../../../lib/publicQuote';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +26,7 @@ export default async function PublicQuotePage({ params }: { params: { token: str
   const { data: version } = await supabaseAdmin
     .from('preventivi_versioni')
     .select(
-      'html_content, client_decision, client_decision_at, client_signer_name, lavori(title)'
+      'html_content, lavoro_id, revision, public_token_expires_at, client_decision, client_decision_at, client_signer_name, lavori(title)'
     )
     .eq('public_token', params.token)
     .maybeSingle();
@@ -32,6 +38,46 @@ export default async function PublicQuotePage({ params }: { params: { token: str
         timeZone: 'Europe/Rome',
       })
     : null;
+
+  const expired = isPublicLinkExpired(version.public_token_expires_at);
+  const accepted = version.client_decision === 'accepted';
+  const status = version.client_decision
+    ? accepted
+      ? `Preventivo accettato da ${version.client_signer_name || 'il cliente'} il ${decidedAt}.`
+      : `Preventivo rifiutato il ${decidedAt}.`
+    : null;
+
+  const privacyNotice = (
+    <p className="text-xs text-slate-500">
+      Il preventivo ti è stato inviato dall&apos;impresa indicata nel documento, che
+      tratta i tuoi dati. Se rispondi, registriamo nome, eventuale nota, data, indirizzo
+      IP e browser come prova della risposta. Questa pagina non usa cookie di analisi.
+      Dettagli nell&apos;{' '}
+      <a href="/privacy" className="underline">
+        informativa privacy
+      </a>
+      .
+    </p>
+  );
+
+  // After expiry the document is gone: an accepted quote only confirms its status.
+  if (expired) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-4 p-4">
+        <p
+          role="status"
+          className="rounded-lg border border-slate-200 bg-white p-4 text-slate-800"
+        >
+          {accepted ? status : LINK_EXPIRED_MESSAGE}
+        </p>
+        {privacyNotice}
+      </div>
+    );
+  }
+
+  const canAnswer =
+    !version.client_decision &&
+    (await isLatestQuoteVersion(version.lavoro_id, version.revision));
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-4">
@@ -46,16 +92,15 @@ export default async function PublicQuotePage({ params }: { params: { token: str
         className="h-[70vh] w-full rounded-lg border border-slate-200 bg-white"
       />
       <section className="rounded-lg border border-slate-200 bg-white p-4">
-        {version.client_decision ? (
-          <p role="status" className="text-slate-800">
-            {version.client_decision === 'accepted'
-              ? `Preventivo accettato da ${version.client_signer_name || 'il cliente'} il ${decidedAt}.`
-              : `Preventivo rifiutato il ${decidedAt}.`}
-          </p>
-        ) : (
+        {canAnswer ? (
           <DecisionForm token={params.token} />
+        ) : (
+          <p role="status" className="text-slate-800">
+            {status || NOT_LATEST_MESSAGE}
+          </p>
         )}
       </section>
+      {privacyNotice}
     </div>
   );
 }

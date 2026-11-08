@@ -3,6 +3,7 @@
  */
 const TOKEN = '11111111-2222-4333-8444-555555555555';
 let version: any;
+let newerVersions: any[] = [];
 const lavoroUpdates: any[] = [];
 const versionUpdates: any[] = [];
 
@@ -13,6 +14,8 @@ jest.mock('../../lib/supabase-server', () => ({
         select: () => query,
         eq: () => query,
         is: () => query,
+        gt: () => query,
+        limit: async () => ({ data: newerVersions, error: null }),
         maybeSingle: async () => ({ data: version, error: null }),
         update: (values: any) => {
           if (table === 'lavori') {
@@ -56,7 +59,14 @@ function send(body: unknown, token = TOKEN) {
 
 describe('public quote decision', () => {
   beforeEach(() => {
-    version = { id: 'v1', lavoro_id: 'l1', client_decision: null };
+    version = {
+      id: 'v1',
+      lavoro_id: 'l1',
+      revision: 1,
+      client_decision: null,
+      public_token_expires_at: null,
+    };
+    newerVersions = [];
     lavoroUpdates.length = 0;
     versionUpdates.length = 0;
   });
@@ -92,6 +102,18 @@ describe('public quote decision', () => {
   it('lets the client reject without a name and marks the job rejected', async () => {
     expect((await send({ decision: 'rejected' })).status).toBe(200);
     expect(lavoroUpdates[0]).toEqual({ status: 'rejected' });
+  });
+
+  it('refuses an answer on an expired link', async () => {
+    version.public_token_expires_at = '2020-01-01T00:00:00Z';
+    expect((await send({ decision: 'rejected' })).status).toBe(410);
+    expect(versionUpdates).toHaveLength(0);
+  });
+
+  it('refuses an answer on a version that is no longer the latest', async () => {
+    newerVersions = [{ id: 'v2' }];
+    expect((await send({ decision: 'rejected' })).status).toBe(409);
+    expect(versionUpdates).toHaveLength(0);
   });
 
   it('does not change an answer already given', async () => {
