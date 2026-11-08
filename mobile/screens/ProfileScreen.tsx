@@ -153,7 +153,18 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleUploadTemplate = async () => {
+  const handleUploadTemplate = () => {
+    Alert.alert(
+      'Solo dati di prova',
+      'Il file viene elaborato da OpenAI. Usa un preventivo di prova, senza nomi, indirizzi o contatti di clienti reali.',
+      [
+        { text: 'Annulla', style: 'cancel' },
+        { text: 'Carica un preventivo senza dati reali', onPress: pickTemplate },
+      ]
+    );
+  };
+
+  const pickTemplate = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: [
@@ -179,7 +190,7 @@ export default function ProfileScreen() {
             const res = await fetch(buildWebApiUrl('/api/templates/prepare'), {
               method: 'POST',
               headers: await getWebApiAuthHeaders({ 'Content-Type': 'application/json' }),
-              body: JSON.stringify({ template: content }),
+              body: JSON.stringify({ template: content, noRealData: true }),
             });
             const payload = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(payload?.error || 'Caricamento non riuscito');
@@ -204,8 +215,9 @@ export default function ProfileScreen() {
         uploadType: FileSystem.FileSystemUploadType.MULTIPART,
         headers: await getWebApiAuthHeaders(),
         mimeType: asset.mimeType || undefined,
+        parameters: { noRealData: 'true' },
       });
-      let payload: { template?: string; notes?: string; missing?: string[]; warnings?: string[]; error?: string } = {};
+      let payload: { template?: string; notes?: string; missing?: string[]; warnings?: string[]; error?: string; clientNameLeft?: boolean } = {};
       try {
         payload = JSON.parse(response.body || '{}');
       } catch {
@@ -213,6 +225,9 @@ export default function ProfileScreen() {
       }
       if (response.status < 200 || response.status >= 300 || !payload.template) {
         throw new Error(payload.error || 'Conversione non riuscita');
+      }
+      if (payload.clientNameLeft) {
+        throw new Error('Nel modello è rimasto il nome del cliente originale. Riprova con un preventivo senza dati reali.');
       }
 
       setProfile({ ...profile, custom_template_html: payload.template });

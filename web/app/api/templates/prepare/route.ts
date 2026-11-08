@@ -14,7 +14,16 @@ export async function POST(req: Request) {
   try {
     const user = await getRequestUser(req);
     if (!user) return unauthorizedResponse();
-    const { template } = (await req.json()) as { template?: string };
+    const { template, noRealData } = (await req.json()) as {
+      template?: string;
+      noRealData?: boolean;
+    };
+    if (noRealData !== true) {
+      return NextResponse.json(
+        { error: 'Conferma di caricare un preventivo senza dati reali' },
+        { status: 400 }
+      );
+    }
     if (!template || !template.trim()) {
       return NextResponse.json({ error: 'Template vuoto' }, { status: 400 });
     }

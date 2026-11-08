@@ -38,15 +38,39 @@ function ensureBucket(): Promise<void> {
   return bucketReady;
 }
 
-/** Replaces inline images with hosted copies; on any failure the inline image stays. */
+/** Header and footer only: photos in the body of a quote must not become public files. */
+export function isLetterheadPosition(html: string, index: number): boolean {
+  const start = html.search(/\{\{#items\}\}|\{\{\s*(?:items|itemsTable)\s*\}\}/);
+  if (start === -1) return false;
+  const closing = html.lastIndexOf('{{/items}}');
+  const total = html.search(/\{\{\s*total\s*\}\}/);
+  const end = Math.max(closing, total, start);
+  return index < start || index > end;
+}
+
+async function assetsFolder(userId: string): Promise<string> {
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .select('template_assets_folder')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error || !data?.template_assets_folder) {
+    throw new Error('Cartella immagini non disponibile');
+  }
+  return data.template_assets_folder as string;
+}
+
+/** Replaces letterhead images with hosted copies; on any failure the inline image stays. */
 export async function hostTemplateImages(userId: string, html: string): Promise<string> {
   const matches = Array.from(
     html.matchAll(/data:(image\/[a-z+]+);base64,([A-Za-z0-9+/=]+)/g)
-  );
+  ).filter((match) => isLetterheadPosition(html, match.index ?? 0));
   if (!matches.length) return html;
 
+  let folder: string;
   try {
     await ensureBucket();
+    folder = await assetsFolder(userId);
   } catch (error) {
     console.warn('Template assets bucket unavailable, keeping inline images:', error);
     return html;
@@ -62,7 +86,7 @@ export async function hostTemplateImages(userId: string, html: string): Promise<
 
     // Same picture, same file: re-saving a template does not pile up copies.
     const hash = crypto.createHash('sha256').update(bytes).digest('hex').slice(0, 32);
-    const path = `${userId}/${hash}.${EXTENSIONS[mime]}`;
+    const path = `${folder}/${hash}.${EXTENSIONS[mime]}`;
     const { error } = await supabaseAdmin.storage
       .from(TEMPLATE_ASSETS_BUCKET)
       .upload(path, bytes, { contentType: mime, upsert: true, cacheControl: '31536000' });

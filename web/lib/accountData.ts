@@ -191,10 +191,21 @@ async function listFolder(bucket: string, folder: string): Promise<AccountFile[]
 
 /** The storage folders that belong to the account. */
 async function accountFolders(userId: string) {
-  return [
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .select('template_assets_folder')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const folders = [
+    // Logos saved before the random folder are still under the user id.
     { bucket: TEMPLATE_ASSETS_BUCKET, folder: userId },
     { bucket: LISTINO_SOURCE_BUCKET, folder: userId },
   ];
+  if (data?.template_assets_folder) {
+    folders.push({ bucket: TEMPLATE_ASSETS_BUCKET, folder: data.template_assets_folder });
+  }
+  return folders;
 }
 
 export async function listAccountFiles(userId: string): Promise<AccountFile[]> {

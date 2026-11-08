@@ -10,6 +10,8 @@ type TemplateDraft = {
   notes: string;
   missing: string[];
   warnings?: string[];
+  sourceClientName?: string | null;
+  clientNameLeft?: boolean;
 };
 
 const ACCEPTED_EXTENSIONS = ['.docx', '.doc', '.html', '.htm'];
@@ -29,6 +31,7 @@ export default function TemplateUploader() {
   const [draft, setDraft] = useState<TemplateDraft | null>(null);
   const [correction, setCorrection] = useState('');
   const [converting, setConverting] = useState(false);
+  const [noRealData, setNoRealData] = useState(false);
 
   useEffect(() => {
     loadTemplate();
@@ -69,7 +72,13 @@ export default function TemplateUploader() {
   };
 
   const requestConversion = async (
-    body: FormData | { previousTemplate: string; instructions: string }
+    body:
+      | FormData
+      | {
+          previousTemplate: string;
+          instructions: string;
+          sourceClientName?: string | null;
+        }
   ) => {
     const res = await fetch('/api/templates/convert', {
       method: 'POST',
@@ -89,6 +98,10 @@ export default function TemplateUploader() {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
+    if (!noRealData) {
+      toast.error('Conferma prima di caricare un preventivo senza dati reali');
+      return;
+    }
 
     const name = file.name.toLowerCase();
     if (!ACCEPTED_EXTENSIONS.some((ext) => name.endsWith(ext))) {
@@ -106,7 +119,7 @@ export default function TemplateUploader() {
           const res = await fetch('/api/templates/prepare', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ template: content }),
+            body: JSON.stringify({ template: content, noRealData: true }),
           });
           const payload = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(payload?.error || 'Caricamento non riuscito');
@@ -120,6 +133,7 @@ export default function TemplateUploader() {
       setConverting(true);
       const form = new FormData();
       form.append('file', file);
+      form.append('noRealData', 'true');
       setDraft(await requestConversion(form));
       setCorrection('');
     } catch (err) {
@@ -138,6 +152,7 @@ export default function TemplateUploader() {
         await requestConversion({
           previousTemplate: draft.template,
           instructions: correction.trim(),
+          sourceClientName: draft.sourceClientName,
         })
       );
       setCorrection('');
@@ -149,7 +164,7 @@ export default function TemplateUploader() {
   };
 
   const handleSaveDraft = async () => {
-    if (!draft) return;
+    if (!draft || draft.clientNameLeft) return;
     if (
       draft.missing.length &&
       !confirm(
@@ -194,7 +209,7 @@ export default function TemplateUploader() {
       type="file"
       accept={ACCEPTED_EXTENSIONS.join(',')}
       onChange={handleUpload}
-      disabled={uploading}
+      disabled={uploading || !noRealData}
       className="hidden"
     />
   );
@@ -207,6 +222,20 @@ export default function TemplateUploader() {
         l&apos;app lo trasforma nel tuo modello, con cliente, voci e totali al posto
         giusto.
       </p>
+      <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        <p>
+          Il file viene elaborato da OpenAI. Usa un preventivo di prova, senza nomi,
+          indirizzi o contatti di clienti reali.
+        </p>
+        <label className="mt-2 flex items-center gap-2 font-medium">
+          <input
+            type="checkbox"
+            checked={noRealData}
+            onChange={(e) => setNoRealData(e.target.checked)}
+          />
+          carica un preventivo senza dati reali
+        </label>
+      </div>
 
       {draft ? (
         <div className="space-y-4">
@@ -251,7 +280,7 @@ export default function TemplateUploader() {
             <button
               onClick={handleSaveDraft}
               className="btn-primary"
-              disabled={converting}
+              disabled={converting || draft.clientNameLeft}
             >
               Salva template
             </button>

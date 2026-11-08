@@ -2,6 +2,7 @@ import mammoth from 'mammoth';
 import JSZip from 'jszip';
 import WordExtractor from 'word-extractor';
 import { openai } from './openaiServer';
+import { redactPersonalData } from './templateRedaction';
 import {
   generateQuoteHTML,
   sanitizeTemplateMarkup,
@@ -35,6 +36,10 @@ export type TemplateConversion = {
   missing: string[];
   /** Things the user should check before saving (leftover data, fixed placeholders...). */
   warnings: string[];
+  /** Client name read in the original document, to check correction rounds too. */
+  sourceClientName: string | null;
+  /** The original client's name is still in the template: it must not be saved. */
+  clientNameLeft: boolean;
 };
 
 /** Placeholders the renderer knows; anything else would be printed literally. */
@@ -478,6 +483,7 @@ Regole:
   Se una colonna non corrisponde a nessun campo lascia la cella vuota. Non lasciare nessuna riga dell'esempio.
   Esempio: la riga <tr><td>A12</td><td>Tubo rame</td><td>m</td><td>10</td><td>€ 5,00</td><td>10%</td><td>€ 45,00</td></tr> diventa
   <tbody>{{#items}}<tr><td>{{item.code}}</td><td>{{item.description}}</td><td>{{item.unit}}</td><td>{{item.quantity}}</td><td>{{item.price}}</td><td>{{item.discount}}</td><td>{{item.total}}</td></tr>{{/items}}</tbody>
+- "[DATO RIMOSSO]" è un dato personale tolto prima di mandarti il documento: dove era un dato del cliente usa il segnaposto corrispondente; altrove elimina la scritta e la sua etichetta.
 - Gli importi del documento originale non devono comparire da nessuna parte.
 - Colonne o righe interne all'azienda (ricarico, margine, costo o prezzo d'acquisto) vanno tolte del tutto:
   intestazione e celle, così le colonne restano allineate.
@@ -506,6 +512,10 @@ export async function convertToTemplate(params: {
   source?: TemplateSource;
   previousTemplate?: string;
   instructions?: string;
+  /** The company's own data: it stays on the letterhead, everything else is redacted. */
+  keepValues?: Array<string | null | undefined>;
+  /** Client name found in the original document, carried over correction rounds. */
+  sourceClientName?: string | null;
 }): Promise<TemplateConversion> {
   const userContent: Array<
     | { type: 'text'; text: string }
@@ -522,14 +532,16 @@ export async function convertToTemplate(params: {
       text:
         'Questo è il template già convertito. Applica SOLO la correzione richiesta, lasciando invariato il resto ' +
         `e rispettando sempre le regole.\n\nCorrezione richiesta: ${params.instructions || '(nessuna)'}\n\nTEMPLATE:\n` +
-        asDocument(compactSourceForModel(previous.html)),
+        asDocument(
+          redactPersonalData(compactSourceForModel(previous.html), params.keepValues)
+        ),
     });
   } else if (params.source) {
     userContent.push({
       type: 'text',
       text:
         `Documento originale (${params.source.kind.toUpperCase()}):\n` +
-        asDocument(params.source.content) +
+        asDocument(redactPersonalData(params.source.content, params.keepValues)) +
         (params.instructions
           ? `\n\nIndicazioni dell'utente: ${params.instructions}`
           : ''),
@@ -574,8 +586,11 @@ export async function convertToTemplate(params: {
         { timeout: Math.min(ATTEMPT_TIMEOUT_MS, remaining), maxRetries: 0 }
       );
     } catch (err) {
-      if (!/timeout|timed out/i.test(`${(err as Error).name} ${(err as Error).message}`))
-        {throw err;}
+      if (
+        !/timeout|timed out/i.test(`${(err as Error).name} ${(err as Error).message}`)
+      ) {
+        throw err;
+      }
       lastProblem = 'timeout';
       continue;
     }
@@ -639,18 +654,20 @@ export async function convertToTemplate(params: {
         `Nel modello sono rimasti importi del preventivo originale (${leftovers.slice(0, 4).join(', ')}): chiedi di toglierli con "Correggi".`
       );
     }
-    const clientName = String(parsed.sourceClientName || '').trim();
-    if (
-      clientName.length >= 3 &&
-      template
-        .replace(/<[^>]+>/g, ' ')
-        .toLowerCase()
-        .includes(clientName.toLowerCase())
-    ) {
-      warnings.push(
-        `Nel modello è rimasto il nome del cliente originale (${clientName}): chiedi di toglierlo con "Correggi".`
-      );
-    }
+  }
+  const clientName = String(
+    parsed.sourceClientName || params.sourceClientName || ''
+  ).trim();
+  const clientNameLeft =
+    clientName.length >= 3 &&
+    template
+      .replace(/<[^>]+>/g, ' ')
+      .toLowerCase()
+      .includes(clientName.toLowerCase());
+  if (clientNameLeft) {
+    warnings.push(
+      `Nel modello è rimasto il nome del cliente originale (${clientName}): chiedi di toglierlo con "Correggi", altrimenti il modello non si può salvare.`
+    );
   }
   // Amount placeholders already carry the currency symbol ("€ 1.930,00").
   const money = String.raw`\{\{\s*(?:subtotal|taxes|total|item\.price|item\.total)\s*\}\}`;
@@ -665,6 +682,8 @@ export async function convertToTemplate(params: {
     notes: String(parsed.notes || '').slice(0, 500),
     missing: missingTemplatePlaceholders(template),
     warnings,
+    sourceClientName: clientName || null,
+    clientNameLeft,
   };
 }
 

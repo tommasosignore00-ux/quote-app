@@ -26,12 +26,25 @@ export async function POST(req: Request) {
     const quotaExceeded = await enforceAiQuota(user.id, 'template');
     if (quotaExceeded) return quotaExceeded;
 
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('company_name, email, vat_number, fiscal_code, iban')
+      .eq('id', user.id)
+      .maybeSingle();
+    const keepValues = [
+      profile?.email,
+      profile?.vat_number,
+      profile?.fiscal_code,
+      profile?.iban,
+    ];
+
     let result;
     const contentType = req.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
       const body = (await req.json()) as {
         previousTemplate?: string;
         instructions?: string;
+        sourceClientName?: string | null;
       };
       if (!body.previousTemplate || !String(body.instructions || '').trim()) {
         return NextResponse.json({ error: 'Scrivi cosa correggere' }, { status: 400 });
@@ -39,12 +52,20 @@ export async function POST(req: Request) {
       result = await convertToTemplate({
         previousTemplate: body.previousTemplate,
         instructions: String(body.instructions).slice(0, 1000),
+        keepValues,
+        sourceClientName: body.sourceClientName,
       });
     } else {
       const form = await req.formData();
       const file = form.get('file') as File | null;
       if (!file) {
         return NextResponse.json({ error: 'Nessun file caricato' }, { status: 400 });
+      }
+      if (form.get('noRealData') !== 'true') {
+        return NextResponse.json(
+          { error: 'Conferma di caricare un preventivo senza dati reali' },
+          { status: 400 }
+        );
       }
       if (file.size > MAX_FILE_BYTES) {
         return NextResponse.json(
@@ -59,17 +80,12 @@ export async function POST(req: Request) {
       result = await convertToTemplate({
         source,
         instructions: String(form.get('instructions') || '').slice(0, 1000) || undefined,
+        keepValues,
       });
     }
 
     // Logos as hosted files: mail apps like Gmail do not show inline images.
     const template = await hostTemplateImages(user.id, result.template);
-
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('company_name')
-      .eq('id', user.id)
-      .maybeSingle();
 
     return NextResponse.json({
       ok: true,
@@ -78,6 +94,8 @@ export async function POST(req: Request) {
       notes: result.notes,
       missing: result.missing,
       warnings: result.warnings,
+      sourceClientName: result.sourceClientName,
+      clientNameLeft: result.clientNameLeft,
     });
   } catch (err) {
     console.error('Template conversion error:', err);
