@@ -213,6 +213,28 @@ function isHallucinatedTranscript(text: string): boolean {
   return /amara\.org|sottotitoli|grazie per la visione|iscriviti al canale/i.test(text) || text.includes('Articoli:')
 }
 
+// Same rules as normalizeSpokenTrade in the app: profiles spelled out by the transcription.
+function normalizeTradeTerms(text: string): string {
+  return text
+    .replace(/\b(?:acca\s*e|h\s*e)\s*(a|b)(?:i)?\b/gi, (_, letter: string) => `HE${letter.toUpperCase()}`)
+    .replace(/\bh\s+e\s*(a|b)\b/gi, (_, letter: string) => `HE${letter.toUpperCase()}`)
+    .replace(/\bi\s*p\s*e\b(?=\s*\d|\s*$)/gi, 'IPE')
+    .replace(/\bu\s*p\s*n\b/gi, 'UPN')
+}
+
+type WhisperSegment = { text?: string; no_speech_prob?: number; avg_logprob?: number }
+
+// Noise that Whisper turned into words: it is unsure both that someone spoke and of the text.
+function transcriptWithoutNoise(transcription: { text?: string; segments?: WhisperSegment[] }): string {
+  if (!Array.isArray(transcription.segments)) return String(transcription.text || '').trim()
+  return transcription.segments
+    .filter((segment) => !(Number(segment.no_speech_prob) > 0.6 && Number(segment.avg_logprob) < -1))
+    .map((segment) => String(segment.text || '').trim())
+    .filter(Boolean)
+    .join(' ')
+    .trim()
+}
+
 function retryableError(message: string, status = 502) {
   return new Response(JSON.stringify({ error: message, retryable: true }), { status, headers: corsHeaders })
 }
@@ -270,6 +292,10 @@ serve(async (req) => {
     // Words of the trade and of the user's price list, so "IPE 120" is not written "ip e 120".
     transcriptionFormData.append('prompt', buildTranscriptionPrompt(catalogVocabulary))
     transcriptionFormData.append('temperature', '0')
+    // Only whisper-1 returns the per-segment confidence.
+    if (OPENAI_TRANSCRIBE_MODEL === 'whisper-1') {
+      transcriptionFormData.append('response_format', 'verbose_json')
+    }
 
     const transcriptionRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
@@ -282,7 +308,8 @@ serve(async (req) => {
       return retryableError(VOICE_UNAVAILABLE)
     }
     const transcription = await transcriptionRes.json()
-    const text = String(transcription.text || '').trim()
+    const rawText = transcriptWithoutNoise(transcription)
+    const text = normalizeTradeTerms(rawText)
 
     if (!text || isHallucinatedTranscript(text)) {
       return new Response(JSON.stringify({ action: 'none', data: {}, text: '', agent: null }), { headers: corsHeaders })
@@ -293,7 +320,7 @@ serve(async (req) => {
         .from('user_command_mappings')
         .select('mapped_text, listino_item_id')
         .eq('profile_id', userId)
-        .eq('input_text', text.toLowerCase())
+        .eq('input_text', rawText.toLowerCase())
         .order('usage_count', { ascending: false })
         .limit(1)
         .maybeSingle()
@@ -475,7 +502,7 @@ function toLegacyAction(agent: any, context: any) {
       action: 'add_costo',
       data: {
         description: firstItem.description,
-        quantity: firstItem.quantity ?? 1,
+        quantity: firstItem.quantity ?? null,
         unit: firstItem.unit ?? null,
         unit_price: firstItem.unitPrice ?? null,
         vat_rate: firstItem.vatRate ?? null,

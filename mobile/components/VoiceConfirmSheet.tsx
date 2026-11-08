@@ -12,14 +12,17 @@ import {
   View,
 } from 'react-native';
 import { useTheme } from '../lib/darkMode';
-import { formatQuantity, normalizeName, type JobRecord, type NamedRecord } from '../lib/voiceDraft';
+import { formatQuantity, normalizeName, parseItalianNumber, type JobRecord, type NamedRecord } from '../lib/voiceDraft';
 
 /** An item of the draft, with the price list article it was matched to. */
 export type DraftItem = {
   key: string;
   spoken: string;
-  quantity: number;
+  /** null until the user gives one: no quantity was said. */
+  quantity: number | null;
   unit: string | null;
+  /** Price said aloud or typed here, as text; when set it wins over the price list. */
+  priceText: string;
   /** Price list candidates, best first; the chosen one is matches[choice]. */
   matches: Array<{ id: string; description: string; unit_price: number; markup_percent?: number | null; unit?: string | null; fullMatch?: boolean }>;
   choice: number;
@@ -52,7 +55,15 @@ function money(value: number): string {
   return `€ ${value.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/** The price typed or said for this item; null when it should come from the price list. */
+export function draftItemOwnPrice(item: DraftItem): number | null {
+  const parsed = parseItalianNumber(item.priceText);
+  return parsed !== null && parsed >= 0 ? parsed : null;
+}
+
 export function draftItemPrice(item: DraftItem, defaultMarkup: number): number | null {
+  const own = draftItemOwnPrice(item);
+  if (own !== null) return own;
   const match = item.matches[item.choice];
   if (!match) return null;
   const markup = Number(match.markup_percent) || defaultMarkup;
@@ -148,10 +159,14 @@ export default function VoiceConfirmSheet({
     onChangeItems(
       items.map((item) =>
         item.key === key
-          ? { ...item, quantity: Math.max(0.5, Math.round((item.quantity + delta) * 100) / 100) }
+          ? { ...item, quantity: item.quantity === null ? 1 : Math.max(0.5, Math.round((item.quantity + delta) * 100) / 100) }
           : item
       )
     );
+  };
+
+  const changePrice = (key: string, priceText: string) => {
+    onChangeItems(items.map((item) => (item.key === key ? { ...item, priceText } : item)));
   };
 
   const removeItem = (key: string) => onChangeItems(items.filter((item) => item.key !== key));
@@ -160,6 +175,9 @@ export default function VoiceConfirmSheet({
     onChangeItems(items.map((item) => (item.key === key ? { ...item, choice } : item)));
     setChoosingItem(null);
   };
+
+  const missingQuantity = items.some((item) => item.quantity === null);
+  const canConfirm = Boolean(lavoro) && items.length > 0 && !missingQuantity && !saving;
 
   const itemBeingChosen = items.find((item) => item.key === choosingItem) || null;
   const text = { color: colors.text };
@@ -317,7 +335,7 @@ export default function VoiceConfirmSheet({
                   accessibilityHint="Scegli un altro articolo del listino"
                 >
                   <Text style={[styles.itemTitle, text]} numberOfLines={3}>{match?.description || item.spoken}</Text>
-                  {match ? (
+                  {match || draftItemOwnPrice(item) !== null ? (
                     <Text style={[styles.itemPrice, { color: colors.primary }]}>
                       {money(draftItemPrice(item, defaultMarkup) ?? 0)}
                       {unit ? ` / ${unit}` : ''}
@@ -348,15 +366,27 @@ export default function VoiceConfirmSheet({
                     </Text>
                   </TouchableOpacity>
                 ) : null}
+                {!match || item.priceText ? (
+                  <TextInput
+                    value={item.priceText}
+                    onChangeText={(value) => changePrice(item.key, value)}
+                    keyboardType="decimal-pad"
+                    placeholder="Prezzo in € per unità"
+                    placeholderTextColor={colors.textTertiary}
+                    accessibilityLabel="Prezzo per unità"
+                    style={[styles.search, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
+                  />
+                ) : null}
+                {item.quantity === null ? <Text style={styles.warning}>Quantità da confermare: usa i tasti − e ＋</Text> : null}
                 <View style={styles.qtyRow}>
                   <TouchableOpacity
                     style={[styles.qtyButton, { backgroundColor: colors.surfaceSecondary }]}
-                    onPress={() => changeQuantity(item.key, unit && QUANTITY_STEP_UNITS.has(unit.toLowerCase()) && item.quantity <= 1 ? -0.5 : -1)}
+                    onPress={() => changeQuantity(item.key, unit && QUANTITY_STEP_UNITS.has(unit.toLowerCase()) && (item.quantity ?? 0) <= 1 ? -0.5 : -1)}
                     accessibilityLabel="Diminuisci quantità"
                   >
                     <Text style={[styles.qtyButtonText, text]}>−</Text>
                   </TouchableOpacity>
-                  <Text style={[styles.qtyText, text]}>{formatQuantity(item.quantity, unit)}</Text>
+                  <Text style={[styles.qtyText, text]}>{item.quantity === null ? 'quantità da confermare' : formatQuantity(item.quantity, unit)}</Text>
                   <TouchableOpacity
                     style={[styles.qtyButton, { backgroundColor: colors.surfaceSecondary }]}
                     onPress={() => changeQuantity(item.key, 1)}
@@ -379,15 +409,17 @@ export default function VoiceConfirmSheet({
       </ScrollView>
 
       <TouchableOpacity
-        style={[styles.bigButton, styles.confirm, (!lavoro || items.length === 0 || saving) && styles.disabled]}
-        onPress={() => lavoro && onConfirm(lavoro)}
-        disabled={!lavoro || items.length === 0 || saving}
+        style={[styles.bigButton, styles.confirm, !canConfirm && styles.disabled]}
+        onPress={() => lavoro && canConfirm && onConfirm(lavoro)}
+        disabled={!canConfirm}
       >
         {saving ? (
           <ActivityIndicator color="#fff" />
         ) : (
           <Text style={styles.bigButtonText}>
-            ✓ Aggiungi {items.length === 1 ? '1 voce' : `${items.length} voci`}
+            {missingQuantity
+              ? 'Conferma le quantità'
+              : `✓ Aggiungi ${items.length === 1 ? '1 voce' : `${items.length} voci`}`}
           </Text>
         )}
       </TouchableOpacity>
@@ -451,7 +483,7 @@ const styles = StyleSheet.create({
   qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   qtyButton: { width: 64, height: 64, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   qtyButtonText: { fontSize: 32, fontWeight: '800' },
-  qtyText: { flex: 1, textAlign: 'center', fontSize: 24, fontWeight: '800' },
+  qtyText: { flex: 1, textAlign: 'center', fontSize: 22, fontWeight: '800' },
   removeButton: { height: 64, minWidth: 80, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fee2e2', paddingHorizontal: 10 },
   removeText: { color: '#b91c1c', fontSize: 18, fontWeight: '800' },
 });

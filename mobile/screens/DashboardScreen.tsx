@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase';
 import { DEFAULT_COUNTRY_CODE, DEFAULT_CURRENCY, DEFAULT_LANGUAGE, DEFAULT_LOCALE, resolveVatPercent } from '../lib/market';
 import VoiceButton from '../components/VoiceButton';
 import QuoteAcceptedPopup from '../components/QuoteAcceptedPopup';
-import VoiceConfirmSheet, { type DraftItem } from '../components/VoiceConfirmSheet';
+import VoiceConfirmSheet, { draftItemOwnPrice, type DraftItem } from '../components/VoiceConfirmSheet';
 import {
   extractVoiceItems,
   listinoSearchNumbers,
@@ -248,18 +248,6 @@ export default function DashboardScreen() {
     fetchData();
   };
 
-  // Punto 14: Save user corrections for command mapping
-  const handleSaveCorrection = async (originalText: string, correctedDescription: string, itemId?: string) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    await supabase.from('user_command_mappings').upsert({
-      profile_id: user.id,
-      raw_text: originalText.toLowerCase(),
-      mapped_description: correctedDescription,
-      listino_item_id: itemId || null,
-    }, { onConflict: 'profile_id,raw_text' });
-  };
-
   useEffect(() => {
     if (!profileId) return;
     const channel = supabase
@@ -400,6 +388,7 @@ export default function DashboardScreen() {
           spoken: item.description,
           quantity: item.quantity,
           unit: item.unit,
+          priceText: item.unitPrice === null ? '' : String(item.unitPrice).replace('.', ','),
           matches,
           // A partial match is only offered: the user picks it if it is right.
           // Preselected only when it is the one article matching everything said.
@@ -461,8 +450,16 @@ export default function DashboardScreen() {
     if (!user) return;
     const ownerId = profileId || user.id;
 
+    const intent = String(result.agent?.intent || '');
+    if (intent === 'remove_quote_items' || intent === 'edit_quote_items') {
+      await voiceNotice('Non si può fare a voce', 'A voce puoi solo aggiungere voci. Per togliere o modificare una voce, toccala nella lista del lavoro.');
+      return;
+    }
+
+    const spokenItems = extractVoiceItems(result);
+
     // New customer: always asked before creating it.
-    if (result.action === 'create_cliente' && result.data?.name) {
+    if (result.action === 'create_cliente' && result.data?.name && !spokenItems.length) {
       const name = String(result.data.name).trim();
       if (!(await askVoiceConfirm('Nuovo cliente', `Creo il cliente «${name}»?`, 'Crea'))) return;
       const { data: created, error } = await supabase
@@ -481,7 +478,7 @@ export default function DashboardScreen() {
     }
 
     // New job: the customer must be one that exists, and the user confirms.
-    if (result.action === 'create_lavoro' && result.data?.title) {
+    if (result.action === 'create_lavoro' && result.data?.title && !spokenItems.length) {
       const title = String(result.data.title).trim();
       let cliente = clienti.find((record) => record.id === result.data?.cliente_id) || null;
       if (!cliente && result.data?.cliente_name) {
@@ -507,8 +504,12 @@ export default function DashboardScreen() {
     }
 
     // Items to add: they go to a draft the user confirms.
-    const spokenItems = extractVoiceItems(result);
     if (!spokenItems.length) {
+      const question = result.agent?.clarification?.questions?.[0];
+      if (typeof question === 'string' && question.trim()) {
+        await voiceNotice('Mi serve un chiarimento', question.trim());
+        return;
+      }
       await voiceNotice('Non ho capito cosa aggiungere', result.text ? `Ho sentito: "${result.text}". Riprova.` : 'Riprova.');
       return;
     }
@@ -571,12 +572,14 @@ export default function DashboardScreen() {
     try {
       const rows = voiceDraft.items.map((item) => {
         const match = item.matches[item.choice];
+        // A price said or typed is the final one: no markup on top of it.
+        const ownPrice = draftItemOwnPrice(item);
         return {
           lavoro_id: lavoro.id,
           description: match?.description || item.spoken,
-          quantity: item.quantity,
-          unit_price: match ? Number(match.unit_price) : 0,
-          tax_rate: match ? Number(match.markup_percent) || profileMaterialMarkup : profileMaterialMarkup,
+          quantity: item.quantity as number,
+          unit_price: ownPrice ?? (match ? Number(match.unit_price) : 0),
+          tax_rate: ownPrice !== null ? 0 : match ? Number(match.markup_percent) || profileMaterialMarkup : profileMaterialMarkup,
           listino_item_id: match?.id || null,
           // Empty: the database copies the unit of the price list item.
           unit: item.unit || null,
