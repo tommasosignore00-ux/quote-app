@@ -1,3 +1,5 @@
+import { countUnmatchedItems, firstTime, scheduleEveningReminder } from '../lib/nudges';
+import { holdClientDecisions } from '../lib/notifications';
 import { loadEntitlement } from '../lib/entitlement';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, FlatList, StyleSheet, Modal, TextInput, Alert, ScrollView, KeyboardAvoidingView, Platform, DeviceEventEmitter } from 'react-native';
@@ -106,11 +108,15 @@ export default function DashboardScreen() {
   const [showFallbackCarousel, setShowFallbackCarousel] = useState(false);
   const [carouselItems, setCarouselItems] = useState<any[]>([]);
 
+  useEffect(() => {
+    holdClientDecisions('confirming', Boolean(voiceDraft));
+    return () => holdClientDecisions('confirming', false);
+  }, [voiceDraft]);
+
   // Punto 1/43: Start offline network listener for auto-sync
   useEffect(() => {
     startNetworkListener((result) => {
       if (result.synced > 0) {
-        Alert.alert('✅ Sincronizzazione', `${result.synced} operazioni sincronizzate`);
         fetchData();
       }
     });
@@ -121,7 +127,7 @@ export default function DashboardScreen() {
   useEffect(() => {
     getTimeSavingsStats().then((stats) => {
       if (stats.totalHoursSaved > 0) {
-        setTimeSaved(`⏱ ${stats.totalHoursSaved}h risparmiate`);
+        setTimeSaved(`${stats.totalActions} operazioni registrate`);
       }
     });
   }, []);
@@ -332,7 +338,7 @@ export default function DashboardScreen() {
 
   const refreshTimeSaved = () => {
     getTimeSavingsStats().then((stats) => {
-      if (stats.totalHoursSaved > 0) setTimeSaved(`⏱ ${stats.totalHoursSaved}h risparmiate`);
+      if (stats.totalActions > 0) setTimeSaved(`${stats.totalActions} operazioni registrate`);
     });
   };
 
@@ -550,6 +556,21 @@ export default function DashboardScreen() {
   const processVoiceResultRef = useRef(processVoiceResult);
   processVoiceResultRef.current = processVoiceResult;
 
+  const handleCreateClienteFromVoice = async (name: string) => {
+    if (!profileId) return null;
+    const { data, error } = await supabase
+      .from('clienti')
+      .insert({ profile_id: profileId, name, country_code: 'IT', preferred_language: 'it' })
+      .select('*')
+      .single();
+    if (error || !data) {
+      Alert.alert(t('messages.error'), 'Cliente non creato');
+      return null;
+    }
+    setClienti((prev) => [data, ...prev]);
+    return data;
+  };
+
   const handleCreateLavoroFromVoice = async (clienteId: string, title: string): Promise<JobRecord | null> => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
@@ -600,6 +621,22 @@ export default function DashboardScreen() {
 
       for (let i = 0; i < rows.length; i++) await trackTimeSaving('add_costo');
       refreshTimeSaved();
+
+      if (await firstTime('first-voice-item')) {
+        Alert.alert('Prima voce salvata', 'Cosa vuoi fare adesso?', [
+          { text: 'Prepara il preventivo', onPress: () => (navigation as any).navigate('Quote', { lavoro }) },
+          { text: 'Ricordamelo stasera', onPress: () => { scheduleEveningReminder(lavoro.title, lavoro.id).catch(() => {}); } },
+          { text: 'Detta ancora', style: 'cancel' },
+        ]);
+      } else {
+        const unmatched = voiceDraft.items.filter((item) => !item.matches[item.choice]).length;
+        if (unmatched > 0 && (await countUnmatchedItems(unmatched)) >= 3 && (await firstTime('listino-prompt'))) {
+          Alert.alert('Vuoi caricare il tuo listino?', 'Alcune voci non hanno un prezzo: con il listino li trovi mentre detti.', [
+            { text: 'Carica listino', onPress: () => (navigation as any).navigate('Listini') },
+            { text: 'Non ora', style: 'cancel' },
+          ]);
+        }
+      }
 
       // Punto 13: Cross-selling suggestions
       if (profileId && rows[0]) {
@@ -1036,6 +1073,11 @@ export default function DashboardScreen() {
 
       {!selectedClienteId && (
         <View style={styles.voiceCenterWrap}>
+          {canUseVoice && lavori.length === 0 && (
+            <Text style={{ color: colors.text, fontSize: 18, textAlign: 'center', marginBottom: 20, paddingHorizontal: 24 }}>
+              Premi il microfono e detta la prima voce, per esempio: «due metri di tubo multistrato».
+            </Text>
+          )}
           {canUseVoice && (
             <VoiceButton onResult={handleVoiceResult} context={voiceContext} size={220} onMicDenied={handleMicDenied} showLabel />
           )}
@@ -1263,6 +1305,7 @@ export default function DashboardScreen() {
         saving={savingVoiceDraft}
         defaultMarkup={profileMaterialMarkup}
         onChangeItems={(items) => setVoiceDraft((draft) => (draft ? { ...draft, items } : draft))}
+        onCreateCliente={handleCreateClienteFromVoice}
         onCreateLavoro={handleCreateLavoroFromVoice}
         onConfirm={handleConfirmVoiceDraft}
         onCancel={closeVoiceDraft}

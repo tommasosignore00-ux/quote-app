@@ -1,3 +1,4 @@
+import { holdClientDecisions } from '../lib/notifications';
 import React, { useState, useRef, useEffect } from 'react';
 import { TouchableOpacity, Text, StyleSheet, Alert, View, Animated, DeviceEventEmitter, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
@@ -65,20 +66,9 @@ export default function VoiceButton({ onResult, context, size = 64, floating = f
   onResultRef.current = onResult;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  // Pulse animation while recording
   useEffect(() => {
-    if (recording) {
-      const pulse = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.15, duration: 600, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-        ])
-      );
-      pulse.start();
-      return () => pulse.stop();
-    } else {
-      pulseAnim.setValue(1);
-    }
+    holdClientDecisions('recording', Boolean(recording));
+    return () => holdClientDecisions('recording', false);
   }, [recording]);
 
   const askAboutStuckRecordings = async () => {

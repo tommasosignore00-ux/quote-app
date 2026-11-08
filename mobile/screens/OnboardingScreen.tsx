@@ -28,13 +28,6 @@ export default function OnboardingScreen() {
   const progressAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Pulse animation for interactive elements
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.15, duration: 800, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
-      ])
-    ).start();
   }, []);
 
   useEffect(() => {
@@ -65,8 +58,7 @@ export default function OnboardingScreen() {
       desc: 'Carica un file CSV con i tuoi materiali e prezzi. Il sistema li indicizza automaticamente per la ricerca vocale.',
       tips: [
         '📊 Formato: Codice;Descrizione;Prezzo',
-        '🔍 Ricerca semantica automatica',
-        '💰 30 minuti risparmiati per ogni importazione',
+        '🔍 Trovi i materiali dettandoli a voce',
       ],
     },
     listini: { title: t('onboarding.listini'), desc: t('onboarding.listiniDesc') },

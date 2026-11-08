@@ -98,9 +98,9 @@ export default function ProfileScreen() {
     load();
     // Punto 44: Load time savings for display
     getTimeSavingsStats().then((stats) => {
-      if (stats.totalHoursSaved > 0) {
+      if (stats.totalActions > 0) {
         setTimeSavedStats(
-          `${stats.totalHoursSaved}h risparmiate (${stats.totalActions} azioni, ${stats.thisMonth}min questo mese)`
+          `${stats.totalActions} operazioni registrate`
         );
       }
     });
@@ -474,7 +474,7 @@ export default function ProfileScreen() {
       {/* Punto 44: Time Savings Widget */}
       {timeSavedStats ? (
         <View style={styles.timeSavedWidget}>
-          <Text style={styles.timeSavedTitle}>⏱️ Tempo risparmiato</Text>
+          <Text style={styles.timeSavedTitle}>La tua attività</Text>
           <Text style={styles.timeSavedValue}>{timeSavedStats}</Text>
         </View>
       ) : null}

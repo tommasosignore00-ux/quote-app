@@ -5,16 +5,39 @@ import * as Device from 'expo-device';
 import { supabase } from './supabase';
 
 // Configure notification handler
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+// While the user is recording or confirming, a client's answer waits.
+const holdReasons = new Set<string>();
+const heldNotifications: Notifications.NotificationContent[] = [];
 
+export function holdClientDecisions(reason: string, active: boolean): void {
+  if (active) {
+    holdReasons.add(reason);
+    return;
+  }
+  holdReasons.delete(reason);
+  if (holdReasons.size > 0) return;
+  for (const content of heldNotifications.splice(0)) {
+    Notifications.scheduleNotificationAsync({
+      content: { title: content.title, body: content.body, data: { ...content.data, released: true } },
+      trigger: null,
+    }).catch(() => {});
+  }
+}
+
+Notifications.setNotificationHandler({
+  handleNotification: async (notification) => {
+    const { content } = notification.request;
+    const hold = holdReasons.size > 0 && content.data?.type === 'client_decision' && !content.data?.released;
+    if (hold) heldNotifications.push(content);
+    return {
+      shouldShowAlert: !hold,
+      shouldShowBanner: !hold,
+      shouldShowList: !hold,
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+    };
+  },
+});
 /**
  * Register for push notifications and store the token in the user's profile.
  */
@@ -49,9 +72,7 @@ export async function registerForPushNotifications(): Promise<string | null> {
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
       name: 'Default',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#dc2626',
+      importance: Notifications.AndroidImportance.DEFAULT,
     });
   }
 

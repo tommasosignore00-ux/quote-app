@@ -17,6 +17,37 @@ const MAX_NOTE_LENGTH = 1000;
  * The client's decision on a quote, from the secret link in the email. No account:
  * the unguessable token is the credential. A decision is final once recorded.
  */
+/** Only for users who opted in. A failed push must not affect the client's answer. */
+async function notifyDecision(lavoroId: string, decision: 'accepted' | 'rejected') {
+  try {
+    const { data } = await supabaseAdmin
+      .from('lavori')
+      .select('title, clienti(name), profiles(push_token, notify_client_decision)')
+      .eq('id', lavoroId)
+      .maybeSingle();
+    const row = data as unknown as {
+      title: string;
+      clienti: { name?: string } | null;
+      profiles: { push_token?: string | null; notify_client_decision?: boolean } | null;
+    } | null;
+    if (!row?.profiles?.notify_client_decision || !row.profiles.push_token) return;
+    const who = row.clienti?.name || 'Il cliente';
+    await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: row.profiles.push_token,
+        title: decision === 'accepted' ? 'Preventivo accettato' : 'Preventivo rifiutato',
+        body: `${who} · ${row.title}`,
+        data: { type: 'client_decision', screen: 'Preventivi' },
+      }),
+      signal: AbortSignal.timeout(4000),
+    });
+  } catch {
+    console.warn('Decision push not sent');
+  }
+}
+
 export async function POST(req: Request, { params }: { params: { token: string } }) {
   try {
     const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim() || null;
@@ -112,6 +143,8 @@ export async function POST(req: Request, { params }: { params: { token: string }
       .from('lavori')
       .update({ status: decision === 'accepted' ? 'approved' : 'rejected' })
       .eq('id', version.lavoro_id);
+
+    await notifyDecision(version.lavoro_id, decision);
 
     return NextResponse.json({ ok: true, decision, decidedAt });
   } catch (err) {

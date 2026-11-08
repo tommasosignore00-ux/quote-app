@@ -1,3 +1,4 @@
+import { enableDecisionPush, firstTime } from '../lib/nudges';
 import { loadEntitlement } from '../lib/entitlement';
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, TextInput, Alert, SafeAreaView, ActivityIndicator, ScrollView } from 'react-native';
@@ -14,7 +15,6 @@ import { generateQuoteHTML, QuoteData, quoteLineExtras } from '../lib/QuoteTempl
 import { validateQuote, formatValidationMessage } from '../lib/quoteValidation';
 import { injectWatermark, shouldShowWatermark } from '../lib/watermark';
 import { exportAsJSON, exportAsXML, exportAsCSV } from '../lib/exportFormats';
-import { scheduleFollowUp } from '../lib/followUpReminder';
 import { roundForCountry } from '../lib/roundingUtils';
 import { useTheme } from '../lib/darkMode';
 import { trackTimeSaving } from '../lib/timeSavings';
@@ -227,17 +227,19 @@ export default function QuoteScreen() {
       await supabase.from('lavori').update({ current_revision: revision + 1 }).eq('id', lavoro.id);
       setRevision(revision + 1);
 
-      // Punto 45: Schedule follow-up reminder
-      await scheduleFollowUp({
-        lavoroId: lavoro.id,
-        lavoroTitle: lavoro.title,
-        clientName: lavoro.clienti?.name || '',
-        recipientEmail,
-      });
-
       await trackTimeSaving('send_email');
       Alert.alert(t('messages.success'), t('messages.emailSent'));
       setShowEmailModal(false);
+      if (user && await firstTime('decision-push-offer')) {
+        Alert.alert(
+          'Vuoi sapere quando il cliente risponde?',
+          'Ti mandiamo un avviso quando accetta o rifiuta il preventivo.',
+          [
+            { text: 'Non ora', style: 'cancel' },
+            { text: 'Sì, avvisami', onPress: () => { enableDecisionPush(user.id).catch(() => {}); } },
+          ]
+        );
+      }
     } catch (err) {
       Alert.alert(t('messages.error'), (err as Error).message);
     } finally {
@@ -342,10 +344,6 @@ export default function QuoteScreen() {
               style={[styles.templateOption, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }, selectedTemplate === template && styles.templateOptionSelected]}
               onPress={() => {
                 if (template === 'custom' && !isProOrTeam) {
-                  Alert.alert('Funzione riservata', 'I template personalizzati sono disponibili solo per abbonati Pro o Team.', [
-                    { text: 'Scopri i piani', style: 'default' },
-                    { text: 'Annulla', style: 'cancel' },
-                  ]);
                   return;
                 }
                 setSelectedTemplate(template);
@@ -361,9 +359,6 @@ export default function QuoteScreen() {
             </TouchableOpacity>
           ))}
         </View>
-        {!isProOrTeam && (
-          <Text style={{ color: '#dc2626', fontSize: 13, marginTop: 6 }}>I template personalizzati sono disponibili solo per abbonati Pro/Team</Text>
-        )}
       </View>
 
       {/* Punto 9: Firma Digitale - signature before approval */}
@@ -389,11 +384,6 @@ export default function QuoteScreen() {
           )}
         </>
       )}
-      {!isProOrTeam && (
-        <TouchableOpacity style={[styles.btn, styles.btnSignature, { backgroundColor: colors.primary, opacity: 0.5 }]} disabled>
-          <Text style={styles.btnText}>✍️ Firma digitale solo per abbonati</Text>
-        </TouchableOpacity>
-      )}
 
       <TouchableOpacity style={[styles.btn, { backgroundColor: colors.primary }]} onPress={generatePreview} disabled={loading}>
         <Text style={styles.btnText}>{loading ? t('buttons.loading') : t('buttons.generatePreview')}</Text>
@@ -413,13 +403,9 @@ export default function QuoteScreen() {
           </TouchableOpacity>
 
           {/* Export multi-formato solo per abbonati */}
-          {isProOrTeam ? (
+          {isProOrTeam && (
             <TouchableOpacity style={[styles.btn, styles.btnExport]} onPress={() => setShowExportMenu(true)}>
               <Text style={styles.btnText}>📊 Esporta (Excel/JSON/XML)</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity style={[styles.btn, styles.btnExport, { opacity: 0.5 }]} disabled>
-              <Text style={styles.btnText}>📊 Esporta (solo per abbonati)</Text>
             </TouchableOpacity>
           )}
         </View>

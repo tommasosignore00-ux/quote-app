@@ -44,6 +44,7 @@ type Props = {
   /** Markup applied when the article has none of its own. */
   defaultMarkup: number;
   onChangeItems: (items: DraftItem[]) => void;
+  onCreateCliente: (name: string) => Promise<NamedRecord | null>;
   onCreateLavoro: (clienteId: string, title: string) => Promise<JobRecord | null>;
   onConfirm: (lavoro: JobRecord) => void;
   onCancel: () => void;
@@ -82,12 +83,14 @@ export default function VoiceConfirmSheet({
   saving,
   defaultMarkup,
   onChangeItems,
+  onCreateCliente,
   onCreateLavoro,
   onConfirm,
   onCancel,
 }: Props) {
   const { colors } = useTheme();
   const [step, setStep] = useState<Step>('cliente');
+  const [creatingCliente, setCreatingCliente] = useState(false);
   const [clienteId, setClienteId] = useState<string | null>(null);
   const [lavoroId, setLavoroId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -128,6 +131,16 @@ export default function VoiceConfirmSheet({
         return ra - rb || a.name.localeCompare(b.name, 'it');
       });
   }, [clienti, lavori, search]);
+
+  const createCliente = async () => {
+    setCreatingCliente(true);
+    const created = await onCreateCliente(search.trim());
+    setCreatingCliente(false);
+    if (created) {
+      setSearch('');
+      pickCliente(created.id);
+    }
+  };
 
   const pickCliente = (id: string) => {
     setClienteId(id);
@@ -201,8 +214,20 @@ export default function VoiceConfirmSheet({
         style={[styles.search, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
       />
       <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
+        {search.trim() && !orderedClienti.some((record) => normalizeName(record.name) === normalizeName(search)) ? (
+          <TouchableOpacity
+            style={[styles.choice, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
+            onPress={createCliente}
+            disabled={creatingCliente}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.choiceText, text]} numberOfLines={2}>
+              {creatingCliente ? 'Creazione…' : `+ Nuovo cliente: ${search.trim()}`}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
         {orderedClienti.length === 0 ? (
-          <Text style={[styles.empty, muted]}>Nessun cliente trovato</Text>
+          search.trim() ? null : <Text style={[styles.empty, muted]}>Nessun cliente ancora</Text>
         ) : (
           orderedClienti.map((record) => (
             <TouchableOpacity
