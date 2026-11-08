@@ -254,7 +254,7 @@ export default function OnboardingPage() {
           </ul>
           <button
             onClick={() => setMainStep(2)}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition"
+            className="w-full bg-primary hover:bg-primary-dark text-white font-semibold py-3 px-4 rounded-lg transition"
           >
             Get Started
           </button>
@@ -275,7 +275,7 @@ export default function OnboardingPage() {
                 key={s.key}
                 onClick={() => setTutorialStep(i)}
                 className={`w-10 h-10 rounded-full flex items-center justify-center text-xl transition ${
-                  i === tutorialStep ? 'bg-blue-600' : 'bg-white/20'
+                  i === tutorialStep ? 'bg-primary' : 'bg-white/20'
                 }`}
               >
                 {s.icon}
@@ -299,14 +299,14 @@ export default function OnboardingPage() {
             {tutorialStep < TUTORIAL_STEPS.length - 1 ? (
               <button
                 onClick={() => setTutorialStep(tutorialStep + 1)}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition"
+                className="flex-1 bg-primary hover:bg-primary-dark text-white font-semibold py-3 rounded-lg transition"
               >
                 Avanti
               </button>
             ) : (
               <button
                 onClick={() => setMainStep(3)}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition"
+                className="flex-1 bg-primary hover:bg-primary-dark text-white font-semibold py-3 rounded-lg transition"
               >
                 Continue
               </button>
@@ -335,14 +335,14 @@ export default function OnboardingPage() {
                 onChange={(e) =>
                   setLegalConsent({ ...legalConsent, privacy_policy: e.target.checked })
                 }
-                className="mt-1 w-5 h-5 text-blue-600 bg-white/10 border-white/20 rounded focus:ring-blue-500"
+                className="mt-1 w-5 h-5 text-blue-600 bg-white/10 border-white/20 rounded focus:ring-orange-400"
               />
               <span className="text-sm">
                 Ho letto e accetto la{' '}
                 <a
                   href="/privacy"
                   target="_blank"
-                  className="text-blue-400 hover:text-blue-300 underline"
+                  className="text-orange-300 hover:text-orange-300 underline"
                 >
                   Informativa sulla Privacy
                 </a>
@@ -356,14 +356,14 @@ export default function OnboardingPage() {
                 onChange={(e) =>
                   setLegalConsent({ ...legalConsent, terms_of_service: e.target.checked })
                 }
-                className="mt-1 w-5 h-5 text-blue-600 bg-white/10 border-white/20 rounded focus:ring-blue-500"
+                className="mt-1 w-5 h-5 text-blue-600 bg-white/10 border-white/20 rounded focus:ring-orange-400"
               />
               <span className="text-sm">
                 Ho letto e accetto i{' '}
                 <a
                   href="/terms"
                   target="_blank"
-                  className="text-blue-400 hover:text-blue-300 underline"
+                  className="text-orange-300 hover:text-orange-300 underline"
                 >
                   Termini di Servizio
                 </a>
@@ -387,7 +387,7 @@ export default function OnboardingPage() {
                 if (!(await handleSaveLegalConsent())) return;
                 setMainStep(4);
               }}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition"
+              className="flex-1 bg-primary hover:bg-primary-dark text-white font-semibold py-3 rounded-lg transition"
             >
               Continue
             </button>
@@ -413,7 +413,7 @@ export default function OnboardingPage() {
                 name="company_name"
                 value={formData.company_name}
                 onChange={handleInputChange}
-                className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-orange-400"
                 placeholder="Es. Idraulica Rossi"
               />
             </div>
@@ -427,7 +427,7 @@ export default function OnboardingPage() {
                 name="vat_number"
                 value={formData.vat_number}
                 onChange={handleInputChange}
-                className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-orange-400"
                 placeholder="IT12345678901"
               />
             </div>
@@ -452,7 +452,7 @@ export default function OnboardingPage() {
             </button>
             <button
               onClick={handleContinueCompanyInfo}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition"
+              className="flex-1 bg-primary hover:bg-primary-dark text-white font-semibold py-3 rounded-lg transition"
             >
               Avanti
             </button>
@@ -474,16 +474,16 @@ export default function OnboardingPage() {
 
           <div className="grid md:grid-cols-2 gap-6 mb-8">
             {/* Monthly */}
-            <div className="bg-white/10 border border-white/20 rounded-lg p-6 hover:border-blue-500 transition">
+            <div className="bg-white/10 border border-white/20 rounded-lg p-6 hover:border-orange-400 transition">
               <h3 className="text-xl font-bold text-white mb-2">Mensile</h3>
-              <p className="text-4xl font-bold text-blue-400 mb-2">€29,99</p>
+              <p className="text-4xl font-bold text-orange-300 mb-2">€29,99</p>
               <p className="text-slate-300 text-sm mb-6">
                 /mese, disdici quando vuoi + 7 giorni di prova
               </p>
               <button
                 onClick={() => handleCheckout('price_monthly')}
                 disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-semibold py-2 rounded-lg transition"
+                className="w-full bg-primary hover:bg-primary-dark disabled:bg-gray-600 text-white font-semibold py-2 rounded-lg transition"
               >
                 {loading && selectedPlan === 'price_monthly'
                   ? 'Processing...'
@@ -492,7 +492,7 @@ export default function OnboardingPage() {
             </div>
 
             {/* Yearly */}
-            <div className="bg-gradient-to-br from-blue-600 to-blue-700 border border-blue-400 rounded-lg p-6 relative">
+            <div className="bg-gradient-to-br from-blue-600 to-blue-700 border border-orange-400 rounded-lg p-6 relative">
               <div className="absolute top-0 right-0 bg-green-500 text-white px-3 py-1 rounded-bl text-xs font-bold">
                 SAVE 17%
               </div>
@@ -551,7 +551,7 @@ export default function OnboardingPage() {
           </p>
           <button
             onClick={() => router.push('/dashboard')}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition"
+            className="w-full bg-primary hover:bg-primary-dark text-white font-semibold py-3 px-4 rounded-lg transition"
           >
             Vai ai tuoi lavori
           </button>
