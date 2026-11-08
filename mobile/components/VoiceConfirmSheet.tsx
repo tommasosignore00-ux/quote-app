@@ -21,7 +21,7 @@ export type DraftItem = {
   quantity: number;
   unit: string | null;
   /** Price list candidates, best first; the chosen one is matches[choice]. */
-  matches: Array<{ id: string; description: string; unit_price: number; markup_percent?: number | null; unit?: string | null }>;
+  matches: Array<{ id: string; description: string; unit_price: number; markup_percent?: number | null; unit?: string | null; fullMatch?: boolean }>;
   choice: number;
 };
 
@@ -325,12 +325,21 @@ export default function VoiceConfirmSheet({
                   ) : (
                     <Text style={styles.warning}>Non trovato nel listino: prezzo da inserire</Text>
                   )}
-                  {item.matches.length > 1 ? (
-                    <Text style={[styles.otherMatches, { color: colors.primary }]}>
-                      Tocca per scegliere tra {item.matches.length} articoli
-                    </Text>
-                  ) : null}
                 </TouchableOpacity>
+                {/* Big enough for gloves: choosing another article is a real button. */}
+                {item.matches.length > 1 || (!match && item.matches.length > 0) ? (
+                  <TouchableOpacity
+                    style={[styles.otherMatchesButton, { borderColor: colors.primary }]}
+                    onPress={() => setChoosingItem(item.key)}
+                    accessibilityRole="button"
+                  >
+                    <Text style={[styles.otherMatches, { color: colors.primary }]}>
+                      {match
+                        ? `Scegli un altro articolo (${item.matches.length})`
+                        : `Vedi ${item.matches.length === 1 ? '1 articolo simile' : `${item.matches.length} articoli simili`}`}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
                 <View style={styles.qtyRow}>
                   <TouchableOpacity
                     style={[styles.qtyButton, { backgroundColor: colors.surfaceSecondary }]}
@@ -429,7 +438,8 @@ const styles = StyleSheet.create({
   itemTitle: { fontSize: 20, fontWeight: '700' },
   itemPrice: { fontSize: 18, fontWeight: '700', marginTop: 4 },
   warning: { fontSize: 17, fontWeight: '700', color: '#b45309', marginTop: 4 },
-  otherMatches: { fontSize: 16, fontWeight: '700', marginTop: 4, textDecorationLine: 'underline' },
+  otherMatchesButton: { minHeight: 60, borderWidth: 2, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  otherMatches: { fontSize: 20, fontWeight: '800', textAlign: 'center' },
   qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   qtyButton: { width: 64, height: 64, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   qtyButtonText: { fontSize: 32, fontWeight: '800' },

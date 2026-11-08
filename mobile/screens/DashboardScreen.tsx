@@ -7,7 +7,9 @@ import { DEFAULT_COUNTRY_CODE, DEFAULT_CURRENCY, DEFAULT_LANGUAGE, DEFAULT_LOCAL
 import VoiceButton from '../components/VoiceButton';
 import VoiceConfirmSheet, { type DraftItem } from '../components/VoiceConfirmSheet';
 import {
+  countWordHits,
   extractVoiceItems,
+  listinoSearchWords,
   isSessionActive,
   matchByName,
   resolveSpokenTarget,
@@ -377,7 +379,7 @@ export default function DashboardScreen() {
             .select('id, description, unit_price, markup_percent, unit')
             .eq('id', mappedItemId)
             .maybeSingle();
-          if (mapped) matches = [mapped, ...matches.filter((match) => match.id !== mapped.id)];
+          if (mapped) matches = [{ ...mapped, fullMatch: true }, ...matches.filter((match) => match.id !== mapped.id)];
         }
         return {
           key: `${stamp}-${index}`,
@@ -385,7 +387,8 @@ export default function DashboardScreen() {
           quantity: item.quantity,
           unit: item.unit,
           matches,
-          choice: matches.length ? 0 : -1,
+          // A partial match is only offered: the user picks it if it is right.
+          choice: matches.length && matches[0].fullMatch !== false ? 0 : -1,
         };
       })
     );
@@ -645,7 +648,7 @@ export default function DashboardScreen() {
         listinoItemId = matchedItem.id;
       } else if (unitPrice === 0) {
         const items = await findListinoMatches(newCostoDesc);
-        if (items.length === 1) {
+        if (items.length === 1 && items[0].fullMatch) {
           const item = items[0];
           description = item.description;
           unitPrice = Number(item.unit_price);
@@ -698,29 +701,27 @@ export default function DashboardScreen() {
 
     if (error) throw error;
 
-    let resultItems = items || [];
+    // fullMatch: the article contains everything that was said, so it can be preselected.
+    let resultItems: any[] = (items || []).map((item: any) => ({ ...item, fullMatch: true }));
 
-    // Word-token fallback: if no results for full query, try matching individual words
+    // Otherwise look for the meaningful words: articles with more of them first.
     if (resultItems.length === 0) {
-      const words = trimmed.split(/\s+/).filter((w) => w.length >= 2);
-      if (words.length > 1) {
+      const words = listinoSearchWords(trimmed);
+      if (words.length > 0) {
         const orFilter = words.map((w) => `description.ilike.%${w}%`).join(',');
         const { data: wordItems, error: wordError } = await supabase
           .from('listini_vettoriali')
           .select('id, description, unit_price, markup_percent, unit, sku, category, listino_id')
           .eq('profile_id', profileId)
           .or(orFilter)
-          .limit(40);
-        // Articles containing more of the spoken words first ("tubo multistrato 20").
+          .limit(60);
         if (!wordError && wordItems) {
-          const lowerWords = words.map((word) => word.toLowerCase());
-          const hits = (description: string) => {
-            const text = String(description || '').toLowerCase();
-            return lowerWords.filter((word) => text.includes(word)).length;
-          };
-          resultItems = [...wordItems]
-            .sort((a: any, b: any) => hits(b.description) - hits(a.description))
-            .slice(0, 5);
+          resultItems = wordItems
+            .map((item: any) => ({ ...item, hits: countWordHits(item.description, words) }))
+            .filter((item: any) => item.hits > 0)
+            .sort((a: any, b: any) => b.hits - a.hits)
+            .slice(0, 5)
+            .map(({ hits, ...item }: any) => ({ ...item, fullMatch: hits === words.length }));
         }
       }
     }
@@ -757,7 +758,7 @@ export default function DashboardScreen() {
     try {
       const items = await findListinoMatches(newCostoDesc);
 
-      if (items.length === 1) {
+      if (items.length === 1 && items[0].fullMatch) {
         applyListinoItem(items[0]);
         return;
       }

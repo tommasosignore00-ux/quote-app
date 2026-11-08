@@ -161,3 +161,29 @@ export function normalizeSpokenUnit(unit: string | null): string | null {
   }
   return text.slice(0, 20);
 }
+
+// Words that say nothing about which article it is.
+const SEARCH_STOPWORDS = new Set([
+  'aggiungi', 'aggiungere', 'metti', 'mettere', 'inserisci', 'anche', 'poi',
+  'di', 'da', 'del', 'dello', 'della', 'dei', 'degli', 'delle', 'con', 'per', 'tra', 'fra',
+  'al', 'allo', 'alla', 'ai', 'agli', 'alle', 'il', 'lo', 'la', 'le', 'gli', 'un', 'una', 'uno',
+  'ed', 'mm', 'cm', 'mt', 'ml', 'metri', 'metro', 'pezzi', 'pezzo', 'pz', 'kg', 'chili', 'litri', 'nr', 'numero',
+]);
+
+/**
+ * Words to look for in the price list: no numbers, units or filler words, and the
+ * final vowel dropped so "tubo" also finds "tubi" and "raccordo" finds "raccordi".
+ */
+export function listinoSearchWords(query: string): string[] {
+  const words = normalizeName(query)
+    .split(' ')
+    .filter((word) => word.length >= 3 && !/^\d+$/.test(word) && !SEARCH_STOPWORDS.has(word))
+    .map((word) => (word.length >= 4 && /[aeiou]$/.test(word) ? word.slice(0, -1) : word));
+  return Array.from(new Set(words));
+}
+
+/** How many of the search words an article description contains. */
+export function countWordHits(description: string, words: string[]): number {
+  const text = normalizeName(description);
+  return words.filter((word) => text.includes(word)).length;
+}
