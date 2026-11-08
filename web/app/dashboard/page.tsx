@@ -9,7 +9,17 @@ import { useSessionTimeout } from '@/hooks/useSessionTimeout';
 import VoiceButton from '@/components/VoiceButton';
 import QuotePreview from '@/components/QuotePreview';
 import CostoEditor from '@/components/CostoEditor';
-import SemanticFallbackModal from '@/components/SemanticFallbackModal';
+import VoiceConfirmModal, {
+  type VoiceCandidate,
+  type VoiceDraft,
+  type VoiceDraftItem,
+} from '@/components/VoiceConfirmModal';
+import {
+  extractSpokenItems,
+  parseItalianNumber,
+  type SpokenItem,
+  type VoiceResult,
+} from '@/lib/voiceResult';
 import { useRealtime } from '@/lib/useRealtime';
 
 type Cliente = { id: string; name: string };
@@ -35,6 +45,7 @@ type ListinoMatchItem = {
   listino_id?: string | null;
   listino_name?: string | null;
   category?: string | null;
+  fullMatch?: boolean;
 };
 
 export default function DashboardPage() {
@@ -49,9 +60,8 @@ export default function DashboardPage() {
   const [profileCountryCode, setProfileCountryCode] = useState<string | null>(null);
   const [profileVatPercent, setProfileVatPercent] = useState<number>(22);
   const [profileMaterialMarkup, setProfileMaterialMarkup] = useState<number>(0);
-  const [semanticAlternatives, setSemanticAlternatives] = useState<
-    ListinoMatchItem[] | null
-  >(null);
+  const [voiceDraft, setVoiceDraft] = useState<VoiceDraft | null>(null);
+  const [savingVoiceDraft, setSavingVoiceDraft] = useState(false);
 
   const [showClientModal, setShowClientModal] = useState(false);
   const [newClientName, setNewClientName] = useState('');
@@ -144,6 +154,10 @@ export default function DashboardPage() {
     fetchData();
   }, [fetchData]);
 
+  const listinoSalePrice = (item: { unit_price: number; markup_percent?: number }) =>
+    Number(item.unit_price) *
+    (1 + (Number(item.markup_percent) || profileMaterialMarkup) / 100);
+
   // Auto-search listino when typing cost description
   useEffect(() => {
     if (!newCostoDesc.trim() || !profileId || !showCostoModal) {
@@ -153,34 +167,25 @@ export default function DashboardPage() {
 
     const timer = setTimeout(async () => {
       try {
-        console.log('[Dashboard] Searching listino for:', newCostoDesc);
         const res = await fetch('/api/listini/text-search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query: newCostoDesc, profileId }),
         });
         const match = await res.json();
-        console.log('[Dashboard] Match result:', match);
+        const found: ListinoMatchItem[] = match.item
+          ? [match.item, ...(match.alternatives || [])]
+          : [];
+        const exact = match.fullMatch ? found.filter((item) => item.fullMatch) : [];
 
-        if (match.item && match.alternatives && match.alternatives.length > 0) {
-          // Multiple results found — show picker
-          console.log('[Dashboard] Multiple matches found, showing picker');
-          setMatchedListinoItem(null);
-          setListinoAlternatives([match.item, ...match.alternatives]);
-        } else if (match.item) {
-          console.log(
-            '[Dashboard] Found single match:',
-            match.item.description,
-            'Price:',
-            match.item.unit_price
-          );
-          setMatchedListinoItem(match.item);
-          setNewCostoPrice(Number(match.item.unit_price).toFixed(2));
+        if (exact.length === 1) {
+          // The price shown is the one that will be saved, markup included.
+          setMatchedListinoItem(exact[0]);
+          setNewCostoPrice(listinoSalePrice(exact[0]).toFixed(2));
           setListinoAlternatives([]);
         } else {
-          console.log('[Dashboard] No match found');
           setMatchedListinoItem(null);
-          setListinoAlternatives([]);
+          setListinoAlternatives(found);
         }
       } catch (err) {
         console.error('[Dashboard] Error searching listino:', err);
@@ -189,33 +194,6 @@ export default function DashboardPage() {
 
     return () => clearTimeout(timer);
   }, [newCostoDesc, profileId, showCostoModal]);
-
-  const addCostoFromItem = async (item: ListinoMatchItem, qty = 1) => {
-    if (!selectedLavoro) return;
-    await supabase.from('preventivi_dettaglio').insert({
-      lavoro_id: selectedLavoro.id,
-      description: item.description,
-      quantity: qty,
-      unit_price: Number(item.unit_price),
-      tax_rate: Number(item.markup_percent) || profileMaterialMarkup,
-      listino_item_id: item.id,
-    });
-    setSemanticAlternatives(null);
-    fetchData();
-  };
-
-  const addCostoManual = async (desc: string, qty = 1) => {
-    if (!selectedLavoro) return;
-    await supabase.from('preventivi_dettaglio').insert({
-      lavoro_id: selectedLavoro.id,
-      description: desc,
-      quantity: qty,
-      unit_price: 0,
-      tax_rate: profileMaterialMarkup,
-    });
-    setSemanticAlternatives(null);
-    fetchData();
-  };
 
   const handleCreateClient = async () => {
     if (!newClientName.trim()) {
@@ -298,9 +276,7 @@ export default function DashboardPage() {
 
       // Use matched item if available
       if (matchedListinoItem) {
-        const price =
-          Number(matchedListinoItem.unit_price) *
-          (1 + (Number(matchedListinoItem.markup_percent) || 0) / 100);
+        const price = listinoSalePrice(matchedListinoItem);
         const { data: created, error } = await supabase
           .from('preventivi_dettaglio')
           .insert({
@@ -413,69 +389,141 @@ export default function DashboardPage() {
     })),
   };
 
-  const handleVoiceResult = async (result: {
-    action: string;
-    data?: Record<string, unknown>;
-  }) => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, country_code')
-      .eq('id', user.id)
-      .single();
-    if (!profile) return;
-
-    if (result.action === 'create_cliente' && result.data?.name) {
-      const { data: created } = await supabase
-        .from('clienti')
-        .insert({ profile_id: profile.id, name: String(result.data.name) })
-        .select('*');
-      if (created?.[0]) setClienti((p) => [...p, created[0]]);
-    } else if (
-      result.action === 'create_lavoro' &&
-      result.data?.title &&
-      (result.data?.cliente_id || result.data?.cliente_name)
-    ) {
-      let clienteId = result.data.cliente_id as string | undefined;
-      if (!clienteId && result.data.cliente_name) {
-        const match = clienti.find((c) =>
-          c.name.toLowerCase().includes(String(result.data?.cliente_name).toLowerCase())
-        );
-        clienteId = match?.id;
-      }
-      if (clienteId) {
-        await supabase.from('lavori').insert({
-          profile_id: profile.id,
-          cliente_id: String(clienteId),
-          title: String(result.data.title),
-        });
-      }
-    } else if (
-      result.action === 'add_costo' &&
-      result.data?.description &&
-      selectedLavoro
-    ) {
-      const res = await fetch('/api/voice/semantic-match', {
+  /** Price list candidates for one spoken item: words first, meaning only as a fallback. */
+  const buildVoiceDraftItem = async (
+    spoken: SpokenItem,
+    index: number
+  ): Promise<VoiceDraftItem> => {
+    const post = async (url: string) => {
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: result.data.description, profileId: profile.id }),
+        body: JSON.stringify({ query: spoken.description, profileId }),
       });
-      const match = await res.json();
-      const qty = Number(result.data?.quantity) || 1;
-      if (match.item && match.alternatives?.length > 0) {
-        setSemanticAlternatives([match.item, ...match.alternatives]);
-      } else if (match.item) {
-        await addCostoFromItem(match.item, qty);
-      } else if (match.alternatives?.length > 0) {
-        setSemanticAlternatives(match.alternatives);
-      } else {
-        await addCostoManual(String(result.data.description), qty);
-      }
+      return res.ok ? res.json() : { item: null, alternatives: [] };
+    };
+    const byWords = await post('/api/listini/text-search');
+    let candidates: VoiceCandidate[] = byWords.item
+      ? [byWords.item, ...(byWords.alternatives || [])]
+      : [];
+    if (candidates.length === 0) {
+      const byMeaning = await post('/api/voice/semantic-match');
+      candidates = (byMeaning.alternatives || []).map((item: VoiceCandidate) => ({
+        ...item,
+        fullMatch: false,
+        semantic: true,
+      }));
     }
-    fetchData();
+    const exact = candidates.filter((candidate) => candidate.fullMatch);
+    return {
+      key: `${Date.now()}-${index}`,
+      spoken: spoken.description,
+      quantity: spoken.quantity === null ? '' : String(spoken.quantity).replace('.', ','),
+      unit: spoken.unit || '',
+      price: spoken.unitPrice === null ? '' : String(spoken.unitPrice).replace('.', ','),
+      candidates,
+      choice: exact.length === 1 ? candidates.indexOf(exact[0]) : -1,
+    };
+  };
+
+  // Nothing dictated is saved here: every result opens a confirmation first.
+  const handleVoiceResult = async (result: VoiceResult) => {
+    const intent = String(result.agent?.intent || '');
+    if (intent === 'remove_quote_items' || intent === 'edit_quote_items') {
+      toast.error(
+        'A voce puoi solo aggiungere voci: togli o modifica le voci dalla lista.'
+      );
+      return;
+    }
+    const spokenItems = extractSpokenItems(result);
+
+    if (result.action === 'create_cliente' && result.data?.name && !spokenItems.length) {
+      setVoiceDraft({ kind: 'cliente', name: String(result.data.name).trim() });
+      return;
+    }
+
+    if (result.action === 'create_lavoro' && result.data?.title && !spokenItems.length) {
+      let clienteId = clienti.find((c) => c.id === result.data?.cliente_id)?.id;
+      if (!clienteId && result.data.cliente_name) {
+        const spokenName = String(result.data.cliente_name).toLowerCase();
+        const matches = clienti.filter((c) => c.name.toLowerCase().includes(spokenName));
+        if (matches.length === 1) clienteId = matches[0].id;
+      }
+      setVoiceDraft({
+        kind: 'lavoro',
+        title: String(result.data.title).trim(),
+        clienteId: clienteId || selectedClienteId || '',
+      });
+      return;
+    }
+
+    if (spokenItems.length) {
+      if (!selectedLavoro) {
+        toast.error('Apri prima il lavoro a cui aggiungere le voci, poi riprova.');
+        return;
+      }
+      const items = await Promise.all(spokenItems.map(buildVoiceDraftItem));
+      setVoiceDraft({ kind: 'items', transcript: result.text || '', items });
+      return;
+    }
+
+    const question = result.agent?.clarification?.questions?.[0];
+    toast.error(
+      typeof question === 'string' && question.trim()
+        ? question.trim()
+        : result.text
+          ? `Non ho capito cosa fare. Ho sentito: "${result.text}".`
+          : 'Non ho sentito niente, riprova.'
+    );
+  };
+
+  const handleConfirmVoiceDraft = async (draft: VoiceDraft) => {
+    if (!profileId) return;
+    setSavingVoiceDraft(true);
+    try {
+      if (draft.kind === 'cliente') {
+        const { data: created, error } = await supabase
+          .from('clienti')
+          .insert({ profile_id: profileId, name: draft.name.trim() })
+          .select('*');
+        if (error) throw error;
+        if (created?.[0]) setClienti((p) => [...p, created[0]]);
+      } else if (draft.kind === 'lavoro') {
+        const { error } = await supabase
+          .from('lavori')
+          .insert({
+            profile_id: profileId,
+            cliente_id: draft.clienteId,
+            title: draft.title.trim(),
+          });
+        if (error) throw error;
+      } else {
+        if (!selectedLavoro) throw new Error('Nessun lavoro aperto');
+        const rows = draft.items.map((item) => {
+          const match = item.candidates[item.choice];
+          const ownPrice = parseItalianNumber(item.price);
+          return {
+            lavoro_id: selectedLavoro.id,
+            description: match?.description || item.spoken,
+            quantity: parseItalianNumber(item.quantity) as number,
+            unit_price: ownPrice ?? (match ? listinoSalePrice(match) : 0),
+            tax_rate: profileVatPercent,
+            listino_item_id: match?.id || null,
+            // Empty: the database copies the unit of the price list item.
+            unit: item.unit.trim() || null,
+          };
+        });
+        const { error } = await supabase.from('preventivi_dettaglio').insert(rows);
+        if (error) throw error;
+      }
+      setVoiceDraft(null);
+      toast.success(t('messages.saved'));
+      fetchData();
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setSavingVoiceDraft(false);
+    }
   };
 
   return (
@@ -613,12 +661,14 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {semanticAlternatives && (
-        <SemanticFallbackModal
-          alternatives={semanticAlternatives}
-          onSelect={(item) => addCostoFromItem(item)}
-          onCancel={() => setSemanticAlternatives(null)}
-          onAddManual={(desc) => addCostoManual(desc)}
+      {voiceDraft && (
+        <VoiceConfirmModal
+          draft={voiceDraft}
+          clienti={clienti}
+          saving={savingVoiceDraft}
+          salePrice={listinoSalePrice}
+          onConfirm={handleConfirmVoiceDraft}
+          onCancel={() => setVoiceDraft(null)}
         />
       )}
 

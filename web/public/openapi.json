@@ -71,51 +71,6 @@
         }
       }
     },
-    "/api/voice/process": {
-      "post": {
-        "summary": "Processa comando vocale",
-        "description": "Accetta audio, lo trascrive con Whisper e lo interpreta con GPT-4 per eseguire azioni (creare clienti, lavori, aggiungere costi).",
-        "tags": ["Voice AI"],
-        "security": [{ "bearerAuth": [] }],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "type": "object",
-                "required": ["audio"],
-                "properties": {
-                  "audio": {
-                    "type": "string",
-                    "format": "binary",
-                    "description": "File audio (webm, mp3, wav)"
-                  },
-                  "clienti": {
-                    "type": "string",
-                    "description": "JSON array dei clienti dell'utente [{id, name}]"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Comando interpretato",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/VoiceProcessResponse"
-                }
-              }
-            }
-          },
-          "400": { "$ref": "#/components/responses/ValidationError" },
-          "429": { "$ref": "#/components/responses/RateLimitError" },
-          "500": { "$ref": "#/components/responses/InternalError" }
-        }
-      }
-    },
     "/api/stripe/create-checkout-session": {
       "post": {
         "summary": "Crea sessione Stripe Checkout",
@@ -333,7 +288,10 @@
       "VoiceProcessResponse": {
         "type": "object",
         "properties": {
-          "action": { "type": "string", "enum": ["create_cliente", "create_lavoro", "add_costo", "none"] },
+          "action": {
+            "type": "string",
+            "enum": ["create_cliente", "create_lavoro", "add_costo", "none"]
+          },
           "data": { "type": "object" },
           "text": { "type": "string", "description": "Testo trascritto da Whisper" }
         }

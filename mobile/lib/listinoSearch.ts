@@ -19,7 +19,10 @@ export function normalizeName(value: unknown): string {
  */
 export function normalizeSpokenTrade(text: string): string {
   return String(text ?? '')
-    .replace(/\b(?:acca\s*e|h\s*e)\s*(a|b)(?:i)?\b/gi, (_, letter: string) => `HE${letter.toUpperCase()}`)
+    .replace(
+      /\b(?:acca\s*e|h\s*e)\s*(a|b)(?:i)?\b/gi,
+      (_, letter: string) => `HE${letter.toUpperCase()}`
+    )
     .replace(/\bh\s+e\s*(a|b)\b/gi, (_, letter: string) => `HE${letter.toUpperCase()}`)
     .replace(/\bi\s*p\s*e\b(?=\s*\d|\s*$)/gi, 'IPE')
     .replace(/\bu\s*p\s*n\b/gi, 'UPN');
@@ -27,10 +30,54 @@ export function normalizeSpokenTrade(text: string): string {
 
 // Words that say nothing about which article it is.
 const SEARCH_STOPWORDS = new Set([
-  'aggiungi', 'aggiungere', 'metti', 'mettere', 'inserisci', 'anche', 'poi',
-  'di', 'da', 'del', 'dello', 'della', 'dei', 'degli', 'delle', 'con', 'per', 'tra', 'fra',
-  'al', 'allo', 'alla', 'ai', 'agli', 'alle', 'il', 'lo', 'la', 'le', 'gli', 'un', 'una', 'uno',
-  'ed', 'mm', 'cm', 'mt', 'ml', 'metri', 'metro', 'pezzi', 'pezzo', 'pz', 'kg', 'chili', 'litri', 'nr', 'numero',
+  'aggiungi',
+  'aggiungere',
+  'metti',
+  'mettere',
+  'inserisci',
+  'anche',
+  'poi',
+  'di',
+  'da',
+  'del',
+  'dello',
+  'della',
+  'dei',
+  'degli',
+  'delle',
+  'con',
+  'per',
+  'tra',
+  'fra',
+  'al',
+  'allo',
+  'alla',
+  'ai',
+  'agli',
+  'alle',
+  'il',
+  'lo',
+  'la',
+  'le',
+  'gli',
+  'un',
+  'una',
+  'uno',
+  'ed',
+  'mm',
+  'cm',
+  'mt',
+  'ml',
+  'metri',
+  'metro',
+  'pezzi',
+  'pezzo',
+  'pz',
+  'kg',
+  'chili',
+  'litri',
+  'nr',
+  'numero',
 ]);
 
 // Often said, rarely written on the article: they can only break a tie.
@@ -96,11 +143,17 @@ export function parseListinoQuery(query: string): ListinoQuery {
     return ' ';
   });
 
-  const plainWords = joinSplitAbbreviations(withoutShapes.split(' ').filter(Boolean)).filter(
+  const plainWords = joinSplitAbbreviations(
+    withoutShapes.split(' ').filter(Boolean)
+  ).filter(
     (word) => word.length >= 3 && !/^\d+$/.test(word) && !SEARCH_STOPWORDS.has(word)
   );
   const stems = Array.from(
-    new Set(plainWords.map((word) => (word.length >= 4 && /[aeiou]$/.test(word) ? word.slice(0, -1) : word)))
+    new Set(
+      plainWords.map((word) =>
+        word.length >= 4 && /[aeiou]$/.test(word) ? word.slice(0, -1) : word
+      )
+    )
   );
   const optional = stems.filter((stem) => OPTIONAL_WORDS.has(stem));
   const main = stems.filter((stem) => !OPTIONAL_WORDS.has(stem));
@@ -110,7 +163,9 @@ export function parseListinoQuery(query: string): ListinoQuery {
   return {
     required: requiredStems.map((stem) => SEARCH_ALIASES[stem] || [stem]),
     optional: main.length ? optional : [],
-    numbers: (spoken.match(/\d+(?:[.,]\d+)?/g) || []).map((number) => number.replace('.', ',')),
+    numbers: (spoken.match(/\d+(?:[.,]\d+)?/g) || []).map((number) =>
+      number.replace('.', ',')
+    ),
     phrases: Array.from(new Set(phrases)),
     plainWords,
   };
@@ -129,7 +184,10 @@ function numberSpellings(number: string): string[] {
  * Filters for the database. `all`: one `.or()` per entry, chained, so an article must
  * satisfy each of them. `any`: a single `.or()`, the wider search used when `all` finds nothing.
  */
-export function buildListinoFilters(parsed: ListinoQuery): { all: string[]; any: string | null } {
+export function buildListinoFilters(parsed: ListinoQuery): {
+  all: string[];
+  any: string | null;
+} {
   const numbers = Array.from(new Set(parsed.numbers));
   const all = [
     ...parsed.required.map((variants) => variants.map(ilike).join(',')),
@@ -173,9 +231,12 @@ export function rankListinoMatches<T extends { description: string }>(
       const sizeText = /\d/.test(name) ? name : item.description;
       return {
         item,
-        hits: required.filter((variants) => variants.some((variant) => text.includes(variant))).length,
+        hits: required.filter((variants) =>
+          variants.some((variant) => text.includes(variant))
+        ).length,
         optionalHits: optional.filter((word) => text.includes(word)).length,
-        phraseHits: phrases.filter((phrase) => new RegExp(`\\b${phrase}\\b`).test(text)).length,
+        phraseHits: phrases.filter((phrase) => new RegExp(`\\b${phrase}\\b`).test(text))
+          .length,
         numberHits: Array.from(needed).reduce(
           (sum, [number, count]) => sum + Math.min(count, countNumber(sizeText, number)),
           0
@@ -196,6 +257,9 @@ export function rankListinoMatches<T extends { description: string }>(
     )
     .map(({ item, hits, numberHits, phraseHits }) => ({
       ...item,
-      fullMatch: hits === required.length && numberHits === numbers.length && phraseHits === phrases.length,
+      fullMatch:
+        hits === required.length &&
+        numberHits === numbers.length &&
+        phraseHits === phrases.length,
     }));
 }

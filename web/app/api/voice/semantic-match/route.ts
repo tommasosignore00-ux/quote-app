@@ -70,16 +70,8 @@ export async function POST(req: Request) {
       ...(metadataMap.get(item.id) || {}),
     }));
 
-    const best = normalizedItems[0];
-    const similarity = best.similarity || 0;
-
-    // Accept any match above 0.6 threshold
-    if (similarity >= 0.6) {
-      return NextResponse.json({ item: best, alternatives: normalizedItems.slice(1, 4) });
-    }
-
-    // Return best match even if below threshold (let frontend decide)
-    return NextResponse.json({ item: best, alternatives: normalizedItems.slice(1, 4) });
+    // Similar in meaning is not the same article: always candidates, the user decides.
+    return NextResponse.json({ item: null, alternatives: normalizedItems.slice(0, 5) });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }
