@@ -20,7 +20,7 @@ export async function POST(req: Request) {
       req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
       req.headers.get('x-real-ip') ||
       'unknown';
-    const rl = rateLimitAuth(ip);
+    const rl = await rateLimitAuth(ip);
     if (!rl.success) {
       return NextResponse.json(
         { error: 'Troppe richieste. Riprova tra poco.' },

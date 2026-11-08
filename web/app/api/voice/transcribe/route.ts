@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     if (!user) return unauthorizedResponse();
     const notEntitled = await requireActiveSubscription(user.id);
     if (notEntitled) return notEntitled;
-    const limited = rateLimitVoice(user.id);
+    const limited = await rateLimitVoice(user.id);
     if (!limited.success) {
       return NextResponse.json(
         { error: 'Troppe richieste. Riprova tra poco.' },

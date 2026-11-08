@@ -59,7 +59,7 @@ export async function POST(req: Request) {
   const user = await getRequestUser(req);
   if (!user) return unauthorizedResponse();
 
-  const limit = rateLimit(`account-delete:${user.id}`, {
+  const limit = await rateLimit(`account-delete:${user.id}`, {
     maxRequests: 5,
     windowMs: 3_600_000,
   });
@@ -126,8 +126,9 @@ export async function POST(req: Request) {
     if (deleteError) throw new Error(deleteError.message);
 
     const leftovers = await findLeftovers(user.id);
-    if (leftovers.length)
-      {console.error('Account deletion left rows in:', leftovers.join(', '));}
+    if (leftovers.length) {
+      console.error('Account deletion left rows in:', leftovers.join(', '));
+    }
 
     // Records that a deletion happened, and nothing about who asked for it.
     const { error: auditError } = await supabaseAdmin.from('audit_logs').insert({

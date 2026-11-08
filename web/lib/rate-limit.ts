@@ -1,30 +1,17 @@
+import { supabaseAdmin } from './supabase-server';
+
 /**
- * In-memory rate limiter for API routes.
- * For production at scale, replace with Upstash Redis or similar.
+ * Durable rate limiter backed by Postgres (consume_rate_limit), so limits hold
+ * across serverless instances and restarts.
  */
-
-interface RateLimitEntry {
-  count: number;
-  resetTime: number;
-}
-
-const store = new Map<string, RateLimitEntry>();
-
-// Cleanup old entries every 5 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of store) {
-    if (now > entry.resetTime) {
-      store.delete(key);
-    }
-  }
-}, 5 * 60 * 1000);
 
 interface RateLimitConfig {
   /** Max requests allowed in the window */
   maxRequests: number;
   /** Window size in milliseconds */
   windowMs: number;
+  /** What to do when the counter is unavailable. Defaults to denying the request. */
+  whenUnavailable?: 'allow' | 'deny';
 }
 
 interface RateLimitResult {
@@ -34,62 +21,58 @@ interface RateLimitResult {
   headers: Record<string, string>;
 }
 
-export function rateLimit(
-  identifier: string,
-  config: RateLimitConfig = { maxRequests: 60, windowMs: 60_000 }
-): RateLimitResult {
-  const now = Date.now();
-  const key = identifier;
-
-  let entry = store.get(key);
-
-  if (!entry || now > entry.resetTime) {
-    entry = { count: 0, resetTime: now + config.windowMs };
-    store.set(key, entry);
-  }
-
-  entry.count++;
-
-  const remaining = Math.max(0, config.maxRequests - entry.count);
-  const resetIn = Math.max(0, entry.resetTime - now);
-
-  const headers: Record<string, string> = {
-    'X-RateLimit-Limit': config.maxRequests.toString(),
-    'X-RateLimit-Remaining': remaining.toString(),
-    'X-RateLimit-Reset': new Date(entry.resetTime).toISOString(),
-  };
-
+function unavailable(config: RateLimitConfig): RateLimitResult {
+  const allowed = config.whenUnavailable === 'allow';
   return {
-    success: entry.count <= config.maxRequests,
-    remaining,
-    resetIn,
-    headers,
+    success: allowed,
+    remaining: 0,
+    resetIn: config.windowMs,
+    headers: allowed ? {} : { 'Retry-After': '60' },
   };
 }
 
-// ── Pre-configured limiters for different route types ──────────
+export async function rateLimit(
+  identifier: string,
+  config: RateLimitConfig = { maxRequests: 60, windowMs: 60_000 }
+): Promise<RateLimitResult> {
+  try {
+    const { data, error } = await supabaseAdmin.rpc('consume_rate_limit', {
+      p_key: identifier,
+      p_limit: config.maxRequests,
+      p_window_seconds: Math.ceil(config.windowMs / 1000),
+    });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (error || !row) {
+      console.error('Rate limit unavailable:', error?.code ?? 'no row');
+      return unavailable(config);
+    }
+    const resetAt = new Date(row.reset_at as string);
+    return {
+      success: row.allowed === true,
+      remaining: row.remaining as number,
+      resetIn: Math.max(0, resetAt.getTime() - Date.now()),
+      headers: {
+        'X-RateLimit-Limit': String(config.maxRequests),
+        'X-RateLimit-Remaining': String(row.remaining),
+        'X-RateLimit-Reset': resetAt.toISOString(),
+      },
+    };
+  } catch {
+    console.error('Rate limit check failed');
+    return unavailable(config);
+  }
+}
 
-/** Auth routes: 10 requests per minute per IP */
+/** Auth routes: 10 requests per minute per key. */
 export function rateLimitAuth(ip: string) {
   return rateLimit(`auth:${ip}`, { maxRequests: 10, windowMs: 60_000 });
 }
 
-/** Voice/AI routes: 20 requests per minute per user */
+/** Voice routes: 20 requests per minute per user. AI quota is the hard stop. */
 export function rateLimitVoice(userId: string) {
-  return rateLimit(`voice:${userId}`, { maxRequests: 20, windowMs: 60_000 });
-}
-
-/** General API: 100 requests per minute per IP */
-export function rateLimitGeneral(ip: string) {
-  return rateLimit(`general:${ip}`, { maxRequests: 100, windowMs: 60_000 });
-}
-
-/** Stripe: 20 requests per minute per user */
-export function rateLimitStripe(userId: string) {
-  return rateLimit(`stripe:${userId}`, { maxRequests: 20, windowMs: 60_000 });
-}
-
-/** Email: 5 emails per minute per user */
-export function rateLimitEmail(userId: string) {
-  return rateLimit(`email:${userId}`, { maxRequests: 5, windowMs: 60_000 });
+  return rateLimit(`voice:${userId}`, {
+    maxRequests: 20,
+    windowMs: 60_000,
+    whenUnavailable: 'allow',
+  });
 }

@@ -43,7 +43,7 @@ export async function GET(req: Request) {
   const user = await getRequestUser(req);
   if (!user) return unauthorizedResponse();
 
-  const limit = rateLimit(`account-export:${user.id}`, {
+  const limit = await rateLimit(`account-export:${user.id}`, {
     maxRequests: 5,
     windowMs: 3_600_000,
   });

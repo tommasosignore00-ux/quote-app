@@ -7,6 +7,11 @@ let newerVersions: any[] = [];
 const lavoroUpdates: any[] = [];
 const versionUpdates: any[] = [];
 
+jest.mock('../../lib/rate-limit', () => ({
+  rateLimit: jest
+    .fn()
+    .mockResolvedValue({ success: true, remaining: 10, resetIn: 0, headers: {} }),
+}));
 jest.mock('../../lib/supabase-server', () => ({
   supabaseAdmin: {
     from: (table: string) => {

@@ -21,12 +21,21 @@ export async function POST(req: Request) {
       );
     }
 
-    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || 'unknown';
-    const rl = rateLimitAuth(`password-reset-confirm:${ip}`);
+    const ip =
+      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      req.headers.get('x-real-ip') ||
+      'unknown';
+    const rl = await rateLimitAuth(`password-reset-confirm:${ip}`);
     if (!rl.success) {
-      return NextResponse.json({ error: 'Troppe richieste. Riprova tra poco.' }, { status: 429, headers: rl.headers });
+      return NextResponse.json(
+        { error: 'Troppe richieste. Riprova tra poco.' },
+        { status: 429, headers: rl.headers }
+      );
     }
-    const normalizedEmail = String(email).trim().toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`);
+    const normalizedEmail = String(email)
+      .trim()
+      .toLowerCase()
+      .replace(/[\\%_]/g, (c) => `\\${c}`);
 
     if (typeof newPassword !== 'string' || newPassword.length < 8) {
       return NextResponse.json(
@@ -55,10 +64,7 @@ export async function POST(req: Request) {
 
     // Check expiration
     if (new Date(resetTokens.expires_at) < new Date()) {
-      return NextResponse.json(
-        { error: 'Reset token has expired' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Reset token has expired' }, { status: 400 });
     }
 
     // Check if already used
@@ -78,18 +84,12 @@ export async function POST(req: Request) {
       .maybeSingle();
     if (userError) {
       console.error('Failed to look up user:', userError);
-      return NextResponse.json(
-        { error: 'Failed to process request' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to process request' }, { status: 500 });
     }
 
     const user = profileRow ? { id: profileRow.id as string } : null;
     if (!user || user.id !== resetTokens.user_id) {
-      return NextResponse.json(
-        { error: 'Invalid credentials' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Invalid credentials' }, { status: 400 });
     }
 
     // Update user password
@@ -99,10 +99,7 @@ export async function POST(req: Request) {
 
     if (updateError) {
       console.error('Failed to update password:', updateError);
-      return NextResponse.json(
-        { error: 'Failed to update password' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to update password' }, { status: 500 });
     }
 
     // Mark token as used
@@ -139,9 +136,6 @@ export async function POST(req: Request) {
     );
   } catch (err: any) {
     console.error('Password reset confirmation error:', err);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

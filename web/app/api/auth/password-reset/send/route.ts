@@ -49,27 +49,35 @@ async function sendResetEmail(email: string, resetUrl: string): Promise<void> {
   }
 
   // Option 2: Standard SMTP via fetch (you can use your own service)
-  throw new Error('Email service not configured. Please set RESEND_API_KEY or implement your email service.');
+  throw new Error(
+    'Email service not configured. Please set RESEND_API_KEY or implement your email service.'
+  );
 }
 
 export async function POST(req: Request) {
   try {
-    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || 'unknown';
-    const rl = rateLimitAuth(`password-reset:${ip}`);
+    const ip =
+      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      req.headers.get('x-real-ip') ||
+      'unknown';
+    const rl = await rateLimitAuth(`password-reset:${ip}`);
     if (!rl.success) {
-      return NextResponse.json({ error: 'Troppe richieste. Riprova tra poco.' }, { status: 429, headers: rl.headers });
+      return NextResponse.json(
+        { error: 'Troppe richieste. Riprova tra poco.' },
+        { status: 429, headers: rl.headers }
+      );
     }
 
     const body = await req.json();
     const { email } = body;
 
     if (!email || typeof email !== 'string') {
-      return NextResponse.json(
-        { error: 'Email is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Email is required' }, { status: 400 });
     }
-    const normalizedEmail = email.trim().toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`);
+    const normalizedEmail = email
+      .trim()
+      .toLowerCase()
+      .replace(/[\\%_]/g, (c) => `\\${c}`);
 
     // Find user by email
     // listUsers() restituisce solo la prima pagina (50 utenti): cerchiamo nel profilo
@@ -80,10 +88,7 @@ export async function POST(req: Request) {
       .maybeSingle();
     if (userError) {
       console.error('Failed to look up user:', userError);
-      return NextResponse.json(
-        { error: 'Failed to process request' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to process request' }, { status: 500 });
     }
 
     const user = profileRow ? { id: profileRow.id as string } : null;
@@ -101,24 +106,22 @@ export async function POST(req: Request) {
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60); // 1 hour
 
     // Store token in database
-    const { error: insertError } = await supabase
-      .from('password_reset_tokens')
-      .insert({
-        user_id: user.id,
-        token_hash: tokenHash,
-        expires_at: expiresAt,
-      });
+    const { error: insertError } = await supabase.from('password_reset_tokens').insert({
+      user_id: user.id,
+      token_hash: tokenHash,
+      expires_at: expiresAt,
+    });
 
     if (insertError) {
       console.error('Failed to insert reset token:', insertError);
-      return NextResponse.json(
-        { error: 'Failed to process request' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to process request' }, { status: 500 });
     }
 
     // Send email with reset link
-    const resetUrl = new URL('/auth/reset-password', process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
+    const resetUrl = new URL(
+      '/auth/reset-password',
+      process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    );
     resetUrl.searchParams.append('token', rawToken);
     resetUrl.searchParams.append('email', email);
 
@@ -126,10 +129,7 @@ export async function POST(req: Request) {
       await sendResetEmail(email, resetUrl.toString());
     } catch (emailError: any) {
       console.error('Failed to send email:', emailError);
-      return NextResponse.json(
-        { error: 'Failed to send reset email' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to send reset email' }, { status: 500 });
     }
 
     // Log audit
@@ -146,9 +146,6 @@ export async function POST(req: Request) {
     );
   } catch (err: any) {
     console.error('Password reset error:', err);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

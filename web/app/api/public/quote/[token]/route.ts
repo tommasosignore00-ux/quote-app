@@ -19,9 +19,11 @@ const MAX_NOTE_LENGTH = 1000;
 export async function POST(req: Request, { params }: { params: { token: string } }) {
   try {
     const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim() || null;
-    const limit = rateLimit(`public-quote:${ip || 'unknown'}`, {
+    const limit = await rateLimit(`public-quote:${ip || 'unknown'}`, {
       maxRequests: 20,
       windowMs: 60_000,
+      // A client accepting a quote must not be stopped by a counter outage.
+      whenUnavailable: 'allow',
     });
     if (!limit.success) {
       return NextResponse.json(
