@@ -30,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           content="preventivi, idraulici, elettricisti, artigiani, preventivi a voce, listini"
         />
         <meta name="author" content="Mastrovoce" />
-        <meta name="theme-color" content="#dc2626" />
+        <meta name="theme-color" content="#c2410c" />
 
         {/* Open Graph */}
         <meta property="og:type" content="website" />

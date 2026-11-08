@@ -53,15 +53,14 @@ export default function HomePage() {
           <section className="grid items-center gap-10 lg:grid-cols-[1.1fr_0.9fr]">
             <div>
               <div className="mb-4 inline-flex rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1 text-sm text-emerald-300">
-                Software per preventivi rapidi per imprenditori e attività di servizi
+                Per idraulici, elettricisti e artigiani
               </div>
               <h2 className="max-w-3xl text-4xl font-bold leading-tight sm:text-6xl">
-                Crea, scarica e invia preventivi professionali in pochi minuti.
+                Detta le voci dal cantiere. Il preventivo lo mandi tu.
               </h2>
               <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300">
-                Mastrovoce aiuta professionisti, artigiani e piccole imprese a creare
-                preventivi e fatture, gestire clienti, dettare le voci dal cantiere e
-                condividere documenti direttamente dal web e dal mobile.
+                Parli al telefono, controlli quello che hai detto e prepari il preventivo
+                con i tuoi prezzi. Niente viene salvato senza la tua conferma.
               </p>
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -80,19 +79,19 @@ export default function HomePage() {
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <p className="text-sm font-semibold text-white">Preventivi e fatture</p>
                   <p className="mt-2 text-sm text-slate-300">
-                    Creazione documenti, PDF, invio cliente e stato pagamento.
+                    Con il nome della tua azienda, da scaricare o inviare al cliente.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <p className="text-sm font-semibold text-white">Detti le voci</p>
                   <p className="mt-2 text-sm text-slate-300">
-                    Acquisizione rapida di lavori, voci e prezzi tramite voce.
+                    Materiali e lavorazioni a voce, con i prezzi del tuo listino.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <p className="text-sm font-semibold text-white">Web e mobile</p>
                   <p className="mt-2 text-sm text-slate-300">
-                    Stesse funzioni principali disponibili su entrambe le versioni.
+                    In cantiere dal telefono, in ufficio dal computer.
                   </p>
                 </div>
               </div>
@@ -120,8 +119,7 @@ export default function HomePage() {
                 <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
                   <p className="font-semibold text-white">3. Scarica o invia</p>
                   <p className="mt-1 text-sm text-slate-300">
-                    Esporta PDF, condividi i documenti e gestisci il flusso cliente senza
-                    carta.
+                    Mandi il PDF o il link: il cliente accetta o rifiuta online.
                   </p>
                 </div>
               </div>

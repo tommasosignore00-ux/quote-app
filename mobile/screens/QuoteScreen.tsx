@@ -427,7 +427,7 @@ export default function QuoteScreen() {
             />
           ) : (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-              <ActivityIndicator size="large" color="#dc2626" />
+              <ActivityIndicator size="large" color="#c2410c" />
             </View>
           )}
           <View style={styles.previewModalFooter}>
@@ -527,14 +527,14 @@ const styles = StyleSheet.create({
     flex: 1, minWidth: 80, backgroundColor: '#e2e8f0', paddingVertical: 10, paddingHorizontal: 8,
     borderRadius: 8, alignItems: 'center', borderWidth: 2, borderColor: '#cbd5e1',
   },
-  templateOptionSelected: { backgroundColor: '#dc2626', borderColor: '#dc2626' },
+  templateOptionSelected: { backgroundColor: '#c2410c', borderColor: '#c2410c' },
   templateOptionText: { fontSize: 12, fontWeight: '600', color: '#1f2937' },
   templateOptionTextSelected: { color: '#fff' },
-  btn: { backgroundColor: '#dc2626', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginBottom: 12 },
+  btn: { backgroundColor: '#c2410c', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginBottom: 12 },
   btnSecondary: { backgroundColor: '#64748b' },
   btnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
   previewModalContainer: { flex: 1, backgroundColor: '#fff' },
-  previewModalHeader: { backgroundColor: '#dc2626', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12 },
+  previewModalHeader: { backgroundColor: '#c2410c', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12 },
   previewModalTitle: { fontSize: 17, fontWeight: 'bold', color: '#fff', marginBottom: 2 },
   previewModalSubtitle: { fontSize: 12, color: '#fecaca' },
   previewModalFooter: { flexDirection: 'row', gap: 12, padding: 16, borderTopWidth: 1, borderTopColor: '#e2e8f0' },

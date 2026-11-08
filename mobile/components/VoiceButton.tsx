@@ -305,7 +305,7 @@ export default function VoiceButton({ onResult, context, size = 64, floating = f
 
 const styles = StyleSheet.create({
   button: {
-    backgroundColor: '#dc2626',
+    backgroundColor: '#c2410c',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',

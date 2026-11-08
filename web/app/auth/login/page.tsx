@@ -90,9 +90,9 @@ export default function LoginPage() {
             <div className="mt-2 text-right">
               <Link
                 href="/auth/forgot-password"
-                className="text-sm text-blue-600 hover:underline"
+                className="text-sm text-primary hover:underline"
               >
-                Forgot password?
+                Password dimenticata?
               </Link>
             </div>
           </div>

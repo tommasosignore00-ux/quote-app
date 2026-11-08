@@ -12,7 +12,7 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
 
     if (!email) {
-      toast.error('Email is required');
+      toast.error('Inserisci la tua email');
       return;
     }
 
@@ -27,7 +27,7 @@ export default function ForgotPasswordPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        toast.error(data.error || 'Failed to send reset email');
+        toast.error(data.error || 'Invio non riuscito. Riprova.');
         return;
       }
 
@@ -36,7 +36,7 @@ export default function ForgotPasswordPage() {
       setEmail('');
     } catch (err: any) {
       console.error('Forgot password error:', err);
-      toast.error('An error occurred');
+      toast.error('Si è verificato un errore');
     } finally {
       setLoading(false);
     }
@@ -61,19 +61,22 @@ export default function ForgotPasswordPage() {
               />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Check Your Email</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            Controlla la tua email
+          </h2>
           <p className="text-gray-600 mb-4">
-            We&apos;ve sent a password reset link to <strong>{email}</strong>
+            Se l&apos;indirizzo è registrato, abbiamo inviato il link a{' '}
+            <strong>{email}</strong>
           </p>
           <p className="text-sm text-gray-500 mb-6">
-            The link expires in 1 hour. If you don&apos;t see the email, check your spam
-            folder.
+            Il link vale per un&apos;ora. Se non vedi l&apos;email, controlla anche nello
+            spam.
           </p>
           <button
             onClick={() => setSubmitted(false)}
-            className="text-blue-600 hover:underline font-semibold"
+            className="text-primary hover:underline font-semibold"
           >
-            Try another email
+            Usa un&apos;altra email
           </button>
         </div>
       </div>
@@ -83,40 +86,37 @@ export default function ForgotPasswordPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Forgot Password?</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Password dimenticata?</h1>
         <p className="text-gray-600 mb-8">
-          No worries! Enter your email and we&apos;ll send you a link to reset your
-          password.
+          Inserisci la tua email: ti mandiamo il link per sceglierne una nuova.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email Address
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="your@email.com"
+              placeholder="nome@azienda.it"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-2 px-4 rounded-lg transition mt-6"
+            className="w-full bg-primary hover:bg-primary-dark disabled:bg-gray-400 text-white font-semibold py-2 px-4 rounded-lg transition mt-6"
           >
-            {loading ? 'Sending...' : 'Send Reset Link'}
+            {loading ? 'Invio in corso...' : 'Invia il link'}
           </button>
         </form>
 
         {/* Back to Login */}
         <p className="text-center text-gray-600 mt-6">
-          Remember your password?{' '}
-          <a href="/auth/login" className="text-blue-600 hover:underline font-semibold">
-            Login here
+          Ricordi la password?{' '}
+          <a href="/auth/login" className="text-primary hover:underline font-semibold">
+            Accedi
           </a>
         </p>
       </div>

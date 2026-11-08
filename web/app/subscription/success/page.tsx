@@ -111,15 +111,15 @@ function SubscriptionSuccessContent() {
 
         {loading && (
           <div className="flex justify-center gap-2 mb-8">
-            <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse" />
+            <div className="w-2 h-2 bg-primary rounded-full" />
             <div
-              className="w-2 h-2 bg-red-600 rounded-full animate-pulse"
+              className="w-2 h-2 bg-primary rounded-full"
               style={{ animationDelay: '0.2s' }}
-             />
+            />
             <div
-              className="w-2 h-2 bg-red-600 rounded-full animate-pulse"
+              className="w-2 h-2 bg-primary rounded-full"
               style={{ animationDelay: '0.4s' }}
-             />
+            />
           </div>
         )}
 

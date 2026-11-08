@@ -167,7 +167,7 @@ export default function IntegrazioniScreen() {
                           <Text style={styles.actionBtnText}>🔄 Sincronizza</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                          style={[styles.actionBtn, { backgroundColor: '#dc2626' }]}
+                          style={[styles.actionBtn, { backgroundColor: '#b91c1c' }]}
                           onPress={() => handleDisconnect(provider.id)}
                         >
                           <Text style={styles.actionBtnText}>Disconnetti</Text>

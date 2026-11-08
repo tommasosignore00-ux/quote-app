@@ -47,7 +47,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a', padding: 24 },
   title: { fontSize: 28, fontWeight: 'bold', color: '#fff', marginBottom: 8 },
   subtitle: { fontSize: 16, color: '#94a3b8', marginBottom: 32 },
-  btnPrimary: { backgroundColor: '#dc2626', paddingVertical: 14, paddingHorizontal: 32, borderRadius: 12, width: '100%', maxWidth: 280, alignItems: 'center', marginBottom: 12 },
+  btnPrimary: { backgroundColor: '#c2410c', paddingVertical: 14, paddingHorizontal: 32, borderRadius: 12, width: '100%', maxWidth: 280, alignItems: 'center', marginBottom: 12 },
   btnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
   btnSecondary: { paddingVertical: 14, paddingHorizontal: 32, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', borderRadius: 12, width: '100%', maxWidth: 280, alignItems: 'center' },
   btnSecondaryText: { color: '#fff', fontSize: 16 },

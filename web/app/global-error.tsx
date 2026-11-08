@@ -17,25 +17,29 @@ export default function GlobalError({
   return (
     <html>
       <body>
-        <div style={{
-          minHeight: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontFamily: 'system-ui, sans-serif',
-          backgroundColor: '#0f172a',
-          color: '#fff',
-          padding: '2rem',
-        }}>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Qualcosa è andato storto</h2>
+        <div
+          style={{
+            minHeight: '100vh',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontFamily: 'system-ui, sans-serif',
+            backgroundColor: '#0f172a',
+            color: '#fff',
+            padding: '2rem',
+          }}
+        >
+          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>
+            Qualcosa è andato storto
+          </h2>
           <p style={{ color: '#94a3b8', marginBottom: '2rem', textAlign: 'center' }}>
             Si è verificato un errore imprevisto. Il nostro team è stato notificato.
           </p>
           <button
             onClick={reset}
             style={{
-              backgroundColor: '#dc2626',
+              backgroundColor: '#c2410c',
               color: '#fff',
               padding: '0.75rem 1.5rem',
               border: 'none',

@@ -138,7 +138,10 @@ async function handleDeleted(eventSubscription: Stripe.Subscription) {
 }
 
 async function handleInvoice(invoice: Stripe.Invoice, action: string) {
-  const subscriptionId = idOf(invoice.subscription);
+  // The endpoint's newer API version omits this field from the event payload;
+  // retrieving with the SDK's pinned version returns it.
+  const current = await stripe.invoices.retrieve(invoice.id);
+  const subscriptionId = idOf(current.subscription);
   if (subscriptionId) {
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
     await applySubscription(subscription);

@@ -622,7 +622,7 @@ export default function DashboardPage() {
                         e.stopPropagation();
                         handleDeleteJob(l.id);
                       }}
-                      className="opacity-0 group-hover:opacity-100 hover:text-red-800 text-xs px-2"
+                      className="text-danger hover:text-danger-dark text-sm px-3 min-h-[44px]"
                     >
                       Elimina
                     </button>

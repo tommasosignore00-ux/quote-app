@@ -95,7 +95,7 @@ export default function RegisterScreen() {
           </TouchableOpacity>
           <Text style={{ flex: 1, marginLeft: 8, fontSize: 13, color: colors.text }}>
             Accetto il trattamento dei dati personali ai sensi del GDPR (Reg. UE 2016/679).
-            <Text style={{ color: '#dc2626' }} onPress={() => Linking.openURL('https://sites.google.com/view/privacypolicy-quoteapp/home-page')}>
+            <Text style={{ color: '#c2410c' }} onPress={() => Linking.openURL('https://sites.google.com/view/privacypolicy-quoteapp/home-page')}>
               {' '}Leggi l'informativa
             </Text>
           </Text>
@@ -116,8 +116,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f1f5f9' },
   scroll: { padding: 24, flexGrow: 1, justifyContent: 'center' },
   input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 16, marginBottom: 16, fontSize: 16 },
-  btnPrimary: { backgroundColor: '#dc2626', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginBottom: 16 },
+  btnPrimary: { backgroundColor: '#c2410c', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginBottom: 16 },
   btnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
   disabled: { opacity: 0.6 },
-  link: { color: '#dc2626', textAlign: 'center', fontSize: 14 },
+  link: { color: '#c2410c', textAlign: 'center', fontSize: 14 },
 });

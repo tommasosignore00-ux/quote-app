@@ -22,12 +22,12 @@ function ResetPasswordContent() {
     e.preventDefault();
 
     if (!email || !token || !newPassword || !confirmPassword) {
-      toast.error('All fields are required');
+      toast.error('Compila tutti i campi');
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      toast.error('Passwords do not match');
+      toast.error('Le password non coincidono');
       return;
     }
 
@@ -51,15 +51,15 @@ function ResetPasswordContent() {
       const data = await res.json();
 
       if (!res.ok) {
-        toast.error(data.error || 'Failed to reset password');
+        toast.error(data.error || 'Operazione non riuscita. Richiedi un nuovo link.');
         return;
       }
 
-      toast.success('Password reset successfully');
+      toast.success('Password aggiornata');
       router.push('/auth/login');
     } catch (err: any) {
       console.error('Reset password error:', err);
-      toast.error('An error occurred');
+      toast.error('Si è verificato un errore');
     } finally {
       setLoading(false);
     }
@@ -68,21 +68,19 @@ function ResetPasswordContent() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Reset Password</h1>
-        <p className="text-gray-600 mb-8">Enter a new password for your account</p>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Nuova password</h1>
+        <p className="text-gray-600 mb-8">Scegli la nuova password del tuo account</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Email */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="your@email.com"
+              placeholder="nome@azienda.it"
               disabled={!!emailParam}
             />
           </div>
@@ -90,43 +88,43 @@ function ResetPasswordContent() {
           {/* Token */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Reset Token
+              Codice del link
             </label>
             <input
               type="text"
               value={token}
               onChange={(e) => setToken(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
-              placeholder="Paste your reset token"
+              placeholder="Incolla il codice ricevuto"
               disabled={!!tokenParam}
             />
           </div>
 
-          {/* New Password */}
+          {/* Nuova password */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              New Password
+              Nuova password
             </label>
             <input
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="At least 8 characters"
+              placeholder="Almeno 8 caratteri"
             />
           </div>
 
-          {/* Confirm Password */}
+          {/* Conferma password */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Confirm Password
+              Conferma password
             </label>
             <input
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Repeat your password"
+              placeholder="Ripeti la password"
             />
           </div>
 
@@ -134,17 +132,17 @@ function ResetPasswordContent() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-2 px-4 rounded-lg transition mt-6"
+            className="w-full bg-primary hover:bg-primary-dark disabled:bg-gray-400 text-white font-semibold py-2 px-4 rounded-lg transition mt-6"
           >
-            {loading ? 'Resetting...' : 'Reset Password'}
+            {loading ? 'Salvataggio...' : 'Salva la password'}
           </button>
         </form>
 
         {/* Back to Login */}
         <p className="text-center text-gray-600 mt-6">
-          Remember your password?{' '}
-          <a href="/auth/login" className="text-blue-600 hover:underline font-semibold">
-            Login here
+          Ricordi la password?{' '}
+          <a href="/auth/login" className="text-primary hover:underline font-semibold">
+            Accedi
           </a>
         </p>
       </div>
@@ -154,7 +152,11 @@ function ResetPasswordContent() {
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100" />}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100" />
+      }
+    >
       <ResetPasswordContent />
     </Suspense>
   );

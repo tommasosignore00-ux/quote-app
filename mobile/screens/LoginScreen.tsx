@@ -55,8 +55,8 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 24, backgroundColor: '#f1f5f9', justifyContent: 'center' },
   input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 16, marginBottom: 16, fontSize: 16 },
-  btnPrimary: { backgroundColor: '#dc2626', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginBottom: 16 },
+  btnPrimary: { backgroundColor: '#c2410c', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginBottom: 16 },
   btnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
   disabled: { opacity: 0.6 },
-  link: { color: '#dc2626', textAlign: 'center', fontSize: 14 },
+  link: { color: '#c2410c', textAlign: 'center', fontSize: 14 },
 });

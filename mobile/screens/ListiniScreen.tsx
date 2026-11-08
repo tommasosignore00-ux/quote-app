@@ -1370,7 +1370,7 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
   input: { borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 10 },
   modalBtns: { flexDirection: 'row', gap: 12, marginTop: 8 },
-  modalBtnPrimary: { flex: 1, backgroundColor: '#dc2626', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
+  modalBtnPrimary: { flex: 1, backgroundColor: '#c2410c', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
   modalBtnPrimaryText: { color: '#fff', fontWeight: '600' },
   modalBtnSecondary: { flex: 1, backgroundColor: '#e2e8f0', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
   modalBtnSecondaryText: { color: '#334155', fontWeight: '600' },

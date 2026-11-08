@@ -539,7 +539,7 @@ export default function ProfileScreen() {
             const link = `https://quoteapp.it/register?ref=${profile.referral_code}`;
             Alert.alert('Link Referral', link);
           }}>
-            <Text style={{ color: '#dc2626', marginTop: 8, fontWeight: '600' }}>📋 Mostra link invito</Text>
+            <Text style={{ color: '#c2410c', marginTop: 8, fontWeight: '600' }}>📋 Mostra link invito</Text>
           </TouchableOpacity>
           <Text style={{ color: '#64748b', fontSize: 12, marginTop: 8 }}>
             Guadagna il 20% su ogni abbonamento tramite il tuo link.
@@ -619,7 +619,7 @@ export default function ProfileScreen() {
           <TextInput style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} placeholder="email@example.com" value={inviteEmail} onChangeText={setInviteEmail} keyboardType="email-address" autoCapitalize="none" placeholderTextColor={colors.textTertiary} />
           <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
             {['admin', 'technician', 'readonly'].map(role => (
-              <TouchableOpacity key={role} onPress={() => setInviteRole(role)} style={{ flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center', backgroundColor: inviteRole === role ? '#dc2626' : '#f1f5f9' }}>
+              <TouchableOpacity key={role} onPress={() => setInviteRole(role)} style={{ flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center', backgroundColor: inviteRole === role ? '#c2410c' : '#f1f5f9' }}>
                 <Text style={{ color: inviteRole === role ? '#fff' : '#374151', fontSize: 12, fontWeight: '600' }}>{role}</Text>
               </TouchableOpacity>
             ))}
@@ -636,7 +636,7 @@ export default function ProfileScreen() {
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <Text style={{ fontWeight: '700', fontSize: 16, color: colors.text }}>🔗 Webhook / Integrazioni</Text>
           <TouchableOpacity onPress={() => setShowWebhookModal(true)}>
-            <Text style={{ color: '#dc2626', fontWeight: '600' }}>➕ Aggiungi</Text>
+            <Text style={{ color: '#c2410c', fontWeight: '600' }}>➕ Aggiungi</Text>
           </TouchableOpacity>
         </View>
         {webhooks.map(w => (
@@ -710,18 +710,18 @@ const styles = StyleSheet.create({
   modal: { backgroundColor: '#fff', borderRadius: 16, padding: 24, maxHeight: '80%' },
   modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
   langItem: { padding: 12, borderRadius: 8, marginBottom: 8, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
-  langItemSelected: { backgroundColor: '#dc2626' },
+  langItemSelected: { backgroundColor: '#c2410c' },
   langItemSelectedText: { color: '#fff' },
   templateSection: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 16, marginBottom: 20 },
   templateInfo: { fontSize: 14, color: '#059669', marginBottom: 12, fontWeight: '600' },
   templateButtons: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   templateHint: { fontSize: 12, color: '#64748b', marginTop: 8, lineHeight: 18 },
-  btn: { backgroundColor: '#dc2626', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  btn: { backgroundColor: '#c2410c', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
   btnSubscription: { backgroundColor: '#0f172a', marginBottom: 12 },
   btnSecondary: { backgroundColor: '#64748b', flex: 1 },
   btnDanger: { backgroundColor: '#ef4444', flex: 1 },
-  btnOutline: { backgroundColor: 'transparent', borderWidth: 2, borderColor: '#dc2626' },
-  btnOutlineText: { color: '#dc2626', fontWeight: '600', fontSize: 16 },
+  btnOutline: { backgroundColor: 'transparent', borderWidth: 2, borderColor: '#c2410c' },
+  btnOutlineText: { color: '#c2410c', fontWeight: '600', fontSize: 16 },
   btnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
   disabled: { opacity: 0.6 },
   inputError: { borderColor: '#ef4444', borderWidth: 2 },

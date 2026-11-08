@@ -1150,7 +1150,7 @@ export default function DashboardScreen() {
               ))}
             </ScrollView>
           ) : (
-            <Text style={{ color: '#dc2626', fontWeight: '600', padding: 12 }}>Funzione riservata agli abbonati Pro/Team</Text>
+            <Text style={{ color: '#c2410c', fontWeight: '600', padding: 12 }}>Funzione riservata agli abbonati Pro/Team</Text>
           )}
         </View>
       )}
@@ -1215,7 +1215,7 @@ export default function DashboardScreen() {
             <Text style={{ marginTop: 12, marginBottom: 6, color: colors.textSecondary, fontSize: 13 }}>Valuta / Currency</Text>
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
               {CURRENCY_OPTIONS.map(cur => (
-                <TouchableOpacity key={cur.code} onPress={() => { setSelectedCurrency(cur.code); fetchExchangeRate(cur.code); }} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: selectedCurrency === cur.code ? '#dc2626' : '#f1f5f9' }}>
+                <TouchableOpacity key={cur.code} onPress={() => { setSelectedCurrency(cur.code); fetchExchangeRate(cur.code); }} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: selectedCurrency === cur.code ? '#c2410c' : '#f1f5f9' }}>
                   <Text style={{ color: selectedCurrency === cur.code ? '#fff' : '#374151', fontWeight: selectedCurrency === cur.code ? '700' : '400', fontSize: 14 }}>{cur.symbol} {cur.code}</Text>
                 </TouchableOpacity>
               ))}
@@ -1357,24 +1357,24 @@ const styles = StyleSheet.create({
   deleteBtnContainer: { paddingHorizontal: 8 },
   lavoroItemContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   lavoroItem: { padding: 12, borderRadius: 10, flex: 1, backgroundColor: '#f8fafc' },
-  lavoroSelected: { backgroundColor: '#dc2626' },
+  lavoroSelected: { backgroundColor: '#c2410c' },
   lavoroSelectedText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   costoRowContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   costoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#e2e8f0', flex: 1 },
   costoDesc: { fontSize: 16, flex: 1 },
   costoPrice: { fontSize: 16, fontWeight: '700' },
-  btnQuote: { backgroundColor: '#dc2626', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
+  btnQuote: { backgroundColor: '#c2410c', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
   btnQuoteText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   smallBtn: { backgroundColor: '#f1f5f9', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
-  smallBtnText: { color: '#dc2626', fontWeight: '700', fontSize: 15 },
+  smallBtnText: { color: '#c2410c', fontWeight: '700', fontSize: 15 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 },
   modal: { backgroundColor: '#fff', borderRadius: 16, padding: 24 },
   modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
   input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 12, marginBottom: 12 },
-  btn: { backgroundColor: '#dc2626', paddingVertical: 12, borderRadius: 12, alignItems: 'center', flex: 1 },
+  btn: { backgroundColor: '#c2410c', paddingVertical: 12, borderRadius: 12, alignItems: 'center', flex: 1 },
   btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   listinoItem: { padding: 10, borderRadius: 10, marginBottom: 6 },
-  listinoSelected: { backgroundColor: '#dc2626' },
+  listinoSelected: { backgroundColor: '#c2410c' },
   listinoSelectedText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   nav: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 18, borderTopWidth: 1, borderTopColor: '#e2e8f0', marginTop: 'auto' },
   navScroll: { flexGrow: 0, borderTopWidth: 1, marginTop: 'auto' },
@@ -1389,18 +1389,18 @@ const styles = StyleSheet.create({
   sessionClose: { minHeight: 64, minWidth: 110, borderRadius: 16, backgroundColor: '#fee2e2', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   sessionCloseText: { fontSize: 19, fontWeight: '800', color: '#b91c1c' },
   clienteSelectBtn: { flex: 1, padding: 10, borderRadius: 10, backgroundColor: '#f8fafc' },
-  clienteSelected: { backgroundColor: '#dc2626' },
+  clienteSelected: { backgroundColor: '#c2410c' },
   clienteSelectedText: { color: '#fff', fontWeight: '700' },
   emptyText: { fontSize: 15, color: '#64748b', paddingVertical: 12 },
   searchInput: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, padding: 8, marginBottom: 8, fontSize: 14 },
   listinoSelectorItem: { backgroundColor: '#f8fafc', padding: 14, borderRadius: 10, marginBottom: 10, borderWidth: 1, borderColor: '#e2e8f0' },
   listinoSelectorDesc: { fontSize: 16, fontWeight: '600', marginBottom: 4 },
   listinoSelectorListino: { fontSize: 14, color: '#64748b', marginBottom: 2 },
-  listinoSelectorPrice: { fontSize: 15, fontWeight: '700', color: '#dc2626' },
+  listinoSelectorPrice: { fontSize: 15, fontWeight: '700', color: '#c2410c' },
   timeSavedBadge: { fontSize: 13, color: '#10b981', fontWeight: '600', backgroundColor: '#d1fae5', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   crossSellCard: { backgroundColor: '#f0fdf4', borderRadius: 12, padding: 14, marginRight: 10, width: 160, borderWidth: 1, borderColor: '#86efac' },
   crossSellDesc: { fontSize: 14, fontWeight: '600', color: '#166534', marginBottom: 6 },
-  crossSellPrice: { fontSize: 15, fontWeight: '700', color: '#dc2626', marginBottom: 4 },
+  crossSellPrice: { fontSize: 15, fontWeight: '700', color: '#c2410c', marginBottom: 4 },
   crossSellAdd: { fontSize: 13, color: '#10b981', fontWeight: '600' },
   carouselCard: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginRight: 8, minWidth: 120, borderWidth: 1, borderColor: '#e2e8f0' },
   carouselDesc: { fontWeight: '600', fontSize: 14, marginBottom: 4 },

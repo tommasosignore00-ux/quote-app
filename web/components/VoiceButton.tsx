@@ -122,7 +122,7 @@ export default function VoiceButton({
         }
       }}
       className={`w-16 h-16 rounded-full flex items-center justify-center text-white font-bold shadow-lg transition focus:outline-none focus:ring-4 focus:ring-red-300 ${
-        recording ? 'bg-red-700 animate-pulse' : 'bg-primary hover:bg-primary-dark'
+        recording ? 'bg-danger' : 'bg-primary hover:bg-primary-dark'
       }`}
       title={recording ? t('main.stop') : t('main.record')}
       aria-label={

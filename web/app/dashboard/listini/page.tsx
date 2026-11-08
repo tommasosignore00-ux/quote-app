@@ -1067,9 +1067,9 @@ export default function ListiniPage() {
                         e.stopPropagation();
                         handleDeleteListino(l.id);
                       }}
-                      className="opacity-0 group-hover:opacity-100 hover:text-red-800 text-xs px-2"
+                      className="text-danger hover:text-danger-dark text-sm px-3 min-h-[44px]"
                     >
-                      🗑️
+                      Elimina
                     </button>
                   </>
                 )}
@@ -1083,7 +1083,9 @@ export default function ListiniPage() {
               <h3 className="font-semibold mb-3">
                 {t('listini.items')} {selectedListino.name}
                 {!selectedListino.canEdit && (
-                  <span className="ml-2 text-xs font-normal text-slate-500">Sola lettura</span>
+                  <span className="ml-2 text-xs font-normal text-slate-500">
+                    Sola lettura
+                  </span>
                 )}
               </h3>
               {selectedSourceInfo && (
@@ -1114,92 +1116,95 @@ export default function ListiniPage() {
                 </div>
               )}
               {selectedListino.canEdit && (
-              <div className="mb-4 rounded-lg border border-slate-200 p-3 text-sm">
-                <button
-                  type="button"
-                  onClick={togglePricingSettings}
-                  className="flex w-full items-center justify-between font-medium text-slate-800"
-                  aria-expanded={showPricingSettings}
-                >
-                  <span>Sconto fornitore e ricarichi</span>
-                  <span className="text-slate-500">
-                    {showPricingSettings ? '▲' : '▼'}
-                  </span>
-                </button>
-                {showPricingSettings && (
-                  <div className="mt-3 space-y-3">
-                    <label className="flex items-center justify-between gap-3">
-                      <span className="text-slate-700">
-                        Sconto fornitore sul prezzo di listino
-                        <span className="block text-xs text-slate-500">
-                          Il prezzo netto delle voci diventa listino × (1 − sconto).
+                <div className="mb-4 rounded-lg border border-slate-200 p-3 text-sm">
+                  <button
+                    type="button"
+                    onClick={togglePricingSettings}
+                    className="flex w-full items-center justify-between font-medium text-slate-800"
+                    aria-expanded={showPricingSettings}
+                  >
+                    <span>Sconto fornitore e ricarichi</span>
+                    <span className="text-slate-500">
+                      {showPricingSettings ? '▲' : '▼'}
+                    </span>
+                  </button>
+                  {showPricingSettings && (
+                    <div className="mt-3 space-y-3">
+                      <label className="flex items-center justify-between gap-3">
+                        <span className="text-slate-700">
+                          Sconto fornitore sul prezzo di listino
+                          <span className="block text-xs text-slate-500">
+                            Il prezzo netto delle voci diventa listino × (1 − sconto).
+                          </span>
                         </span>
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={discountDraft}
-                          onChange={(e) => setDiscountDraft(e.target.value)}
-                          placeholder="0"
-                          aria-label="Sconto fornitore in percentuale"
-                          className="w-20 rounded border border-slate-300 px-2 py-1 text-right"
-                        />
-                        <span className="text-slate-500">%</span>
-                      </span>
-                    </label>
-                    {categoryMarkupRows.length > 0 && (
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b text-slate-600">
-                            <th className="text-left py-1">Categoria</th>
-                            <th className="text-right py-1">Voci</th>
-                            <th className="text-right py-1">Ricarico</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {categoryMarkupRows.map((row) => (
-                            <tr key={row.category} className="border-b border-slate-100">
-                              <td className="py-1 pr-2">{row.category}</td>
-                              <td className="py-1 text-right text-slate-500">
-                                {row.itemCount}
-                              </td>
-                              <td className="py-1 text-right">
-                                <span className="inline-flex items-center gap-1">
-                                  <input
-                                    type="text"
-                                    inputMode="decimal"
-                                    value={categoryMarkupDrafts[row.category] ?? ''}
-                                    onChange={(e) =>
-                                      setCategoryMarkupDrafts((drafts) => ({
-                                        ...drafts,
-                                        [row.category]: e.target.value,
-                                      }))
-                                    }
-                                    placeholder="—"
-                                    aria-label={`Ricarico ${row.category} in percentuale`}
-                                    className="w-20 rounded border border-slate-300 px-2 py-1 text-right"
-                                  />
-                                  <span className="text-slate-500">%</span>
-                                </span>
-                              </td>
+                        <span className="inline-flex items-center gap-1">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={discountDraft}
+                            onChange={(e) => setDiscountDraft(e.target.value)}
+                            placeholder="0"
+                            aria-label="Sconto fornitore in percentuale"
+                            className="w-20 rounded border border-slate-300 px-2 py-1 text-right"
+                          />
+                          <span className="text-slate-500">%</span>
+                        </span>
+                      </label>
+                      {categoryMarkupRows.length > 0 && (
+                        <table className="w-full">
+                          <thead>
+                            <tr className="border-b text-slate-600">
+                              <th className="text-left py-1">Categoria</th>
+                              <th className="text-right py-1">Voci</th>
+                              <th className="text-right py-1">Ricarico</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                    <div className="flex justify-end">
-                      <button
-                        onClick={handleSavePricingSettings}
-                        className="btn-primary"
-                        disabled={savingPricingSettings}
-                      >
-                        {savingPricingSettings ? 'Salvo...' : 'Salva e ricalcola'}
-                      </button>
+                          </thead>
+                          <tbody>
+                            {categoryMarkupRows.map((row) => (
+                              <tr
+                                key={row.category}
+                                className="border-b border-slate-100"
+                              >
+                                <td className="py-1 pr-2">{row.category}</td>
+                                <td className="py-1 text-right text-slate-500">
+                                  {row.itemCount}
+                                </td>
+                                <td className="py-1 text-right">
+                                  <span className="inline-flex items-center gap-1">
+                                    <input
+                                      type="text"
+                                      inputMode="decimal"
+                                      value={categoryMarkupDrafts[row.category] ?? ''}
+                                      onChange={(e) =>
+                                        setCategoryMarkupDrafts((drafts) => ({
+                                          ...drafts,
+                                          [row.category]: e.target.value,
+                                        }))
+                                      }
+                                      placeholder="—"
+                                      aria-label={`Ricarico ${row.category} in percentuale`}
+                                      className="w-20 rounded border border-slate-300 px-2 py-1 text-right"
+                                    />
+                                    <span className="text-slate-500">%</span>
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                      <div className="flex justify-end">
+                        <button
+                          onClick={handleSavePricingSettings}
+                          className="btn-primary"
+                          disabled={savingPricingSettings}
+                        >
+                          {savingPricingSettings ? 'Salvo...' : 'Salva e ricalcola'}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
               )}
               <div className="mb-4 rounded-lg border border-slate-200 p-3 text-sm">
                 <button
@@ -1362,9 +1367,9 @@ export default function ListiniPage() {
                             </button>
                             <button
                               onClick={() => handleDeleteItem(i.id)}
-                              className="opacity-0 group-hover:opacity-100 text-red-600 hover:text-red-800 text-xs"
+                              className="text-danger hover:text-danger-dark text-sm px-3 min-h-[44px]"
                             >
-                              🗑️
+                              Elimina
                             </button>
                           </>
                         )}

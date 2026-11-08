@@ -1,5 +1,7 @@
 'use client';
 
+import { CreditCard, FileText, Hammer, List, Plug, Receipt, User } from 'lucide-react';
+
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -77,44 +79,51 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <nav className="flex-1 p-4 space-y-2">
           <Link
             href="/dashboard"
-            className={`block py-2 px-3 rounded-lg ${pathname === '/dashboard' ? 'bg-primary' : 'hover:bg-slate-700'}`}
+            className={`flex items-center gap-2 min-h-[44px] py-2 px-3 rounded-lg ${pathname === '/dashboard' ? 'bg-primary' : 'hover:bg-slate-700'}`}
           >
+            <Hammer size={18} aria-hidden="true" />
             {t('main.jobs')}
           </Link>
           <Link
             href="/dashboard/preventivi"
-            className={`block py-2 px-3 rounded-lg ${pathname === '/dashboard/preventivi' ? 'bg-primary' : 'hover:bg-slate-700'}`}
+            className={`flex items-center gap-2 min-h-[44px] py-2 px-3 rounded-lg ${pathname === '/dashboard/preventivi' ? 'bg-primary' : 'hover:bg-slate-700'}`}
           >
+            <FileText size={18} aria-hidden="true" />
             Preventivi
           </Link>
           <Link
             href="/dashboard/listini"
-            className={`block py-2 px-3 rounded-lg ${pathname === '/dashboard/listini' ? 'bg-primary' : 'hover:bg-slate-700'}`}
+            className={`flex items-center gap-2 min-h-[44px] py-2 px-3 rounded-lg ${pathname === '/dashboard/listini' ? 'bg-primary' : 'hover:bg-slate-700'}`}
           >
+            <List size={18} aria-hidden="true" />
             {t('main.listini')}
           </Link>
           <Link
             href="/dashboard/fatture"
-            className={`block py-2 px-3 rounded-lg ${pathname === '/dashboard/fatture' ? 'bg-primary' : 'hover:bg-slate-700'}`}
+            className={`flex items-center gap-2 min-h-[44px] py-2 px-3 rounded-lg ${pathname === '/dashboard/fatture' ? 'bg-primary' : 'hover:bg-slate-700'}`}
           >
+            <Receipt size={18} aria-hidden="true" />
             Fatture
           </Link>
           <Link
             href="/dashboard/integrazioni"
-            className={`block py-2 px-3 rounded-lg ${pathname === '/dashboard/integrazioni' ? 'bg-primary' : 'hover:bg-slate-700'}`}
+            className={`flex items-center gap-2 min-h-[44px] py-2 px-3 rounded-lg ${pathname === '/dashboard/integrazioni' ? 'bg-primary' : 'hover:bg-slate-700'}`}
           >
+            <Plug size={18} aria-hidden="true" />
             Integrazioni
           </Link>
           <Link
             href="/dashboard/profile"
-            className={`block py-2 px-3 rounded-lg ${pathname === '/dashboard/profile' ? 'bg-primary' : 'hover:bg-slate-700'}`}
+            className={`flex items-center gap-2 min-h-[44px] py-2 px-3 rounded-lg ${pathname === '/dashboard/profile' ? 'bg-primary' : 'hover:bg-slate-700'}`}
           >
+            <User size={18} aria-hidden="true" />
             {t('main.profile')}
           </Link>
           <Link
             href="/dashboard/subscription"
-            className={`block py-2 px-3 rounded-lg ${pathname === '/dashboard/subscription' ? 'bg-primary' : 'hover:bg-slate-700'}`}
+            className={`flex items-center gap-2 min-h-[44px] py-2 px-3 rounded-lg ${pathname === '/dashboard/subscription' ? 'bg-primary' : 'hover:bg-slate-700'}`}
           >
+            <CreditCard size={18} aria-hidden="true" />
             {t('subscription.title')}
           </Link>
         </nav>

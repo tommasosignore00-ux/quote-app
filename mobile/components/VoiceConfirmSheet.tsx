@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
   choiceText: { fontSize: 22, fontWeight: '700' },
   newJobBox: { gap: 10 },
   bigButton: { minHeight: 68, borderRadius: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
-  primary: { backgroundColor: '#dc2626' },
+  primary: { backgroundColor: '#c2410c' },
   confirm: { backgroundColor: '#16a34a', minHeight: 76 },
   secondary: { borderWidth: 2, backgroundColor: 'transparent', minHeight: 64 },
   disabled: { opacity: 0.45 },

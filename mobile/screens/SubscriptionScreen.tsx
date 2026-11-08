@@ -175,11 +175,11 @@ export default function SubscriptionScreen() {
         <View style={[styles.usageBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={{ fontWeight: '700', fontSize: 16, color: colors.text, marginBottom: 4 }}>📊 Utilizzo preventivi</Text>
           <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-            <Text style={{ fontSize: 28, fontWeight: '700', color: usageInfo.within_limit ? '#059669' : '#dc2626' }}>{usageInfo.quotes_generated}</Text>
+            <Text style={{ fontSize: 28, fontWeight: '700', color: usageInfo.within_limit ? '#059669' : '#b91c1c' }}>{usageInfo.quotes_generated}</Text>
             <Text style={{ fontSize: 16, color: colors.textSecondary }}>/{usageInfo.quotes_limit} questo mese</Text>
           </View>
           {usageInfo.overage_count > 0 && (
-            <Text style={{ color: '#dc2626', fontSize: 13, marginTop: 4 }}>⚠️ {usageInfo.overage_count} extra (€1.50/cad.)</Text>
+            <Text style={{ color: '#b91c1c', fontSize: 13, marginTop: 4 }}>⚠️ {usageInfo.overage_count} extra (€1.50/cad.)</Text>
           )}
         </View>
       )}
@@ -209,7 +209,7 @@ export default function SubscriptionScreen() {
       ) : (
         <View style={styles.plansContainer}>
           {PLANS.map(plan => (
-            <View key={plan.key} style={[styles.planCard, { backgroundColor: colors.card, borderColor: plan.badge ? '#dc2626' : colors.border }]}>
+            <View key={plan.key} style={[styles.planCard, { backgroundColor: colors.card, borderColor: plan.badge ? '#c2410c' : colors.border }]}>
               {plan.badge && (
                 <View style={styles.planBadge}>
                   <Text style={styles.planBadgeText}>{plan.badge}</Text>
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -10,
     right: 12,
-    backgroundColor: '#dc2626',
+    backgroundColor: '#c2410c',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,

@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  --primary: #dc2626;
+  --primary: #c2410c;
   --primary-dark: #b91c1c;
 }
 
@@ -30,7 +30,7 @@ body {
 
 /* Focus visible for keyboard navigation */
 *:focus-visible {
-  outline: 2px solid #dc2626;
+  outline: 2px solid #c2410c;
   outline-offset: 2px;
 }
 
@@ -50,7 +50,7 @@ body {
   overflow: visible;
   clip: auto;
   white-space: normal;
-  background: #dc2626;
+  background: #c2410c;
   color: white;
   font-weight: bold;
 }
