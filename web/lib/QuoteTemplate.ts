@@ -273,37 +273,50 @@ export function sanitizeTemplateMarkup(html: string): string {
 /**
  * <span data-if="clienteVat">P.IVA {{clienteVat}}</span>: the element (label included)
  * is dropped when that field is empty, so a client without VAT number or address does
- * not leave "P.IVA" or " - , - " on the quote.
+ * not leave "P.IVA" or " - , - " on the quote. Elements are matched by counting tags,
+ * so a block containing other <div>s is removed whole.
  */
+const CONDITIONAL_OPEN =
+  /<(span|p|div|td|li|strong|b|em|small|tr)\b([^>]*?)\sdata-if=(["'])([\w.]+)\3([^>]*)>/i;
+
+/** Position just after the tag closing the element whose content starts at `from`; -1 if none. */
+function closingTagEnd(html: string, tag: string, from: number): number {
+  const tags = new RegExp(`<(/?)${tag}\\b[^>]*>`, 'gi');
+  tags.lastIndex = from;
+  let depth = 1;
+  for (let match = tags.exec(html); match; match = tags.exec(html)) {
+    depth += match[1] ? -1 : 1;
+    if (depth === 0) return match.index + match[0].length;
+  }
+  return -1;
+}
+
 function applyConditionalBlocks(
   template: string,
   values: Record<string, string | undefined | null>
 ): string {
-  let html = template;
-  // Innermost first, a few rounds for nested blocks.
-  for (let round = 0; round < 3; round++) {
-    const next = html.replace(
-      /<(span|p|div|td|li|strong|b|em|small|tr)\b([^>]*?)\sdata-if=(["'])([\w.]+)\3([^>]*)>([\s\S]*?)<\/\1>/gi,
-      (
-        _m,
-        tag: string,
-        before: string,
-        _q: string,
-        field: string,
-        after: string,
-        inner: string
-      ) => {
-        const value = values[field];
-        if (value === undefined || value === null || String(value).trim() === '') {
-          return '';
-        }
-        return `<${tag}${before}${after}>${inner}</${tag}>`;
-      }
-    );
-    if (next === html) break;
-    html = next;
+  let output = '';
+  let rest = template;
+  for (
+    let match = CONDITIONAL_OPEN.exec(rest);
+    match;
+    match = CONDITIONAL_OPEN.exec(rest)
+  ) {
+    const [open, tag, before, , field, after] = match;
+    const contentStart = match.index + open.length;
+    const end = closingTagEnd(rest, tag, contentStart);
+    const value = values[field];
+    const empty = value === undefined || value === null || String(value).trim() === '';
+    output += rest.slice(0, match.index);
+    if (empty && end !== -1) {
+      rest = rest.slice(end);
+    } else {
+      // Kept: its content is scanned too, for conditions nested inside it.
+      output += `<${tag}${before}${after}>`;
+      rest = rest.slice(contentStart);
+    }
   }
-  return html;
+  return output + rest;
 }
 
 const CURRENCIES: Record<string, string> = {
