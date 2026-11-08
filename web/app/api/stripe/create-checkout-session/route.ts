@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getRequestUser, unauthorizedResponse, forbiddenResponse, isOwnProfile } from '../../../../lib/apiAuth';
+import {
+  getRequestUser,
+  unauthorizedResponse,
+  forbiddenResponse,
+  isOwnProfile,
+} from '../../../../lib/apiAuth';
 import Stripe from 'stripe';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import { checkoutSessionSchema, validateRequest } from '../../../../lib/validations';
@@ -16,13 +21,19 @@ export async function POST(req: Request) {
     if (!validation.success) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
-    const { userId: claimedUserId, companyName, priceId: requestedPlan } = validation.data;
+    const {
+      userId: claimedUserId,
+      companyName,
+      priceId: requestedPlan,
+    } = validation.data;
     if (!isOwnProfile(user, claimedUserId)) return forbiddenResponse();
     const userId = user.id;
     const email = user.email;
 
     // Solo i piani configurati sul server: mai un price id arbitrario dal client
-    const planKey = String(requestedPlan).replace(/^price_/i, '').toUpperCase();
+    const planKey = String(requestedPlan)
+      .replace(/^price_/i, '')
+      .toUpperCase();
     const stripePriceId = ['MONTHLY', 'YEARLY', 'TEAM'].includes(planKey)
       ? process.env[`STRIPE_PRICE_${planKey}`]
       : undefined;
@@ -34,10 +45,26 @@ export async function POST(req: Request) {
     let customerId: string | null = null;
     const { data: existing } = await supabase
       .from('profiles')
-      .select('stripe_customer_id, stripe_subscription_id, subscription_status, trial_ends_at')
+      .select(
+        'stripe_customer_id, stripe_subscription_id, subscription_status, trial_ends_at'
+      )
       .eq('id', userId)
       .single();
     customerId = existing?.stripe_customer_id || null;
+
+    if (
+      existing?.stripe_subscription_id &&
+      ['trialing', 'active', 'past_due'].includes(existing.subscription_status ?? '')
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'Hai già un abbonamento attivo. Puoi cambiarlo dalla pagina Abbonamento.',
+          code: 'ALREADY_SUBSCRIBED',
+        },
+        { status: 409 }
+      );
+    }
 
     if (!customerId) {
       const customer = await stripe.customers.create({
@@ -46,13 +73,23 @@ export async function POST(req: Request) {
         name: companyName,
       });
       customerId = customer.id;
-      await supabase.from('profiles').update({ stripe_customer_id: customerId }).eq('id', userId);
+      await supabase
+        .from('profiles')
+        .update({ stripe_customer_id: customerId })
+        .eq('id', userId);
     } else {
-      await stripe.customers.update(customerId, { metadata: { userId }, name: companyName });
+      await stripe.customers.update(customerId, {
+        metadata: { userId },
+        name: companyName,
+      });
     }
 
     // Check if user is a founding member for coupon discount
-    const { data: profileData } = await supabase.from('profiles').select('is_founding_member').eq('id', userId).single();
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('is_founding_member')
+      .eq('id', userId)
+      .single();
     const isFoundingMember = profileData?.is_founding_member === true;
     const hadSubscriptionBefore = Boolean(
       existing?.stripe_subscription_id ||
@@ -78,6 +115,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ sessionId: session.id });
   } catch (err: any) {
     console.error('Create checkout session error:', err);
-    return NextResponse.json({ error: 'Failed to create checkout session' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Failed to create checkout session' },
+      { status: 500 }
+    );
   }
 }

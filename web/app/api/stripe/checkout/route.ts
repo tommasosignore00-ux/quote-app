@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getRequestUser, unauthorizedResponse, forbiddenResponse, isOwnProfile } from '@/lib/apiAuth';
+import {
+  getRequestUser,
+  unauthorizedResponse,
+  forbiddenResponse,
+  isOwnProfile,
+} from '@/lib/apiAuth';
 import Stripe from 'stripe';
 import { supabaseAdmin } from '@/lib/supabase-server';
 
@@ -15,18 +20,26 @@ export async function POST(req: Request) {
     const userId = user.id;
     const email = user.email;
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-    const priceId = plan === 'team'
-      ? process.env.STRIPE_PRICE_TEAM
-      : plan === 'yearly'
-        ? process.env.STRIPE_PRICE_YEARLY
-        : process.env.STRIPE_PRICE_MONTHLY;
+    const priceId =
+      plan === 'team'
+        ? process.env.STRIPE_PRICE_TEAM
+        : plan === 'yearly'
+          ? process.env.STRIPE_PRICE_YEARLY
+          : process.env.STRIPE_PRICE_MONTHLY;
 
     if (!process.env.STRIPE_SECRET_KEY) {
-      return NextResponse.json({ error: 'STRIPE_SECRET_KEY not configured on Vercel' }, { status: 500 });
+      return NextResponse.json(
+        { error: 'STRIPE_SECRET_KEY not configured on Vercel' },
+        { status: 500 }
+      );
     }
-    if (!priceId) return NextResponse.json({ error: 'Price not configured' }, { status: 500 });
+    if (!priceId)
+      {return NextResponse.json({ error: 'Price not configured' }, { status: 500 });}
     if (!appUrl) {
-      return NextResponse.json({ error: 'NEXT_PUBLIC_APP_URL not configured on Vercel' }, { status: 500 });
+      return NextResponse.json(
+        { error: 'NEXT_PUBLIC_APP_URL not configured on Vercel' },
+        { status: 500 }
+      );
     }
     if (!userId || !email || !plan) {
       return NextResponse.json({ error: 'Missing checkout payload' }, { status: 400 });
@@ -39,7 +52,24 @@ export async function POST(req: Request) {
       .single();
 
     if (profileError) {
-      return NextResponse.json({ error: 'Unable to load subscription profile' }, { status: 500 });
+      return NextResponse.json(
+        { error: 'Unable to load subscription profile' },
+        { status: 500 }
+      );
+    }
+
+    if (
+      profile?.stripe_subscription_id &&
+      ['trialing', 'active', 'past_due'].includes(profile.subscription_status ?? '')
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'Hai già un abbonamento attivo. Puoi cambiarlo dalla pagina Abbonamento.',
+          code: 'ALREADY_SUBSCRIBED',
+        },
+        { status: 409 }
+      );
     }
 
     const hadSubscriptionBefore = Boolean(
@@ -63,7 +93,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ url: session.url });
   } catch (err) {
-    console.error('Stripe checkout route error:', err);
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    console.error('Stripe checkout route error');
+    return NextResponse.json({ error: 'Checkout non riuscito' }, { status: 500 });
   }
 }

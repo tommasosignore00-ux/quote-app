@@ -45,6 +45,10 @@ serve(async (req) => {
       .eq('id', user.id)
       .single()
 
+    if (profile?.stripe_subscription_id && ['trialing', 'active', 'past_due'].includes(profile.subscription_status ?? '')) {
+      return jsonResponse({ error: 'Hai già un abbonamento attivo. Puoi cambiarlo dalla pagina Abbonamento.', code: 'ALREADY_SUBSCRIBED' }, 409)
+    }
+
     // Customer Stripe dell'utente (creato se manca), con userId nei metadata per il webhook
     let customerId: string | null = profile?.stripe_customer_id || null
     if (!customerId) {
@@ -54,7 +58,7 @@ serve(async (req) => {
         'metadata[userId]': user.id,
       })
       if (!customer.id) {
-        return jsonResponse({ error: customer.error?.message || 'Creazione cliente Stripe non riuscita' }, 400)
+        return jsonResponse({ error: 'Creazione cliente Stripe non riuscita' }, 400)
       }
       customerId = customer.id as string
       await supabase.from('profiles').update({ stripe_customer_id: customerId }).eq('id', user.id)
