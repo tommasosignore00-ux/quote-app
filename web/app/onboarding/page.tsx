@@ -101,10 +101,10 @@ export default function OnboardingPage() {
 
   const handleContinueCompanyInfo = () => {
     if (!formData.company_name.trim()) {
-      toast.error('Company name is required');
+      toast.error("Inserisci il nome dell'azienda");
       return;
     }
-    setMainStep(4);
+    setMainStep(5);
   };
 
   const handleCheckout = async (plan: 'price_monthly' | 'price_yearly') => {
@@ -127,7 +127,7 @@ export default function OnboardingPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        toast.error(data.error || 'Failed to create checkout session');
+        toast.error(data.error || 'Non è stato possibile aprire il pagamento');
         return;
       }
 
@@ -137,7 +137,7 @@ export default function OnboardingPage() {
       }
     } catch (err: any) {
       console.error('Checkout error:', err);
-      toast.error('An error occurred');
+      toast.error('Si è verificato un errore');
     } finally {
       setLoading(false);
     }
@@ -218,7 +218,7 @@ export default function OnboardingPage() {
       setTimeout(() => router.push('/dashboard'), 2000);
     } catch (err: any) {
       console.error('Finish onboarding error:', err);
-      toast.error('Failed to complete onboarding');
+      toast.error('Non è stato possibile completare la configurazione');
     } finally {
       setLoading(false);
     }
@@ -478,7 +478,7 @@ export default function OnboardingPage() {
             {/* Monthly */}
             <div className="bg-white/10 border border-white/20 rounded-lg p-6 hover:border-blue-500 transition">
               <h3 className="text-xl font-bold text-white mb-2">Monthly</h3>
-              <p className="text-4xl font-bold text-blue-400 mb-2">€29</p>
+              <p className="text-4xl font-bold text-blue-400 mb-2">€29,99</p>
               <p className="text-slate-300 text-sm mb-6">
                 /month, cancel anytime + 7 day trial
               </p>
@@ -499,9 +499,9 @@ export default function OnboardingPage() {
                 SAVE 17%
               </div>
               <h3 className="text-xl font-bold text-white mb-2">Yearly</h3>
-              <p className="text-4xl font-bold text-white mb-2">€290</p>
+              <p className="text-4xl font-bold text-white mb-2">€299,99</p>
               <p className="text-blue-100 text-sm mb-6">
-                /year (€24.17/month) + 7 day trial
+                /anno (€25/mese) + 7 giorni di prova
               </p>
               <button
                 onClick={() => handleCheckout('price_yearly')}

@@ -149,7 +149,14 @@ export default function SubscriptionScreen() {
     }
   };
 
-  const isSubscribed = profile?.subscription_status === 'active';
+  const isTrial = profile?.subscription_status === 'trialing';
+  const isSubscribed = ['active', 'trialing', 'past_due'].includes(profile?.subscription_status);
+  const billingDate = isTrial ? profile?.trial_ends_at : profile?.subscription_period_end;
+  const billingLabel = isTrial
+    ? 'Periodo di prova fino al'
+    : profile?.subscription_cancel_at_period_end
+      ? 'Termina il'
+      : 'Si rinnova il';
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -181,10 +188,14 @@ export default function SubscriptionScreen() {
 
       {isSubscribed ? (
         <View style={[styles.activeBox, { backgroundColor: colors.successBg, borderLeftColor: colors.success }]}>
-          <Text style={[styles.activeText, { color: colors.successText }]}>✅ {t('subscription.active') || 'Abbonamento Attivo'}</Text>
-          <Text style={[styles.dateText, { color: colors.success }]}>
-            {t('subscription.expires') || 'Scade il'}: {new Date(profile.subscription_end_date).toLocaleDateString('it-IT')}
+          <Text style={[styles.activeText, { color: colors.successText }]}>
+            {isTrial ? 'Prova gratuita attiva' : profile?.subscription_status === 'past_due' ? 'Pagamento da aggiornare' : (t('subscription.active') || 'Abbonamento attivo')}
           </Text>
+          {billingDate ? (
+            <Text style={[styles.dateText, { color: colors.success }]}>
+              {billingLabel}: {new Date(billingDate).toLocaleDateString('it-IT')}
+            </Text>
+          ) : null}
           <TouchableOpacity
             style={[styles.button, styles.manageButton, { backgroundColor: colors.primary }]}
             onPress={handleManageSubscription}
@@ -193,7 +204,7 @@ export default function SubscriptionScreen() {
             {managingSubscription ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>{t('subscription.manage') || 'Gestisci abbonamento'}</Text>
+              <Text style={styles.buttonText}>{isTrial ? 'Gestisci o disdici la prova' : 'Gestisci o disdici'}</Text>
             )}
           </TouchableOpacity>
         </View>

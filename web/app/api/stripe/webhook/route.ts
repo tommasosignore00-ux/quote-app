@@ -12,15 +12,21 @@ type Plan = 'monthly' | 'yearly' | 'team';
 /** Reads the plan from the price IDs configured on the server; metered items are skipped. */
 function planFromSubscription(subscription: Stripe.Subscription): Plan | null {
   const prices = subscription.items.data.map((item) => item.price.id);
-  if (process.env.STRIPE_PRICE_TEAM && prices.includes(process.env.STRIPE_PRICE_TEAM))
-    {return 'team';}
-  if (process.env.STRIPE_PRICE_YEARLY && prices.includes(process.env.STRIPE_PRICE_YEARLY))
-    {return 'yearly';}
+  if (process.env.STRIPE_PRICE_TEAM && prices.includes(process.env.STRIPE_PRICE_TEAM)) {
+    return 'team';
+  }
+  if (
+    process.env.STRIPE_PRICE_YEARLY &&
+    prices.includes(process.env.STRIPE_PRICE_YEARLY)
+  ) {
+    return 'yearly';
+  }
   if (
     process.env.STRIPE_PRICE_MONTHLY &&
     prices.includes(process.env.STRIPE_PRICE_MONTHLY)
-  )
-    {return 'monthly';}
+  ) {
+    return 'monthly';
+  }
   return null;
 }
 
@@ -71,8 +77,9 @@ async function applySubscription(eventSubscription: Stripe.Subscription) {
   }
 
   const plan = planFromSubscription(subscription);
-  if (!plan && !finished)
-    {console.warn('Subscription with an unknown price:', subscription.id);}
+  if (!plan && !finished) {
+    console.warn('Subscription with an unknown price:', subscription.id);
+  }
 
   const trialEnd = subscription.trial_end
     ? new Date(subscription.trial_end * 1000).toISOString()
@@ -84,6 +91,10 @@ async function applySubscription(eventSubscription: Stripe.Subscription) {
       stripe_subscription_id: subscription.id,
       subscription_status: subscription.status,
       trial_ends_at: finished ? null : trialEnd,
+      subscription_period_end: new Date(
+        subscription.current_period_end * 1000
+      ).toISOString(),
+      subscription_cancel_at_period_end: subscription.cancel_at_period_end,
       ...(plan
         ? {
             subscription_plan: plan,

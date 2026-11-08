@@ -81,9 +81,7 @@ export function usePushNotifications() {
   const responseListener = useRef<Notifications.Subscription | undefined>(undefined);
 
   useEffect(() => {
-    registerForPushNotifications().then(token => {
-      if (token) setExpoPushToken(token);
-    });
+    // Permission is requested only when the user accepts an offer in the app.
 
     // Listen for incoming notifications while app is in foreground
     notificationListener.current = Notifications.addNotificationReceivedListener((n: Notifications.Notification) => {

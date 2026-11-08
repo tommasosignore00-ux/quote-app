@@ -72,8 +72,12 @@ export const ALL_LANGUAGES = [
   { code: 'ko', name: '한국어' },
 ] as const;
 
-export const COUNTRIES = ALL_COUNTRIES.filter((c) => ACTIVE_COUNTRY_CODES.includes(c.code));
-export const LANGUAGES = ALL_LANGUAGES.filter((l) => ACTIVE_LANGUAGE_CODES.includes(l.code));
+export const COUNTRIES = ALL_COUNTRIES.filter((c) =>
+  ACTIVE_COUNTRY_CODES.includes(c.code)
+);
+export const LANGUAGES = ALL_LANGUAGES.filter((l) =>
+  ACTIVE_LANGUAGE_CODES.includes(l.code)
+);
 
 export function isActiveCountry(code: string | null | undefined): boolean {
   return !!code && ACTIVE_COUNTRY_CODES.includes(code.toUpperCase());
@@ -91,18 +95,44 @@ export function normalizeLanguage(lang: string | null | undefined): string {
 }
 
 export const LEGAL_FRAMEWORKS: Record<string, string> = {
-  IT: 'GDPR', DE: 'GDPR', FR: 'GDPR', ES: 'GDPR', AT: 'GDPR',
-  NL: 'GDPR', BE: 'GDPR', PT: 'GDPR', PL: 'GDPR', GB: 'UK_GDPR',
-  GR: 'GDPR', CZ: 'GDPR', HU: 'GDPR', RO: 'GDPR', HR: 'GDPR',
-  SK: 'GDPR', BG: 'GDPR', SI: 'GDPR', RS: 'GDPR', LV: 'GDPR',
-  LT: 'GDPR', EE: 'GDPR', UA: 'GDPR', RU: 'GDPR',
-  US: 'CCPA', CA: 'PIPEDA', AU: 'APA', CH: 'FADP',
-  CN: 'PIPL', JP: 'APPI', KR: 'PIPA', IN: 'DPDP', BR: 'LGPD',
+  IT: 'GDPR',
+  DE: 'GDPR',
+  FR: 'GDPR',
+  ES: 'GDPR',
+  AT: 'GDPR',
+  NL: 'GDPR',
+  BE: 'GDPR',
+  PT: 'GDPR',
+  PL: 'GDPR',
+  GB: 'UK_GDPR',
+  GR: 'GDPR',
+  CZ: 'GDPR',
+  HU: 'GDPR',
+  RO: 'GDPR',
+  HR: 'GDPR',
+  SK: 'GDPR',
+  BG: 'GDPR',
+  SI: 'GDPR',
+  RS: 'GDPR',
+  LV: 'GDPR',
+  LT: 'GDPR',
+  EE: 'GDPR',
+  UA: 'GDPR',
+  RU: 'GDPR',
+  US: 'CCPA',
+  CA: 'PIPEDA',
+  AU: 'APA',
+  CH: 'FADP',
+  CN: 'PIPL',
+  JP: 'APPI',
+  KR: 'PIPA',
+  IN: 'DPDP',
+  BR: 'LGPD',
 };
 
 export const STRIPE_PRICES = {
-  monthly: 2900, // 29€ in cents
-  yearly: 29000, // 290€ in cents
+  monthly: 2999, // cents
+  yearly: 29999, // cents
   trialDays: 7,
 };
 

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
+import { analytics } from '@/lib/analytics';
 import Link from 'next/link';
 import LegalModule from '@/components/LegalModule';
 import { DEFAULT_COUNTRY_CODE, DEFAULT_LANGUAGE } from '@/lib/constants';
@@ -53,6 +54,7 @@ export default function RegisterPage() {
         "Ti abbiamo inviato un'email: apri il link per confermare l'indirizzo.",
         { duration: 8000 }
       );
+      analytics.trackRegister('email');
       router.push('/auth/login');
     } catch (err: unknown) {
       toast.error((err as Error).message);

@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { normalizeCountryCode, resolveVatPercent } from '@/lib/constants';
 import { generateQuoteHTML, QuoteData, quoteLineExtras } from '@/lib/QuoteTemplate';
 import toast from 'react-hot-toast';
+import { analytics } from '@/lib/analytics';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -258,6 +259,7 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
         .update({ current_revision: revision + 1 })
         .eq('id', lavoroId);
       setRevision(revision + 1);
+      analytics.trackQuoteCreated(selectedTemplate);
       toast.success(t('quote.emailSent'));
       setShowEmailModal(false);
     } catch (err) {

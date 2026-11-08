@@ -1,3 +1,4 @@
+import { loadEntitlement } from '../lib/entitlement';
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, TextInput, Alert, SafeAreaView, ActivityIndicator, ScrollView } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -42,7 +43,10 @@ export default function QuoteScreen() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [profileData, setProfileData] = useState<any>(null);
   // Helper: verifica se l'utente ha abbonamento attivo
-  const isProOrTeam = profileData?.subscription_status === 'active' || profileData?.subscription_status === 'team';
+  const [isProOrTeam, setIsProOrTeam] = useState(false);
+  useEffect(() => {
+    if (profileData) loadEntitlement(profileData.subscription_status).then(setIsProOrTeam);
+  }, [profileData]);
   const isTeam = profileData?.subscription_status === 'team';
   const [dettaglioItems, setDettaglioItems] = useState<any[]>([]);
 

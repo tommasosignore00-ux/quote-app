@@ -1,3 +1,4 @@
+import { loadEntitlement } from '../lib/entitlement';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, FlatList, StyleSheet, Modal, TextInput, Alert, ScrollView, KeyboardAvoidingView, Platform, DeviceEventEmitter } from 'react-native';
 import { useTranslation } from 'react-i18next';
@@ -44,8 +45,8 @@ export default function DashboardScreen() {
   const [profileCountryCode, setProfileCountryCode] = useState<string | null>(null);
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
   // Helper: gating
-  const isProOrTeam = subscriptionStatus === 'active' || subscriptionStatus === 'team';
-  const isTeam = subscriptionStatus === 'team';
+  const [isProOrTeam, setIsProOrTeam] = useState(false);
+  const [isTeam, setIsTeam] = useState(false);
   const [profileVatPercent, setProfileVatPercent] = useState<number>(22);
   const [profileMaterialMarkup, setProfileMaterialMarkup] = useState<number>(0);
   const [showClientModal, setShowClientModal] = useState(false);
@@ -162,6 +163,8 @@ export default function DashboardScreen() {
       setProfileVatPercent(resolveVatPercent((profile as any).vat_percent));
       setProfileMaterialMarkup(Number((profile as any).material_markup) || 0);
       setSubscriptionStatus(profile.subscription_status || null);
+      setIsTeam(profile.team_plan === true);
+      setIsProOrTeam(await loadEntitlement(profile.subscription_status));
     } else if (profileErr) {
       console.warn('profiles select error', profileErr);
     }
