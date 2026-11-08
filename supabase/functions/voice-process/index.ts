@@ -228,13 +228,25 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Registrazione troppo lunga: dividila in frasi piu brevi.' }), { status: 413, headers: corsHeaders })
     }
 
-    // A missing counter must never block paying users: only an explicit "no" stops here.
-    const { data: quota } = await supabase.rpc('consume_ai_quota', {
+    // Same rule as the web API; an unavailable check denies access.
+    const { data: entitled, error: entitlementError } = await supabase.rpc('profile_is_entitled', { p_profile_id: userId })
+    if (entitlementError) {
+      return new Response(JSON.stringify({ error: 'Servizio temporaneamente non disponibile. Riprova tra poco.' }), { status: 503, headers: corsHeaders })
+    }
+    if (entitled !== true) {
+      return new Response(JSON.stringify({ error: 'Serve un abbonamento attivo per usare il microfono.', code: 'SUBSCRIPTION_REQUIRED' }), { status: 402, headers: corsHeaders })
+    }
+
+    // Transcription is the most expensive call: without a working counter it does not run.
+    const { data: quota, error: quotaError } = await supabase.rpc('consume_ai_quota', {
       p_profile_id: userId,
       p_feature: 'voice',
       p_units: 1,
       p_daily_limit: DAILY_VOICE_LIMIT,
     })
+    if (quotaError) {
+      return new Response(JSON.stringify({ error: 'Servizio temporaneamente non disponibile. Riprova tra poco.' }), { status: 503, headers: corsHeaders })
+    }
     const quotaRow = Array.isArray(quota) ? quota[0] : quota
     if (quotaRow && quotaRow.allowed === false) {
       return new Response(JSON.stringify({ error: 'Hai raggiunto il limite giornaliero di richieste vocali. Riprova domani.', code: 'AI_DAILY_LIMIT' }), { status: 429, headers: corsHeaders })

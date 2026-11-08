@@ -1,12 +1,18 @@
 import { enforceAiQuota } from '../../../../lib/aiQuota';
 import { NextResponse } from 'next/server';
-import { getRequestUser, unauthorizedResponse } from '../../../../lib/apiAuth';
+import {
+  getRequestUser,
+  unauthorizedResponse,
+  requireActiveSubscription,
+} from '../../../../lib/apiAuth';
 import { openai } from '../../../../lib/openaiServer';
 
 export async function POST(req: Request) {
   try {
     const user = await getRequestUser(req);
     if (!user) return unauthorizedResponse();
+    const notEntitled = await requireActiveSubscription(user.id);
+    if (notEntitled) return notEntitled;
     const quotaExceeded = await enforceAiQuota(user.id, 'semantic');
     if (quotaExceeded) return quotaExceeded;
     const { description } = await req.json();

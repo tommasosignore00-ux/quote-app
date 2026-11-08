@@ -474,18 +474,10 @@ export default function QuoteScreen() {
             <TouchableOpacity style={[styles.btn, { flex: 1 }]} onPress={async () => {
               setApproved(true);
               setShowPreviewModal(false);
-              // Punto 33: Increment quote usage for metered billing
+              // Quote usage is counted by the database when the revision is sent.
               try {
                 const { data: { user } } = await supabase.auth.getUser();
                 if (user) {
-                  const { data: usage } = await supabase.rpc('increment_quote_usage', { p_profile_id: user.id });
-                  if (usage && !usage.within_limit) {
-                    Alert.alert(
-                      '⚠️ Limite raggiunto',
-                      `Hai generato ${usage.quotes_generated}/${usage.quotes_limit} preventivi questo mese. I preventivi extra verranno addebitati al costo di €1.50 ciascuno.`,
-                      [{ text: 'OK' }]
-                    );
-                  }
                   // Punto 43: Dispatch webhook for quote_approved
                   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
                   const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -501,7 +493,7 @@ export default function QuoteScreen() {
                     }).catch(() => {});
                   }
                 }
-              } catch { /* metered billing is best-effort */ }
+              } catch { /* the webhook is best-effort */ }
             }} disabled={loading}>
               <Text style={styles.btnText}>✓ {t('buttons.validateApprove') || 'Valida e Approva'}</Text>
             </TouchableOpacity>

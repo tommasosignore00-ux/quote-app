@@ -6,6 +6,7 @@ import {
   unauthorizedResponse,
   forbiddenResponse,
   isOwnProfile,
+  requireActiveSubscription,
 } from '../../../../lib/apiAuth';
 import path from 'path';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
@@ -29,6 +30,8 @@ export async function POST(req: Request) {
   try {
     const user = await getRequestUser(req);
     if (!user) return unauthorizedResponse();
+    const notEntitled = await requireActiveSubscription(user.id);
+    if (notEntitled) return notEntitled;
     const quotaExceeded = await enforceAiQuota(user.id, 'listino_import');
     if (quotaExceeded) return quotaExceeded;
     const requestContentType = req.headers.get('content-type') || '';
@@ -70,7 +73,8 @@ export async function POST(req: Request) {
 
       if (listinoId) {
         const access = await getListinoAccess(user.id, listinoId);
-        if (!access) return NextResponse.json({ error: 'Listino non trovato' }, { status: 404 });
+        if (!access)
+          {return NextResponse.json({ error: 'Listino non trovato' }, { status: 404 });}
         if (!access.canEdit) return forbiddenResponse();
         profileId = access.ownerProfileId;
       }
@@ -118,7 +122,8 @@ export async function POST(req: Request) {
 
       if (listinoId) {
         const access = await getListinoAccess(user.id, listinoId);
-        if (!access) return NextResponse.json({ error: 'Listino non trovato' }, { status: 404 });
+        if (!access)
+          {return NextResponse.json({ error: 'Listino non trovato' }, { status: 404 });}
         if (!access.canEdit) return forbiddenResponse();
         profileId = access.ownerProfileId;
       }

@@ -6,6 +6,7 @@ import {
   unauthorizedResponse,
   forbiddenResponse,
   isOwnProfile,
+  requireActiveSubscription,
 } from '../../../../lib/apiAuth';
 import OpenAI from 'openai';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
@@ -233,6 +234,8 @@ export async function POST(req: Request) {
   try {
     const user = await getRequestUser(req);
     if (!user) return unauthorizedResponse();
+    const notEntitled = await requireActiveSubscription(user.id);
+    if (notEntitled) return notEntitled;
     const quotaExceeded = await enforceAiQuota(user.id, 'listino_ai_organize');
     if (quotaExceeded) return quotaExceeded;
     const { listinoId, profileId: claimedProfileId } = await req.json();
@@ -241,8 +244,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'listinoId è obbligatorio' }, { status: 400 });
     }
     const access = await getListinoAccess(user.id, listinoId);
-    if (!access)
-      {return NextResponse.json({ error: 'Listino non trovato' }, { status: 404 });}
+    if (!access) {
+      return NextResponse.json({ error: 'Listino non trovato' }, { status: 404 });
+    }
     if (!access.canEdit) return forbiddenResponse();
     const profileId = access.ownerProfileId;
 

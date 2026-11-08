@@ -1,20 +1,29 @@
 import { enforceAiQuota } from '../../../../lib/aiQuota';
 import { NextResponse } from 'next/server';
-import { getRequestUser, unauthorizedResponse } from '../../../../lib/apiAuth';
+import {
+  getRequestUser,
+  unauthorizedResponse,
+  requireActiveSubscription,
+} from '../../../../lib/apiAuth';
 import { openai } from '../../../../lib/openaiServer';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import { getListinoProfileIds } from '../../../../lib/listinoAccess';
 
 const supabase = supabaseAdmin;
+const MAX_QUERY_LENGTH = 500;
 
 export async function POST(req: Request) {
   try {
     const user = await getRequestUser(req);
     if (!user) return unauthorizedResponse();
+    const notEntitled = await requireActiveSubscription(user.id);
+    if (notEntitled) return notEntitled;
     const quotaExceeded = await enforceAiQuota(user.id, 'semantic');
     if (quotaExceeded) return quotaExceeded;
     const { query, k = 8 } = await req.json();
-    if (!query) return NextResponse.json({ error: 'query required' }, { status: 400 });
+    if (typeof query !== 'string' || !query.trim() || query.length > MAX_QUERY_LENGTH) {
+      return NextResponse.json({ error: 'Ricerca non valida' }, { status: 400 });
+    }
 
     // Create embedding for query
     const model = process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
@@ -34,11 +43,8 @@ export async function POST(req: Request) {
       p_profile_ids: await getListinoProfileIds(user.id),
     });
     if (error) {
-      console.error('Search RPC error:', error);
-      return NextResponse.json(
-        { error: error.message || 'Search failed' },
-        { status: 500 }
-      );
+      console.error('Search RPC error:', error.code);
+      return NextResponse.json({ error: 'Ricerca non riuscita' }, { status: 500 });
     }
 
     const itemIds = (data || []).map((item: { id: string }) => item.id).filter(Boolean);
@@ -73,10 +79,7 @@ export async function POST(req: Request) {
       })),
     });
   } catch (err: any) {
-    console.error('Semantic search error:', err);
-    return NextResponse.json(
-      { error: err.message || 'Semantic search failed' },
-      { status: 500 }
-    );
+    console.error('Semantic search error:', err?.status ?? 'unknown');
+    return NextResponse.json({ error: 'Ricerca non riuscita' }, { status: 500 });
   }
 }

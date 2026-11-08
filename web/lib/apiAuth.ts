@@ -66,3 +66,33 @@ export function isOwnProfile(user: User, claimedId: unknown): boolean {
   if (claimedId === undefined || claimedId === null || claimedId === '') return true;
   return String(claimedId) === user.id;
 }
+
+/**
+ * Returns a response when the user may not use paid features, otherwise null.
+ * The rule lives in the database function profile_is_entitled. An unavailable
+ * check denies access: these routes spend money on every call.
+ */
+export async function requireActiveSubscription(
+  profileId: string
+): Promise<NextResponse | null> {
+  const { data, error } = await supabaseAdmin.rpc('profile_is_entitled', {
+    p_profile_id: profileId,
+  });
+  if (error) {
+    console.error('Entitlement check failed:', error.code);
+    return NextResponse.json(
+      { error: 'Servizio temporaneamente non disponibile. Riprova tra poco.' },
+      { status: 503 }
+    );
+  }
+  if (data !== true) {
+    return NextResponse.json(
+      {
+        error: 'Serve un abbonamento attivo per usare questa funzione.',
+        code: 'SUBSCRIPTION_REQUIRED',
+      },
+      { status: 402 }
+    );
+  }
+  return null;
+}

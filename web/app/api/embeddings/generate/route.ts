@@ -1,20 +1,29 @@
 import { enforceAiQuota } from '../../../../lib/aiQuota';
 import { NextResponse } from 'next/server';
-import { getRequestUser, unauthorizedResponse } from '../../../../lib/apiAuth';
+import {
+  getRequestUser,
+  unauthorizedResponse,
+  requireActiveSubscription,
+} from '../../../../lib/apiAuth';
 import { openai } from '../../../../lib/openaiServer';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 
 const supabase = supabaseAdmin;
+const MAX_TEXT_LENGTH = 2000;
 
 export async function POST(req: Request) {
   try {
     const user = await getRequestUser(req);
     if (!user) return unauthorizedResponse();
+    const notEntitled = await requireActiveSubscription(user.id);
+    if (notEntitled) return notEntitled;
     const quotaExceeded = await enforceAiQuota(user.id, 'semantic');
     if (quotaExceeded) return quotaExceeded;
     const { text, metadata } = await req.json();
-    if (!text) return NextResponse.json({ error: 'text required' }, { status: 400 });
+    if (typeof text !== 'string' || !text.trim() || text.length > MAX_TEXT_LENGTH) {
+      return NextResponse.json({ error: 'Testo non valido' }, { status: 400 });
+    }
 
     const model = process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
     const resp = await openai.embeddings.create({ model, input: text });
@@ -36,9 +45,13 @@ export async function POST(req: Request) {
         if (!ownListino) return NextResponse.json({ embedding });
 
         const insert = await supabase.from('listini_vettoriali').insert({
-          title: metadata?.title || null,
-          description: metadata?.description || text,
-          price: metadata?.price || null,
+          title:
+            typeof metadata?.title === 'string' ? metadata.title.slice(0, 300) : null,
+          description:
+            typeof metadata?.description === 'string'
+              ? metadata.description.slice(0, MAX_TEXT_LENGTH)
+              : text,
+          price: Number.isFinite(Number(metadata?.price)) ? Number(metadata.price) : null,
           listino_id: listinoId,
           profile_id: user.id,
           embedding: embedding,
@@ -52,10 +65,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ embedding });
   } catch (err: any) {
-    console.error('Embedding error:', err);
-    return NextResponse.json(
-      { error: err.message || 'Embedding failed' },
-      { status: 500 }
-    );
+    console.error('Embedding error:', err?.status ?? 'unknown');
+    return NextResponse.json({ error: 'Elaborazione non riuscita' }, { status: 500 });
   }
 }

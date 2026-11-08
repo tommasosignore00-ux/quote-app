@@ -28,10 +28,21 @@ function dailyLimit(feature: AiFeature): number {
     : DEFAULT_DAILY_LIMITS[feature];
 }
 
+/** A semantic lookup costs a fraction of a cent; the others call expensive models. */
+const FAILS_OPEN: ReadonlySet<AiFeature> = new Set<AiFeature>(['semantic']);
+
+function quotaUnavailable(feature: AiFeature): NextResponse | null {
+  if (FAILS_OPEN.has(feature)) return null;
+  return NextResponse.json(
+    { error: 'Servizio temporaneamente non disponibile. Riprova tra poco.' },
+    { status: 503 }
+  );
+}
+
 /**
- * Consumes one unit of the user's daily AI allowance. Returns a 429 response when
- * the limit is reached, otherwise null. If the quota table is not available the
- * request is allowed: a missing counter must never block paying users.
+ * Consumes one unit of the user's daily AI allowance. Returns a response when the
+ * limit is reached. If the counter is unavailable, expensive features are refused
+ * and only semantic lookups continue.
  */
 export async function enforceAiQuota(
   profileId: string,
@@ -47,8 +58,8 @@ export async function enforceAiQuota(
       p_daily_limit: limit,
     });
     if (error) {
-      console.warn('AI quota check unavailable, allowing request:', error.message);
-      return null;
+      console.error('AI quota check unavailable:', error.code);
+      return quotaUnavailable(feature);
     }
     const row = Array.isArray(data) ? data[0] : data;
     if (row && row.allowed === false) {
@@ -61,8 +72,8 @@ export async function enforceAiQuota(
       );
     }
     return null;
-  } catch (error) {
-    console.warn('AI quota check failed, allowing request:', error);
-    return null;
+  } catch {
+    console.error('AI quota check failed');
+    return quotaUnavailable(feature);
   }
 }

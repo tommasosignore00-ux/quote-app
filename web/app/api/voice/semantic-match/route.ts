@@ -5,23 +5,37 @@ import {
   unauthorizedResponse,
   forbiddenResponse,
   isOwnProfile,
+  requireActiveSubscription,
 } from '../../../../lib/apiAuth';
+import { rateLimitVoice } from '../../../../lib/rate-limit';
 import { openai } from '../../../../lib/openaiServer';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import { getListinoProfileIds } from '../../../../lib/listinoAccess';
 
 const supabase = supabaseAdmin;
+const MAX_QUERY_LENGTH = 500;
 
 export async function POST(req: Request) {
   try {
     const user = await getRequestUser(req);
     if (!user) return unauthorizedResponse();
+    const notEntitled = await requireActiveSubscription(user.id);
+    if (notEntitled) return notEntitled;
+    const limited = rateLimitVoice(user.id);
+    if (!limited.success) {
+      return NextResponse.json(
+        { error: 'Troppe richieste. Riprova tra poco.' },
+        { status: 429, headers: limited.headers }
+      );
+    }
     const quotaExceeded = await enforceAiQuota(user.id, 'semantic');
     if (quotaExceeded) return quotaExceeded;
     const { query, profileId: claimedProfileId } = await req.json();
     if (!isOwnProfile(user, claimedProfileId)) return forbiddenResponse();
     const profileId = user.id;
-    if (!query) return NextResponse.json({ error: 'Missing params' }, { status: 400 });
+    if (typeof query !== 'string' || !query.trim() || query.length > MAX_QUERY_LENGTH) {
+      return NextResponse.json({ error: 'Ricerca non valida' }, { status: 400 });
+    }
 
     const embeddingRes = await openai.embeddings.create({
       model: 'text-embedding-3-small',
@@ -72,7 +86,7 @@ export async function POST(req: Request) {
 
     // Similar in meaning is not the same article: always candidates, the user decides.
     return NextResponse.json({ item: null, alternatives: normalizedItems.slice(0, 5) });
-  } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: 'Ricerca non riuscita' }, { status: 500 });
   }
 }

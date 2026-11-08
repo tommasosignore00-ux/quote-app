@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getRequestUser, unauthorizedResponse } from '../../../../lib/apiAuth';
+import {
+  getRequestUser,
+  unauthorizedResponse,
+  requireActiveSubscription,
+} from '../../../../lib/apiAuth';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import { enforceAiQuota } from '../../../../lib/aiQuota';
 import { hostTemplateImages } from '../../../../lib/templateAssets';
@@ -23,6 +27,8 @@ export async function POST(req: Request) {
   try {
     const user = await getRequestUser(req);
     if (!user) return unauthorizedResponse();
+    const notEntitled = await requireActiveSubscription(user.id);
+    if (notEntitled) return notEntitled;
     const quotaExceeded = await enforceAiQuota(user.id, 'template');
     if (quotaExceeded) return quotaExceeded;
 
