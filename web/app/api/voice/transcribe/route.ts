@@ -3,11 +3,7 @@ import { openai } from '../../../../lib/openaiServer';
 import { NextResponse } from 'next/server';
 import { getRequestUser, unauthorizedResponse } from '../../../../lib/apiAuth';
 import OpenAI from 'openai';
-import { createClient } from '@supabase/supabase-js';
-import { supabaseAdmin } from '../../../../lib/supabase-server';
 import { Readable } from 'stream';
-
-const supabase = supabaseAdmin;
 
 export async function POST(req: Request) {
   try {
@@ -16,8 +12,7 @@ export async function POST(req: Request) {
     const quotaExceeded = await enforceAiQuota(user.id, 'voice');
     if (quotaExceeded) return quotaExceeded;
     const body = await req.json();
-    const { audioBase64, filename = 'audio.wav', mimeType = 'audio/wav' } = body;
-    const userId = user.id;
+    const { audioBase64 } = body;
 
     if (!audioBase64) {
       return NextResponse.json({ error: 'audioBase64 is required' }, { status: 400 });
@@ -34,20 +29,6 @@ export async function POST(req: Request) {
     } as any);
 
     const text = transcription.text || '';
-
-    // Optional: persist transcription
-    try {
-      await supabase.from('transcriptions').insert({
-        user_id: userId || null,
-        filename,
-        mime_type: mimeType,
-        text,
-        created_at: new Date(),
-      });
-    } catch (e) {
-      // table may not exist; don't fail hard
-      console.warn('Could not persist transcription:', e);
-    }
 
     return NextResponse.json({ text });
   } catch (err: any) {

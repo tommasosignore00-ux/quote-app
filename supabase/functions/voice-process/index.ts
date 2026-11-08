@@ -101,50 +101,6 @@ VINCOLI FINALI
 - Nessun commento, markdown o spiegazione fuori JSON.
 - Meglio null che dato inventato.`
 
-async function getEmbeddingWithCache(
-  supabase: ReturnType<typeof createClient>,
-  text: string
-): Promise<number[]> {
-  const normalised = text.trim().toLowerCase()
-  const encoded = new TextEncoder().encode(normalised)
-  const hashBuffer = await crypto.subtle.digest('SHA-256', encoded)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  const textHash = hashArray.map((byte) => byte.toString(16).padStart(2, '0')).join('')
-
-  const { data: cached } = await supabase
-    .from('embedding_cache')
-    .select('embedding')
-    .eq('text_hash', textHash)
-    .maybeSingle()
-
-  if (cached?.embedding) {
-    await supabase.from('embedding_cache').update({ last_used_at: new Date().toISOString() }).eq('text_hash', textHash)
-    return cached.embedding
-  }
-
-  const res = await fetch('https://api.openai.com/v1/embeddings', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ model: 'text-embedding-ada-002', input: normalised }),
-  })
-  const json = await res.json()
-  const embedding: number[] = json.data?.[0]?.embedding || []
-
-  if (embedding.length > 0) {
-    await supabase.from('embedding_cache').upsert({
-      text_hash: textHash,
-      text_content: normalised,
-      embedding,
-      last_used_at: new Date().toISOString(),
-    }, { onConflict: 'text_hash' })
-  }
-
-  return embedding
-}
-
 // Trade words the transcription often gets wrong, on top of the user's own price list.
 const BASE_VOCABULARY = [
   'IPE', 'HEA', 'HEB', 'UPN', 'INP', 'tondi laminati', 'tubi', 'piatti', 'angolari', 'lamiere',
@@ -390,10 +346,6 @@ serve(async (req) => {
       rawAgent.quote.items = []
     }
     const legacy = toLegacyAction(rawAgent, context)
-
-    if (legacy.action === 'add_costo' && text) {
-      getEmbeddingWithCache(supabase, text).catch(() => {})
-    }
 
     return new Response(JSON.stringify({
       action: legacy.action,
