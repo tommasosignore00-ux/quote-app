@@ -6,6 +6,13 @@ import OpenAI from 'openai';
 import { supabaseAdmin } from './supabase-server';
 import * as XLSX from 'xlsx';
 import {
+  assertSafeArchive,
+  hasExpectedSignature,
+  MAX_PARSE_BYTES,
+} from './archiveSafety';
+
+const MAX_SHEET_ROWS = 500_000;
+import {
   type UniversalImportResult,
   type UniversalParsedItem,
   mergeUniversalImportResults,
@@ -1052,7 +1059,14 @@ export async function processListinoImport(
     let aiFeedback: string | null = null;
 
     if (ext === 'xlsx' || ext === 'xls') {
-      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      if (arrayBuffer.byteLength > MAX_PARSE_BYTES) throw new Error('File troppo grande');
+      if (!hasExpectedSignature(arrayBuffer, ext))
+        {throw new Error('Il file non è un foglio Excel valido');}
+      if (ext === 'xlsx') await assertSafeArchive(arrayBuffer);
+      const workbook = XLSX.read(arrayBuffer, {
+        type: 'array',
+        sheetRows: MAX_SHEET_ROWS,
+      });
       const analyses = workbook.SheetNames.map((sheetName) =>
         analyzeRowsForImport(readWorksheetRows(workbook.Sheets[sheetName]), sheetName)
       );

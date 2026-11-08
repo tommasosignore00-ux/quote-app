@@ -31,11 +31,12 @@ describe('enforceAiQuota', () => {
     );
   });
 
-  it('never blocks users when the quota table is unavailable', async () => {
+  it('refuses expensive features and allows lookups when the counter is unavailable', async () => {
     rpcMock.mockResolvedValue({
       data: null,
       error: { message: 'function consume_ai_quota does not exist' },
     });
-    expect(await enforceAiQuota('user-1', 'voice')).toBeNull();
+    expect((await enforceAiQuota('user-1', 'voice'))?.status).toBe(503);
+    expect(await enforceAiQuota('user-1', 'semantic')).toBeNull();
   });
 });

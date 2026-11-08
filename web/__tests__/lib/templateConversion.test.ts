@@ -63,7 +63,7 @@ describe('quote template conversion', () => {
     });
 
     const result = await convertToTemplate({ source });
-    expect(result.template).toContain(`<img src="${LOGO}">`);
+    expect(result.template).toContain(`<img src="${LOGO}" />`);
     expect(result.template).not.toContain('logo.png');
     expect(result.template).not.toMatch(/<script|onclick/);
     expect(result.template).toContain('Totale {{total}}');

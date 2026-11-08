@@ -1,5 +1,6 @@
 import mammoth from 'mammoth';
 import JSZip from 'jszip';
+import { assertSafeArchive, hasExpectedSignature } from './archiveSafety';
 import WordExtractor from 'word-extractor';
 import { openai } from './openaiServer';
 import { redactPersonalData } from './templateRedaction';
@@ -296,6 +297,15 @@ function topValues(values: string[], limit: number): string[] {
     .map(([value]) => value);
 }
 
+/** Looks an id up by comparison: the id comes from the uploaded file. */
+function relationTarget(rels: string, id: string): string | undefined {
+  for (const [tag] of rels.matchAll(/<Relationship\b[^>]*>/g)) {
+    if (tag.match(/\bId="([^"]+)"/)?.[1] === id)
+      {return tag.match(/\bTarget="([^"]+)"/)?.[1];}
+  }
+  return undefined;
+}
+
 /**
  * What mammoth leaves out of a Word file: page header and footer (often the
  * letterhead with logo, company data and IBAN) and the colours/fonts used, so the
@@ -322,7 +332,7 @@ async function readDocxExtras(buffer: Buffer) {
     const relsFile = zip.file(name.replace('word/', 'word/_rels/') + '.rels');
     const rels = relsFile ? await relsFile.async('string') : '';
     for (const match of xml.matchAll(/r:embed="([^"]+)"/g)) {
-      const target = new RegExp(`Id="${match[1]}"[^>]*Target="([^"]+)"`).exec(rels)?.[1];
+      const target = relationTarget(rels, match[1]);
       const file = target ? zip.file(`word/${target.replace(/^\.\.\//, '')}`) : null;
       const ext = target?.split('.').pop()?.toLowerCase() || '';
       if (!file || !IMAGE_MIME[ext]) continue;
@@ -369,6 +379,9 @@ export async function readTemplateSource(params: {
   const name = params.fileName.toLowerCase();
 
   if (name.endsWith('.docx')) {
+    if (!hasExpectedSignature(params.buffer, 'docx'))
+      {throw new Error('Il file non è un documento Word valido');}
+    await assertSafeArchive(params.buffer);
     const { value } = await mammoth.convertToHtml({ buffer: params.buffer });
     const extras = await readDocxExtras(params.buffer).catch(() => null);
     let body = value;
