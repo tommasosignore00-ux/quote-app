@@ -83,18 +83,23 @@ export async function setCachedData(
 
 // ── Sync Engine ──────────────────────────────────
 
+// NetInfo can report "no connection" on a working network, so only a request that
+// really failed counts as being offline.
+function isNetworkFailure(error: unknown): boolean {
+  const message = String((error as { message?: unknown } | null)?.message ?? error);
+  return /network request failed|failed to fetch/i.test(message);
+}
+
 export async function syncOfflineQueue(): Promise<{ synced: number; failed: number }> {
   const queue = await getOfflineQueue();
   if (queue.length === 0) return { synced: 0, failed: 0 };
-
-  const netState = await NetInfo.fetch();
-  if (!netState.isConnected) return { synced: 0, failed: queue.length };
 
   let synced = 0;
   let failed = 0;
   const remaining: QueuedOperation[] = [];
 
-  for (const op of queue) {
+  for (let index = 0; index < queue.length; index++) {
+    const op = queue[index];
     try {
       let result;
       switch (op.operation) {
@@ -113,6 +118,12 @@ export async function syncOfflineQueue(): Promise<{ synced: number; failed: numb
       if (result?.error) throw result.error;
       synced++;
     } catch (e) {
+      // No connection says nothing about the operation: it must not use up its retries.
+      if (isNetworkFailure(e)) {
+        remaining.push(...queue.slice(index));
+        failed += queue.length - index;
+        break;
+      }
       console.warn(`Sync failed for ${op.table}/${op.operation}:`, e);
       op.retries++;
       if (op.retries < 5) {
@@ -133,23 +144,15 @@ export async function fetchWithOfflineFallback<T>(
   fetchFn: () => Promise<T>,
   ttlMs = 5 * 60 * 1000
 ): Promise<{ data: T | null; isOffline: boolean }> {
-  const netState = await NetInfo.fetch();
-
-  if (netState.isConnected) {
-    try {
-      const data = await fetchFn();
-      await setCachedData(cacheKey, data, ttlMs);
-      return { data, isOffline: false };
-    } catch (e) {
-      console.warn('Fetch failed, trying cache:', e);
-      const cached = await getCachedData<T>(cacheKey);
-      return { data: cached, isOffline: true };
-    }
+  try {
+    const data = await fetchFn();
+    await setCachedData(cacheKey, data, ttlMs);
+    return { data, isOffline: false };
+  } catch (e) {
+    console.warn('Fetch failed, trying cache:', e);
+    const cached = await getCachedData<T>(cacheKey);
+    return { data: cached, isOffline: true };
   }
-
-  // Offline: use cache
-  const cached = await getCachedData<T>(cacheKey);
-  return { data: cached, isOffline: true };
 }
 
 // ── Offline-aware mutation ──────────────────────
@@ -159,9 +162,7 @@ export async function mutateWithOfflineQueue(
   operation: 'insert' | 'update' | 'delete',
   data: Record<string, unknown>
 ): Promise<{ queued: boolean }> {
-  const netState = await NetInfo.fetch();
-
-  if (netState.isConnected && supabase) {
+  if (supabase) {
     try {
       let result;
       switch (operation) {
@@ -194,12 +195,10 @@ let unsubscribeNetInfo: (() => void) | null = null;
 export function startNetworkListener(onSync?: (result: { synced: number; failed: number }) => void) {
   if (unsubscribeNetInfo) return;
 
-  unsubscribeNetInfo = NetInfo.addEventListener(async (state: { isConnected: boolean | null }) => {
-    if (state.isConnected) {
-      const result = await syncOfflineQueue();
-      if (result.synced > 0) {
-        onSync?.(result);
-      }
+  unsubscribeNetInfo = NetInfo.addEventListener(async () => {
+    const result = await syncOfflineQueue();
+    if (result.synced > 0) {
+      onSync?.(result);
     }
   });
 }

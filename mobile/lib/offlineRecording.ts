@@ -6,7 +6,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { getFunctionHeaders } from './supabaseFunctions';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import NetInfo from '@react-native-community/netinfo';
 import { supabase } from './supabase';
 
 const OFFLINE_RECORDINGS_KEY = '@quoteapp:offline_recordings';
@@ -250,9 +249,8 @@ export async function syncOfflineRecordings(
   syncInFlight = true;
   try {
     summary.expired = await applyRetention();
-    const netState = await NetInfo.fetch();
-    if (!netState.isConnected) return summary;
 
+    // The first failed upload stops the round below: there is no need to ask NetInfo.
     const recordings = (await ownRecordings()).filter((rec) => !rec.needsAttention);
     for (const rec of recordings) {
       const uri = currentUri(rec);

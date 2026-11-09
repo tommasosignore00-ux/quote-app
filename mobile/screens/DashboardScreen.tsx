@@ -1,6 +1,6 @@
 import { trackEvent } from '../lib/analytics';
 import { Ionicons } from '@expo/vector-icons';
-import { countUnmatchedItems, firstTime, scheduleEveningReminder } from '../lib/nudges';
+import { countUnmatchedItems, firstTime } from '../lib/nudges';
 import { holdClientDecisions } from '../lib/notifications';
 import { loadEntitlement } from '../lib/entitlement';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -625,20 +625,12 @@ export default function DashboardScreen() {
       for (let i = 0; i < rows.length; i++) await trackTimeSaving('add_costo');
       refreshTimeSaved();
 
-      if (await firstTime('first-voice-item')) {
-        Alert.alert('Prima voce salvata', 'Cosa vuoi fare adesso?', [
-          { text: 'Prepara il preventivo', onPress: () => (navigation as any).navigate('Quote', { lavoro }) },
-          { text: 'Ricordamelo stasera', onPress: () => { scheduleEveningReminder(lavoro.title, lavoro.id).catch(() => {}); } },
-          { text: 'Detta ancora', style: 'cancel' },
+      const unmatched = voiceDraft.items.filter((item) => !item.matches[item.choice]).length;
+      if (unmatched > 0 && (await countUnmatchedItems(unmatched)) >= 3 && (await firstTime('listino-prompt'))) {
+        Alert.alert('Vuoi caricare il tuo listino?', 'Alcune voci non hanno un prezzo: con il listino li trovi mentre detti.', [
+          { text: 'Carica listino', onPress: () => (navigation as any).navigate('Listini') },
+          { text: 'Non ora', style: 'cancel' },
         ]);
-      } else {
-        const unmatched = voiceDraft.items.filter((item) => !item.matches[item.choice]).length;
-        if (unmatched > 0 && (await countUnmatchedItems(unmatched)) >= 3 && (await firstTime('listino-prompt'))) {
-          Alert.alert('Vuoi caricare il tuo listino?', 'Alcune voci non hanno un prezzo: con il listino li trovi mentre detti.', [
-            { text: 'Carica listino', onPress: () => (navigation as any).navigate('Listini') },
-            { text: 'Non ora', style: 'cancel' },
-          ]);
-        }
       }
 
       // Punto 13: Cross-selling suggestions

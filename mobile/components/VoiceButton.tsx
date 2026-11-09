@@ -1,6 +1,6 @@
 import { holdClientDecisions } from '../lib/notifications';
 import React, { useState, useRef, useEffect } from 'react';
-import { TouchableOpacity, Text, StyleSheet, Alert, View, Animated, DeviceEventEmitter, ActivityIndicator } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, Alert, View, Animated, AppState, DeviceEventEmitter, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import {
   RecordingPresets,
@@ -101,10 +101,10 @@ export default function VoiceButton({ onResult, context, size = 64, floating = f
     askAboutStuckRecordings();
   }, []);
 
-  // Auto-sync offline recordings when online
+  // NetInfo only tells when to try: it can report "no connection" on a working network,
+  // so its answer never decides whether a recording is sent.
   useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener(async (state) => {
-      if (!state.isConnected) return;
+    const syncSavedRecordings = async (askAboutStuck: boolean) => {
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
       const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
       if (!supabaseUrl || !supabaseAnonKey) return;
@@ -117,9 +117,19 @@ export default function VoiceButton({ onResult, context, size = 64, floating = f
       if (expired > 0) {
         Alert.alert('Registrazioni eliminate', expired === 1 ? 'Una registrazione non inviata aveva più di 14 giorni ed è stata eliminata.' : `${expired} registrazioni non inviate avevano più di 14 giorni e sono state eliminate.`);
       }
-      askAboutStuckRecordings();
+      if (askAboutStuck) askAboutStuckRecordings();
+    };
+    const unsubscribe = NetInfo.addEventListener(() => {
+      syncSavedRecordings(true);
     });
-    return () => unsubscribe();
+    // Not asking here: "Tienile" must not bring the question back at every reopening.
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'active') syncSavedRecordings(false);
+    });
+    return () => {
+      unsubscribe();
+      appState.remove();
+    };
   }, []);
 
   useEffect(() => () => {
@@ -185,19 +195,12 @@ export default function VoiceButton({ onResult, context, size = 64, floating = f
       setProcessing(true);
 
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-      const savedMessage = t('messages.offlineRecordingSaved') || 'Registrazione salvata. Verrà elaborata quando tornerà la connessione.';
 
-      // Punto 1: Check network - if offline, save for later
-      const netState = await NetInfo.fetch();
-      if (!netState.isConnected) {
-        await saveForLater(uri, savedMessage);
-        return;
-      }
-
+      // Always try: a recording is kept for later only when sending it really failed.
       const outcome = await uploadVoiceRecording(supabaseUrl, uri, context);
       if (outcome.kind === 'transient') {
         triggerHaptic('aiError');
-        await saveForLater(uri, 'Il servizio non ha risposto: riprovo da solo appena possibile, non devi ridettare.');
+        await saveForLater(uri, 'Invio non riuscito: riprovo da solo appena possibile, non devi ridettare.');
         return;
       }
       if (outcome.kind !== 'ok') {
