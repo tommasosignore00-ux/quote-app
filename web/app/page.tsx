@@ -5,10 +5,12 @@ import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
+import { useFounderSlots } from '@/lib/useFounderSlots';
 
 export default function HomePage() {
   const { t } = useTranslation();
   const router = useRouter();
+  const founderSlots = useFounderSlots();
 
   useEffect(() => {
     const {
@@ -172,7 +174,7 @@ export default function HomePage() {
                   &ldquo;Quanto mi costa?&rdquo;
                 </p>
                 <p className="mt-3 text-sm leading-7 text-slate-300">
-                  €29,99 al mese, con 7 giorni di prova per provarlo con i tuoi prezzi.
+                  €29,99 al mese, con 14 giorni di prova per provarlo con i tuoi prezzi.
                   Disdici quando vuoi dalla tua area account.
                 </p>
               </div>
@@ -195,14 +197,25 @@ export default function HomePage() {
               <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
                 <p className="text-lg font-semibold text-white">Team</p>
                 <p className="mt-3 text-3xl font-bold text-white">€79,99</p>
-                <p className="text-sm text-slate-300">al mese, per lavorare in squadra</p>
+                <p className="text-sm text-slate-300">
+                  al mese, 5 utenti tu compreso. €9,99 al mese per ogni utente in più,
+                  fino a 10.
+                </p>
               </div>
             </div>
             <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-300">
-              I 7 giorni di prova valgono per il primo abbonamento. Al momento
+              I 14 giorni di prova valgono per il primo abbonamento. Al momento
               dell&apos;attivazione serve la carta: se non disdici entro la fine della
               prova, parte il piano che hai scelto.
             </p>
+            {founderSlots !== null && founderSlots > 0 && (
+              <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-300">
+                <strong className="text-white">Primi 50 clienti:</strong> €19,99 al mese o
+                €199,99 all&apos;anno, finché resti abbonato senza interruzioni. Si paga
+                subito, senza prova, e se entro 30 giorni non ti convince ti rimborsiamo
+                il primo pagamento. Restano {founderSlots} posti.
+              </p>
+            )}
           </section>
 
           <section className="mt-12 grid gap-4 md:grid-cols-2">

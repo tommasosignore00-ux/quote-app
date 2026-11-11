@@ -228,10 +228,8 @@ export default function DashboardScreen() {
 
   // Gating: mostra messaggio se utente Free tenta funzioni Pro/Team
   const showUpgradeAlert = (feature: string) => {
-    Alert.alert('Funzione riservata', `${feature} è disponibile solo per abbonati Pro o Team.`, [
-      { text: 'Scopri i piani', onPress: () => (navigation as any).navigate('Subscription') },
-      { text: 'Annulla', style: 'cancel' },
-    ]);
+    // No link to plans: the app sells nothing (App Store and Play Store rules).
+    Alert.alert('Funzione riservata', `${feature} è disponibile con un abbonamento attivo.`);
   };
 
   // Punto 4: Add cost item from carousel

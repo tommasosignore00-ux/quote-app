@@ -323,8 +323,9 @@ export default function ProfileScreen() {
   };
 
   // Punto 41: Team constants
-  const TEAM_MEMBERS_INCLUDED = 5;
-  const EXTRA_MEMBER_PRICE = 7.99;
+  // Users included in Team besides the owner (5 in all). Extra users are added from the website:
+  // the app sells nothing.
+  const TEAM_MEMBERS_INCLUDED = 4;
 
   const handleLogoUpload = async () => {
     const result = await DocumentPicker.getDocumentAsync({ type: ['image/png', 'image/jpeg', 'image/webp'], copyToCacheDirectory: true });
@@ -378,14 +379,7 @@ export default function ProfileScreen() {
       sendInvite();
       return;
     }
-    Alert.alert(
-      'Membro extra',
-      `Il piano include ${TEAM_MEMBERS_INCLUDED} membri. Ogni membro in più costa €${EXTRA_MEMBER_PRICE} al mese.`,
-      [
-        { text: 'Annulla', style: 'cancel' },
-        { text: 'Invita', onPress: sendInvite },
-      ]
-    );
+    Alert.alert('Utenti inclusi esauriti', `Il piano Team include ${TEAM_MEMBERS_INCLUDED + 1} utenti, tu compreso, e sono già tutti in uso.`);
   };
 
   // Punto 41: Remove team member
@@ -628,18 +622,11 @@ export default function ProfileScreen() {
 
       {profile.team_plan === true && <>
       <TouchableOpacity onPress={() => setShowTeamSection(!showTeamSection)} style={styles.sectionHeader}>
-        <Text style={{ fontWeight: '700', fontSize: 16, color: colors.text }}>👥 Team ({teamMembers.length}/{TEAM_MEMBERS_INCLUDED} inclusi{teamMembers.length > TEAM_MEMBERS_INCLUDED ? ` + ${teamMembers.length - TEAM_MEMBERS_INCLUDED} extra` : ''})</Text>
+        <Text style={{ fontWeight: '700', fontSize: 16, color: colors.text }}>👥 Team ({teamMembers.length}/{TEAM_MEMBERS_INCLUDED} inclusi oltre a te{teamMembers.length > TEAM_MEMBERS_INCLUDED ? ` + ${teamMembers.length - TEAM_MEMBERS_INCLUDED} extra` : ''})</Text>
         <Text style={{ color: colors.textSecondary }}>{showTeamSection ? '▲' : '▼'}</Text>
       </TouchableOpacity>
       {showTeamSection && (
         <View style={[styles.sectionBox, { marginTop: 0, borderTopLeftRadius: 0, borderTopRightRadius: 0 }]}>
-          {teamMembers.length > TEAM_MEMBERS_INCLUDED && (
-            <View style={{ backgroundColor: '#fef3c7', padding: 10, borderRadius: 8, marginBottom: 12 }}>
-              <Text style={{ color: '#92400e', fontSize: 13, fontWeight: '600' }}>
-                💰 {teamMembers.length - TEAM_MEMBERS_INCLUDED} {teamMembers.length - TEAM_MEMBERS_INCLUDED === 1 ? 'membro extra' : 'membri extra'} — €{((teamMembers.length - TEAM_MEMBERS_INCLUDED) * EXTRA_MEMBER_PRICE).toFixed(2)}/mese
-              </Text>
-            </View>
-          )}
           {teamMembers.map(m => (
             <View key={m.id} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }}>
               <View>

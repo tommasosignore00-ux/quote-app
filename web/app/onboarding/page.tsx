@@ -4,12 +4,10 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
-import { loadStripe } from '@stripe/stripe-js';
 import toast from 'react-hot-toast';
 import { setLanguage } from '@/lib/language';
 import { DEFAULT_COUNTRY_CODE, DEFAULT_LANGUAGE } from '@/lib/constants';
-
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_KEY!);
+import { useFounderSlots } from '@/lib/useFounderSlots';
 
 const TUTORIAL_STEPS = [
   {
@@ -38,6 +36,7 @@ type LegalDocumentType = (typeof LEGAL_DOCUMENT_TYPES)[number];
 export default function OnboardingPage() {
   const { t } = useTranslation();
   const router = useRouter();
+  const founderSlots = useFounderSlots();
   const [mainStep, setMainStep] = useState(1); // 1: Welcome, 2: Tutorial, 3: Legal Consent, 4: Company Info, 5: Plan, 6: Done
   const [tutorialStep, setTutorialStep] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -131,10 +130,7 @@ export default function OnboardingPage() {
         return;
       }
 
-      const stripe = await stripePromise;
-      if (stripe) {
-        await stripe.redirectToCheckout({ sessionId: data.sessionId });
-      }
+      if (data.url) window.location.href = data.url;
     } catch (err: any) {
       console.error('Checkout error:', err);
       toast.error('Si è verificato un errore');
@@ -478,7 +474,7 @@ export default function OnboardingPage() {
               <h3 className="text-xl font-bold text-white mb-2">Mensile</h3>
               <p className="text-4xl font-bold text-orange-300 mb-2">€29,99</p>
               <p className="text-slate-300 text-sm mb-6">
-                /mese, disdici quando vuoi + 7 giorni di prova
+                /mese, disdici quando vuoi. 14 giorni di prova
               </p>
               <button
                 onClick={() => handleCheckout('price_monthly')}
@@ -486,20 +482,20 @@ export default function OnboardingPage() {
                 className="w-full bg-primary hover:bg-primary-dark disabled:bg-gray-600 text-white font-semibold py-2 rounded-lg transition"
               >
                 {loading && selectedPlan === 'price_monthly'
-                  ? 'Processing...'
-                  : 'Choose Monthly'}
+                  ? 'Apertura pagamento…'
+                  : 'Scegli mensile'}
               </button>
             </div>
 
             {/* Yearly */}
             <div className="bg-gradient-to-br from-blue-600 to-blue-700 border border-orange-400 rounded-lg p-6 relative">
               <div className="absolute top-0 right-0 bg-green-500 text-white px-3 py-1 rounded-bl text-xs font-bold">
-                SAVE 17%
+                Risparmi 2 mesi
               </div>
               <h3 className="text-xl font-bold text-white mb-2">Annuale</h3>
               <p className="text-4xl font-bold text-white mb-2">€299,99</p>
               <p className="text-blue-100 text-sm mb-6">
-                /anno (€25/mese) + 7 giorni di prova
+                /anno (€25/mese). 14 giorni di prova
               </p>
               <button
                 onClick={() => handleCheckout('price_yearly')}
@@ -507,8 +503,8 @@ export default function OnboardingPage() {
                 className="w-full bg-white hover:bg-slate-100 text-blue-600 font-semibold py-2 rounded-lg transition"
               >
                 {loading && selectedPlan === 'price_yearly'
-                  ? 'Processing...'
-                  : 'Choose Yearly'}
+                  ? 'Apertura pagamento…'
+                  : 'Scegli annuale'}
               </button>
             </div>
           </div>
@@ -518,6 +514,14 @@ export default function OnboardingPage() {
               <strong className="text-white">Cosa comprende:</strong> preventivi, clienti,
               listini e dettatura in italiano.
             </p>
+            {founderSlots !== null && founderSlots > 0 && (
+              <p className="mt-2 text-sm text-slate-300">
+                <strong className="text-white">Primi 50 clienti:</strong> €19,99 al mese o
+                €199,99 all&apos;anno finché resti abbonato. In quel caso si paga subito,
+                senza prova, con rimborso del primo pagamento entro 30 giorni. Restano{' '}
+                {founderSlots} posti.
+              </p>
+            )}
           </div>
 
           <div className="flex gap-4">
@@ -531,7 +535,7 @@ export default function OnboardingPage() {
               onClick={handleSkipToTrial}
               className="flex-1 bg-slate-600 hover:bg-slate-700 text-white font-semibold py-3 rounded-lg transition"
             >
-              Skip (Start Free Trial)
+              Decido più tardi
             </button>
           </div>
         </div>

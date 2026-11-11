@@ -1,33 +1,49 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
+import { TEAM_INCLUDED_USERS } from '../../../../lib/checkout';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const supabase = supabaseAdmin;
 
-const TEAM_INCLUDED_MEMBERS = 5;
-
 type Plan = 'monthly' | 'yearly' | 'team';
 
-/** Reads the plan from the price IDs configured on the server; metered items are skipped. */
+const has = (prices: string[], id: string | undefined) =>
+  Boolean(id && prices.includes(id));
+
+/** Reads the plan from the price IDs configured on the server; the seat item is skipped. */
 function planFromSubscription(subscription: Stripe.Subscription): Plan | null {
   const prices = subscription.items.data.map((item) => item.price.id);
-  if (process.env.STRIPE_PRICE_TEAM && prices.includes(process.env.STRIPE_PRICE_TEAM)) {
-    return 'team';
-  }
+  if (has(prices, process.env.STRIPE_PRICE_TEAM)) return 'team';
   if (
-    process.env.STRIPE_PRICE_YEARLY &&
-    prices.includes(process.env.STRIPE_PRICE_YEARLY)
+    has(prices, process.env.STRIPE_PRICE_YEARLY) ||
+    has(prices, process.env.STRIPE_PRICE_FOUNDER_YEARLY)
   ) {
     return 'yearly';
   }
   if (
-    process.env.STRIPE_PRICE_MONTHLY &&
-    prices.includes(process.env.STRIPE_PRICE_MONTHLY)
+    has(prices, process.env.STRIPE_PRICE_MONTHLY) ||
+    has(prices, process.env.STRIPE_PRICE_FOUNDER_MONTHLY)
   ) {
     return 'monthly';
   }
   return null;
+}
+
+/** Founder price in use, or null. */
+function founderPrice(subscription: Stripe.Subscription): number | null {
+  const prices = subscription.items.data.map((item) => item.price.id);
+  if (has(prices, process.env.STRIPE_PRICE_FOUNDER_MONTHLY)) return 19.99;
+  if (has(prices, process.env.STRIPE_PRICE_FOUNDER_YEARLY)) return 199.99;
+  return null;
+}
+
+/** Team users paid for: the included ones plus the extra seats on the subscription. */
+function teamUsers(subscription: Stripe.Subscription): number {
+  const seat = subscription.items.data.find(
+    (item) => item.price.id === process.env.STRIPE_PRICE_TEAM_SEAT
+  );
+  return TEAM_INCLUDED_USERS + (seat?.quantity ?? 0);
 }
 
 function idOf(value: string | { id: string } | null | undefined): string | null {
@@ -99,7 +115,14 @@ async function applySubscription(eventSubscription: Stripe.Subscription) {
         ? {
             subscription_plan: plan,
             team_plan: plan === 'team',
-            max_team_members: plan === 'team' ? TEAM_INCLUDED_MEMBERS : 1,
+            max_team_members: plan === 'team' ? teamUsers(subscription) : 1,
+          }
+        : {}),
+      // A founder is someone whose founder subscription was paid, never a mere sign-up.
+      ...(founderPrice(subscription) !== null && subscription.status === 'active'
+        ? {
+            is_founding_member: true,
+            founding_member_locked_price: founderPrice(subscription),
           }
         : {}),
       ...(finished ? { team_plan: false } : {}),

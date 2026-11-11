@@ -98,7 +98,7 @@ npm run web
 - **Auth**: Registrazione con email + password (Supabase Auth usa bcrypt internamente)
 - **Modulo legale dinamico**: Privacy, termini, sicurezza (GDPR, CCPA) in base a nazione, con timestamp e versione
 - **Onboarding**: Guida interattiva (pulsante vocale, listini, primo preventivo)
-- **Abbonamento Stripe**: 29€/mese, 290€/anno, 7 giorni prova, RLS per accesso
+- **Abbonamento Stripe** (solo dal sito, mai dall'app): €29,99/mese, €299,99/anno, Team €79,99/mese con 5 utenti e €9,99 per utente in più fino a 10; 14 giorni di prova; primi 50 clienti €19,99/mese o €199,99/anno senza prova. Logica in `web/lib/checkout.ts`
 - **Profilo aziendale**: Form intelligente (P.IVA/EIN, IBAN, valute, aliquote) per paese
 - **Pulsante vocale**: Registrazione → Whisper → GPT-4 per creare clienti/lavori/voci costo
 - **Ricerca semantica**: pgvector su listini, fallback menu se ambiguità

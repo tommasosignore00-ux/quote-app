@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useFounderSlots } from '@/lib/useFounderSlots';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
@@ -8,6 +9,7 @@ import toast from 'react-hot-toast';
 export default function SubscriptionPage() {
   const { t } = useTranslation();
   const [user, setUser] = useState<any>(null);
+  const founderSlots = useFounderSlots();
   const [subscription, setSubscription] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
@@ -40,7 +42,7 @@ export default function SubscriptionPage() {
     : null;
   const skipSub = process.env.NEXT_PUBLIC_SKIP_SUBSCRIPTION === 'true';
   const isActive = status === 'active';
-  const isTeam = status === 'team' || plan === 'team';
+  const isTeam = plan === 'team';
   const isTrial =
     status === 'trialing' ||
     (!isActive && !isTeam && trialEndsAt && trialEndsAt > new Date());
@@ -151,6 +153,19 @@ export default function SubscriptionPage() {
             ? 'Confronta i piani o cambia abbonamento.'
             : t('subscription.chooseYourPlan')}
         </p>
+        {!isSubscribed && (
+          <p className="text-sm text-slate-600 mb-4">
+            Il primo abbonamento comprende 14 giorni di prova. Serve la carta: se non
+            disdici prima della fine della prova, parte il piano scelto.
+          </p>
+        )}
+        {founderSlots !== null && founderSlots > 0 && (
+          <p className="mb-4 rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-900">
+            <strong>Primi 50 clienti:</strong> €19,99 al mese o €199,99 all&apos;anno,
+            finché resti abbonato senza interruzioni. Si paga subito, senza prova, con
+            rimborso del primo pagamento entro 30 giorni. Restano {founderSlots} posti.
+          </p>
+        )}
 
         <div className="grid md:grid-cols-3 gap-6">
           {/* Monthly */}
@@ -166,14 +181,13 @@ export default function SubscriptionPage() {
               {t('subscription.monthly')}
             </h3>
             <p className="text-3xl font-bold text-slate-900 mb-1">
-              €29.99
+              €29,99
               <span className="text-base font-normal text-slate-500">
                 {t('subscription.perMonth')}
               </span>
             </p>
             <ul className="mt-4 space-y-2 text-sm text-slate-600">
               <li>✔ {t('subscription.unlimitedQuotes')}</li>
-              <li>✔ {t('subscription.noWatermark')}</li>
               <li>✔ {t('subscription.digitalSignature')}</li>
               <li>✔ {t('subscription.multiExport')}</li>
               <li>✔ {t('subscription.aiFeatures')}</li>
@@ -202,7 +216,7 @@ export default function SubscriptionPage() {
               {t('subscription.yearly')}
             </h3>
             <p className="text-3xl font-bold text-slate-900 mb-1">
-              €299.99
+              €299,99
               <span className="text-base font-normal text-slate-500">
                 {t('subscription.perYear')}
               </span>
@@ -243,7 +257,7 @@ export default function SubscriptionPage() {
               {t('subscription.team')}
             </h3>
             <p className="text-3xl font-bold text-slate-900 mb-1">
-              €79.99
+              €79,99
               <span className="text-base font-normal text-slate-500">
                 {t('subscription.perMonth')}
               </span>

@@ -28,8 +28,9 @@ type CommandMapping = Record<string, any>;
 type TeamMember = Record<string, any>;
 type WebhookEndpoint = Record<string, any>;
 
-const TEAM_MEMBERS_INCLUDED = 5;
-const EXTRA_MEMBER_PRICE = 7.99;
+// Users included in Team besides the owner (5 in all), and the price of each one more.
+const TEAM_MEMBERS_INCLUDED = 4;
+const EXTRA_MEMBER_PRICE = 9.99;
 const WEBHOOK_EVENT_OPTIONS = [
   'quote.created',
   'quote.sent',

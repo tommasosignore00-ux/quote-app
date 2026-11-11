@@ -5,7 +5,7 @@ import { supabaseAdmin } from './supabase-server';
 const DEFAULT_DAILY_LIMITS = {
   listino_import: 40,
   listino_ai_organize: 40,
-  voice: 400,
+  voice: 150,
   semantic: 2000,
   template: 20,
 } as const;
@@ -19,6 +19,17 @@ const FEATURE_LABELS: Record<AiFeature, string> = {
   semantic: 'ricerche intelligenti',
   template: 'conversioni di template',
 };
+
+/** Monthly caps, only where the daily one alone leaves too much room. */
+const DEFAULT_MONTHLY_LIMITS: Partial<Record<AiFeature, number>> = {
+  voice: 2000,
+};
+
+function monthlyLimit(feature: AiFeature): number | null {
+  const fromEnv = Number(process.env[`AI_MONTHLY_LIMIT_${feature.toUpperCase()}`]);
+  if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv;
+  return DEFAULT_MONTHLY_LIMITS[feature] ?? null;
+}
 
 function dailyLimit(feature: AiFeature): number {
   // e.g. AI_DAILY_LIMIT_LISTINO_IMPORT=100
@@ -56,6 +67,7 @@ export async function enforceAiQuota(
       p_feature: feature,
       p_units: units,
       p_daily_limit: limit,
+      p_monthly_limit: monthlyLimit(feature),
     });
     if (error) {
       console.error('AI quota check unavailable:', error.code);
@@ -63,10 +75,13 @@ export async function enforceAiQuota(
     }
     const row = Array.isArray(data) ? data[0] : data;
     if (row && row.allowed === false) {
+      const monthly = row.limit_reached === 'monthly';
       return NextResponse.json(
         {
-          error: `Hai raggiunto il limite giornaliero di ${limit} ${FEATURE_LABELS[feature]}. Riprova domani.`,
-          code: 'AI_DAILY_LIMIT',
+          error: monthly
+            ? `Hai raggiunto il limite mensile di ${monthlyLimit(feature)} ${FEATURE_LABELS[feature]}. Riprende il primo del mese prossimo.`
+            : `Hai raggiunto il limite giornaliero di ${limit} ${FEATURE_LABELS[feature]}. Riprova domani.`,
+          code: monthly ? 'AI_MONTHLY_LIMIT' : 'AI_DAILY_LIMIT',
         },
         { status: 429 }
       );

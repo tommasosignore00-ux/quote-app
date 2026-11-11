@@ -147,7 +147,9 @@ async function loadCatalogVocabulary(
 
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024
 const MAX_CONTEXT_CHARS = 50000
-const DAILY_VOICE_LIMIT = Number(Deno.env.get('AI_DAILY_LIMIT_VOICE')) || 400
+// About €15 a month at most per user in transcription and agent costs (estimate of 11/11/2026).
+const DAILY_VOICE_LIMIT = Number(Deno.env.get('AI_DAILY_LIMIT_VOICE')) || 150
+const MONTHLY_VOICE_LIMIT = Number(Deno.env.get('AI_MONTHLY_LIMIT_VOICE')) || 2000
 const OPENAI_TIMEOUT_MS = 30000
 const TRANSCRIPTION_PREFIX = 'Aggiungi 6 metri di trave IPE 120, 10 pezzi di HEA 200. Articoli: '
 
@@ -244,13 +246,20 @@ serve(async (req) => {
       p_feature: 'voice',
       p_units: 1,
       p_daily_limit: DAILY_VOICE_LIMIT,
+      p_monthly_limit: MONTHLY_VOICE_LIMIT,
     })
     if (quotaError) {
       return new Response(JSON.stringify({ error: 'Servizio temporaneamente non disponibile. Riprova tra poco.' }), { status: 503, headers: corsHeaders })
     }
     const quotaRow = Array.isArray(quota) ? quota[0] : quota
     if (quotaRow && quotaRow.allowed === false) {
-      return new Response(JSON.stringify({ error: 'Hai raggiunto il limite giornaliero di richieste vocali. Riprova domani.', code: 'AI_DAILY_LIMIT' }), { status: 429, headers: corsHeaders })
+      const monthly = quotaRow.limit_reached === 'monthly'
+      return new Response(JSON.stringify({
+        error: monthly
+          ? 'Hai raggiunto il limite mensile di dettature. Riprende il primo del mese prossimo.'
+          : 'Hai raggiunto il limite giornaliero di dettature. Riprova domani.',
+        code: monthly ? 'AI_MONTHLY_LIMIT' : 'AI_DAILY_LIMIT',
+      }), { status: 429, headers: corsHeaders })
     }
 
     const catalogVocabulary = await loadCatalogVocabulary(supabase, userId)

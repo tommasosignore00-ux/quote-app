@@ -2,8 +2,11 @@ import { NextResponse } from 'next/server';
 import { getRequestUser, unauthorizedResponse } from '../../../lib/apiAuth';
 import { supabaseAdmin } from '../../../lib/supabase-server';
 import { rateLimit } from '../../../lib/rate-limit';
+import { TEAM_MAX_USERS } from '../../../lib/checkout';
+import { syncTeamSeats } from '../../../lib/teamSeats';
 
-const MAX_TEAM_MEMBERS = 25;
+// Members and pending invitations, the owner excluded.
+const MAX_TEAM_MEMBERS = TEAM_MAX_USERS - 1;
 
 const ROLE_PERMISSIONS: Record<string, Record<string, boolean>> = {
   admin: {
@@ -84,8 +87,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Email non valida' }, { status: 400 });
   }
   const permissions = typeof role === 'string' ? ROLE_PERMISSIONS[role] : undefined;
-  if (!permissions)
-    {return NextResponse.json({ error: 'Ruolo non valido' }, { status: 400 });}
+  if (!permissions) {
+    return NextResponse.json({ error: 'Ruolo non valido' }, { status: 400 });
+  }
 
   const [{ data: entitled }, { data: owner }, { count }] = await Promise.all([
     supabaseAdmin.rpc('profile_is_entitled', { p_profile_id: user.id }),
@@ -104,7 +108,7 @@ export async function POST(req: Request) {
   }
   if ((count ?? MAX_TEAM_MEMBERS) >= MAX_TEAM_MEMBERS) {
     return NextResponse.json(
-      { error: `Puoi avere al massimo ${MAX_TEAM_MEMBERS} membri.` },
+      { error: `Il Team arriva al massimo a ${TEAM_MAX_USERS} utenti, tu compreso.` },
       { status: 409 }
     );
   }
@@ -151,7 +155,9 @@ export async function DELETE(req: Request) {
     .delete()
     .eq('id', id)
     .eq('team_owner_id', user.id);
-  if (error)
-    {return NextResponse.json({ error: 'Operazione non riuscita' }, { status: 500 });}
+  if (error) {
+    return NextResponse.json({ error: 'Operazione non riuscita' }, { status: 500 });
+  }
+  await syncTeamSeats(user.id);
   return NextResponse.json({ ok: true });
 }

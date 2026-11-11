@@ -42,7 +42,7 @@ Per erogare il servizio possiamo utilizzare fornitori terzi, tra cui:
 
 - **Supabase** per database, autenticazione e servizi backend;
 - **Vercel** per hosting e distribuzione dell'app web;
-- **Stripe** per pagamenti, abbonamenti e gestione fiscale collegata al checkout;
+- **Stripe** per pagamenti e abbonamenti;
 - **Resend** per email transazionali, se e quando attivato;
 - **PostHog** o strumenti analoghi per analytics, se e quando attivati.
 
@@ -132,6 +132,8 @@ In tali casi:
 - i rinnovi possono essere automatici se previsti dal piano sottoscritto;
 - la cancellazione dell'abbonamento avviene tramite gli strumenti messi a disposizione nell'area account o nel portale di pagamento;
 - eventuali rimborsi sono gestiti secondo la legge applicabile e l'eventuale policy pubblicata al momento della vendita.
+
+**Offerta clienti fondatori.** I primi 50 clienti che attivano e pagano un abbonamento mensile o annuale possono ricevere il prezzo riservato ai fondatori (€19,99 al mese o €199,99 all'anno), che resta invariato finche' l'abbonamento resta attivo senza interruzioni. L'offerta non comprende il periodo di prova. Entro 30 giorni dal primo pagamento il cliente fondatore puo' chiedere, una sola volta per azienda, il rimborso del primo pagamento scrivendo all'assistenza; con il rimborso l'abbonamento termina.
 
 Fino alla pubblicazione delle condizioni economiche definitive, la presente versione ha valore prevalentemente informativo per test e pre-lancio.
 
