@@ -21,6 +21,7 @@ export async function POST(req: Request) {
       userId: claimedUserId,
       companyName,
       priceId: requestedPlan,
+      offer,
     } = validation.data;
     if (!isOwnProfile(user, claimedUserId)) return forbiddenResponse();
 
@@ -37,6 +38,7 @@ export async function POST(req: Request) {
       email: user.email,
       plan: plan as CheckoutPlan,
       companyName,
+      founderRequested: offer === 'founder',
     });
     if (!result.ok) {
       return NextResponse.json(

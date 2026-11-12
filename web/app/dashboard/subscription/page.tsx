@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useFounderSlots } from '@/lib/useFounderSlots';
+import { founderSlotsText, useFounderSlots } from '@/lib/useFounderSlots';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
@@ -49,7 +49,10 @@ export default function SubscriptionPage() {
   const isSubscribed = isActive || isTeam || isTrial || skipSub;
   const currentPlan = isTeam ? 'team' : subscription?.subscription_plan || '';
 
-  const handleSubscribe = async (plan: 'monthly' | 'yearly' | 'team') => {
+  const handleSubscribe = async (
+    plan: 'monthly' | 'yearly' | 'team',
+    founder = false
+  ) => {
     if (!user) {
       toast.error(t('messages.notAuthenticated'));
       return;
@@ -60,7 +63,12 @@ export default function SubscriptionPage() {
       const res = await fetch('/api/stripe/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, email: user.email, plan }),
+        body: JSON.stringify({
+          userId: user.id,
+          email: user.email,
+          plan,
+          offer: founder ? 'founder' : 'trial',
+        }),
       });
       const payload = await res.json();
       if (!res.ok) {
@@ -159,12 +167,31 @@ export default function SubscriptionPage() {
             disdici prima della fine della prova, parte il piano scelto.
           </p>
         )}
-        {founderSlots !== null && founderSlots > 0 && (
-          <p className="mb-4 rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-900">
-            <strong>Primi 50 clienti:</strong> €19,99 al mese o €199,99 all&apos;anno,
-            finché resti abbonato senza interruzioni. Si paga subito, senza prova, con
-            rimborso del primo pagamento entro 30 giorni. Restano {founderSlots} posti.
-          </p>
+        {!isSubscribed && founderSlots !== null && founderSlots > 0 && (
+          <div className="mb-4 rounded-xl border border-orange-200 bg-orange-50 p-4 text-base text-orange-900">
+            <p>
+              <strong>Oppure il prezzo fondatori</strong>, per i primi 50 clienti: €19,99
+              al mese o €199,99 all&apos;anno, finché resti abbonato senza interruzioni.
+              Si paga subito, senza prova, con rimborso del primo pagamento entro 30
+              giorni. {founderSlotsText(founderSlots)}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-3">
+              <button
+                onClick={() => handleSubscribe('monthly', true)}
+                disabled={loading}
+                className="min-h-[48px] rounded-lg bg-primary px-5 font-semibold text-white disabled:opacity-50"
+              >
+                Fondatori mensile €19,99
+              </button>
+              <button
+                onClick={() => handleSubscribe('yearly', true)}
+                disabled={loading}
+                className="min-h-[48px] rounded-lg border border-orange-300 bg-white px-5 font-semibold text-orange-900 disabled:opacity-50"
+              >
+                Fondatori annuale €199,99
+              </button>
+            </div>
+          </div>
         )}
 
         <div className="grid md:grid-cols-3 gap-6">

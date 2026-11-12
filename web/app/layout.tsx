@@ -9,6 +9,27 @@ import { setLanguage } from '@/lib/language';
 import { DEFAULT_LANGUAGE } from '@/lib/constants';
 import { PostHogProvider } from '@/lib/analytics';
 import WebVitals from '@/components/WebVitals';
+import { Archivo, Source_Sans_3, Caveat } from 'next/font/google';
+
+// Landing fonts, exposed as CSS variables (used through the mv-* Tailwind font families).
+const displayFont = Archivo({
+  subsets: ['latin'],
+  axes: ['wdth'],
+  display: 'swap',
+  variable: '--font-mv-display',
+});
+const textFont = Source_Sans_3({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-mv-text',
+});
+// Only the handwritten measurement sheet uses it: not preloaded.
+const handFont = Caveat({
+  subsets: ['latin'],
+  display: 'swap',
+  preload: false,
+  variable: '--font-mv-hand',
+});
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -17,13 +38,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   }, []);
 
   return (
-    <html lang="it" suppressHydrationWarning>
+    <html
+      lang="it"
+      suppressHydrationWarning
+      className={`${displayFont.variable} ${textFont.variable} ${handFont.variable}`}
+    >
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta
           name="description"
-          content="Detti le voci in cantiere e il preventivo esce con i tuoi prezzi, il tuo formato e il nome della tua azienda."
+          content="Detti materiali e lavorazioni dal telefono. Il preventivo esce con i tuoi prezzi e il tuo modello Word, a nome della tua azienda. 14 giorni di prova."
         />
         <meta
           name="keywords"
@@ -36,11 +61,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta property="og:type" content="website" />
         <meta
           property="og:title"
-          content="Mastrovoce - Il tuo preventivo, dettato in cantiere"
+          content="Detti le voci in cantiere. Il preventivo esce con i tuoi prezzi."
         />
         <meta
           property="og:description"
-          content="Detti le voci in cantiere e il preventivo esce con i tuoi prezzi, il tuo formato e il nome della tua azienda."
+          content="Per fabbri, idraulici, elettricisti e piccole imprese edili. Parli, controlli le righe, mandi il preventivo a nome tuo."
         />
         <meta property="og:site_name" content="Mastrovoce" />
         <meta property="og:locale" content="it_IT" />
@@ -49,11 +74,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="twitter:card" content="summary_large_image" />
         <meta
           name="twitter:title"
-          content="Mastrovoce - Il tuo preventivo, dettato in cantiere"
+          content="Detti le voci in cantiere. Il preventivo esce con i tuoi prezzi."
         />
         <meta
           name="twitter:description"
-          content="Detti le voci in cantiere e il preventivo esce con i tuoi prezzi, il tuo formato e il nome della tua azienda."
+          content="Per fabbri, idraulici, elettricisti e piccole imprese edili. Parli, controlli le righe, mandi il preventivo a nome tuo."
         />
 
         <meta
@@ -69,7 +94,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/manifest.json" />
 
-        <title>Mastrovoce - Il tuo preventivo, dettato in cantiere</title>
+        <title>Mastrovoce · Il preventivo dettato in cantiere, con i tuoi prezzi</title>
       </head>
       <body suppressHydrationWarning>
         <a href="#main-content" className="skip-to-content">

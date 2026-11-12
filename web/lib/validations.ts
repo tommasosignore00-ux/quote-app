@@ -53,6 +53,7 @@ export const checkoutSessionSchema = z.object({
   email: z.string().email().optional(),
   companyName: z.string().optional(),
   priceId: z.string().min(1, 'priceId è richiesto'),
+  offer: z.enum(['founder', 'trial']).optional(),
 });
 
 // ── Voice Schemas ──────────────────────────────────────────

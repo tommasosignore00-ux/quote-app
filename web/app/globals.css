@@ -4,7 +4,7 @@
 
 :root {
   --primary: #c2410c;
-  --primary-dark: #b91c1c;
+  --primary-dark: #9a3412;
 }
 
 body {
@@ -65,4 +65,48 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ---------- Landing (Mastrovoce) ---------- */
+
+/* Logged-in visitors are sent to /dashboard: hide the landing until the session check ends. */
+html[data-mv-session] .mv-landing {
+  visibility: hidden;
+}
+
+.mv-landing {
+  font-stretch: 100%;
+}
+.mv-display {
+  font-family: var(--font-mv-display), 'Arial Narrow', Arial, sans-serif;
+  font-stretch: 85%;
+}
+
+/* Brief highlight of the rows dictated at step 3, when the quote scrolls into view. */
+@keyframes mv-row-flash {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  30%,
+  70% {
+    background-color: #fde3d3;
+  }
+}
+.mv-row-flash {
+  animation: mv-row-flash 2.4s ease-in-out 1;
+}
+
+/* Slow pulse of the orange microphone in the example screen. */
+@keyframes mv-mic-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(194, 65, 12, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 18px rgba(194, 65, 12, 0);
+  }
+}
+.mv-mic-pulse {
+  animation: mv-mic-pulse 2.6s ease-in-out infinite;
 }

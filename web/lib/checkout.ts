@@ -49,8 +49,10 @@ export async function createSubscriptionCheckout(options: {
   email: string;
   plan: CheckoutPlan;
   companyName?: string;
+  /** The customer chose the founder price instead of the free trial. */
+  founderRequested?: boolean;
 }): Promise<CheckoutResult> {
-  const { userId, email, plan, companyName } = options;
+  const { userId, email, plan, companyName, founderRequested } = options;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
   if (!process.env.STRIPE_SECRET_KEY || !appUrl) {
     return { ok: false, status: 500, error: 'Pagamenti non configurati' };
@@ -85,11 +87,12 @@ export async function createSubscriptionCheckout(options: {
     profile?.subscription_status ||
     profile?.trial_ends_at
   );
-  // Founders: Pro only, first subscription only (or a founder who comes back), while places last.
+  // Founders: Pro only, chosen by the customer on a first subscription while places last.
+  // A founder who comes back keeps the price.
   const founder =
     plan !== 'team' &&
     (profile?.is_founding_member === true ||
-      (firstSubscription && (await founderSlotsLeft()) > 0));
+      (founderRequested === true && firstSubscription && (await founderSlotsLeft()) > 0));
 
   const priceId = planPrice(plan, founder);
   if (!priceId) return { ok: false, status: 500, error: 'Piano non configurato' };

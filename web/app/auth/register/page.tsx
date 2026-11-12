@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
@@ -9,6 +9,7 @@ import { analytics } from '@/lib/analytics';
 import Link from 'next/link';
 import LegalModule from '@/components/LegalModule';
 import { DEFAULT_COUNTRY_CODE, DEFAULT_LANGUAGE } from '@/lib/constants';
+import { rememberOfferFromUrl } from '@/lib/useFounderSlots';
 
 export default function RegisterPage() {
   const { t } = useTranslation();
@@ -24,6 +25,11 @@ export default function RegisterPage() {
     []
   );
   const [loading, setLoading] = useState(false);
+
+  // The landing page's founder button arrives here with ?offer=founder.
+  useEffect(() => {
+    rememberOfferFromUrl();
+  }, []);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();

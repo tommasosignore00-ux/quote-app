@@ -13,9 +13,14 @@ export async function POST(req: Request) {
   try {
     const user = await getRequestUser(req);
     if (!user) return unauthorizedResponse();
-    const { userId: claimedUserId, plan } = (await req.json().catch(() => ({}))) as {
+    const {
+      userId: claimedUserId,
+      plan,
+      offer,
+    } = (await req.json().catch(() => ({}))) as {
       userId?: string;
       plan?: string;
+      offer?: string;
     };
     if (!isOwnProfile(user, claimedUserId)) return forbiddenResponse();
     if (!user.email || !PLANS.includes(plan as CheckoutPlan)) {
@@ -26,6 +31,7 @@ export async function POST(req: Request) {
       userId: user.id,
       email: user.email,
       plan: plan as CheckoutPlan,
+      founderRequested: offer === 'founder',
     });
     if (!result.ok) {
       return NextResponse.json(

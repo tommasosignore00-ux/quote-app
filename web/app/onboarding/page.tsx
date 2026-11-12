@@ -7,7 +7,11 @@ import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 import { setLanguage } from '@/lib/language';
 import { DEFAULT_COUNTRY_CODE, DEFAULT_LANGUAGE } from '@/lib/constants';
-import { useFounderSlots } from '@/lib/useFounderSlots';
+import {
+  chosenFounderOffer,
+  founderSlotsText,
+  useFounderSlots,
+} from '@/lib/useFounderSlots';
 
 const TUTORIAL_STEPS = [
   {
@@ -42,9 +46,7 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
-  const [selectedPlan, setSelectedPlan] = useState<'price_monthly' | 'price_yearly'>(
-    'price_monthly'
-  );
+  const [selectedPlan, setSelectedPlan] = useState<string>('price_monthly');
   const [formData, setFormData] = useState({
     company_name: '',
     vat_number: '',
@@ -106,10 +108,13 @@ export default function OnboardingPage() {
     setMainStep(5);
   };
 
-  const handleCheckout = async (plan: 'price_monthly' | 'price_yearly') => {
+  const handleCheckout = async (
+    plan: 'price_monthly' | 'price_yearly',
+    founder = false
+  ) => {
     if (!user) return;
 
-    setSelectedPlan(plan);
+    setSelectedPlan(founder ? `${plan}_founder` : plan);
     setLoading(true);
     try {
       const res = await fetch('/api/stripe/create-checkout-session', {
@@ -120,6 +125,7 @@ export default function OnboardingPage() {
           email: user.email,
           companyName: formData.company_name,
           priceId: plan,
+          offer: founder ? 'founder' : 'trial',
         }),
       });
 
@@ -514,15 +520,40 @@ export default function OnboardingPage() {
               <strong className="text-white">Cosa comprende:</strong> preventivi, clienti,
               listini e dettatura in italiano.
             </p>
-            {founderSlots !== null && founderSlots > 0 && (
-              <p className="mt-2 text-sm text-slate-300">
-                <strong className="text-white">Primi 50 clienti:</strong> €19,99 al mese o
-                €199,99 all&apos;anno finché resti abbonato. In quel caso si paga subito,
-                senza prova, con rimborso del primo pagamento entro 30 giorni. Restano{' '}
-                {founderSlots} posti.
-              </p>
-            )}
           </div>
+
+          {founderSlots !== null && founderSlots > 0 && (
+            <div
+              className={`rounded-lg border p-4 mb-8 ${chosenFounderOffer() ? 'border-orange-400 bg-orange-500/10' : 'border-white/20 bg-white/10'}`}
+            >
+              <p className="text-base text-slate-200">
+                <strong className="text-white">Oppure il prezzo fondatori</strong>, per i
+                primi 50 clienti: €19,99 al mese o €199,99 all&apos;anno, finché resti
+                abbonato. Si paga subito, senza prova, con rimborso del primo pagamento
+                entro 30 giorni. {founderSlotsText(founderSlots)}
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <button
+                  onClick={() => handleCheckout('price_monthly', true)}
+                  disabled={loading}
+                  className="min-h-[48px] rounded-lg bg-primary px-4 font-semibold text-white transition hover:bg-primary-dark disabled:bg-gray-600"
+                >
+                  {loading && selectedPlan === 'price_monthly_founder'
+                    ? 'Apertura pagamento…'
+                    : 'Fondatori mensile €19,99'}
+                </button>
+                <button
+                  onClick={() => handleCheckout('price_yearly', true)}
+                  disabled={loading}
+                  className="min-h-[48px] rounded-lg bg-white px-4 font-semibold text-slate-900 transition hover:bg-slate-100 disabled:bg-gray-600"
+                >
+                  {loading && selectedPlan === 'price_yearly_founder'
+                    ? 'Apertura pagamento…'
+                    : 'Fondatori annuale €199,99'}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-4">
             <button
