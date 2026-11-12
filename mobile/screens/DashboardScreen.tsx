@@ -32,7 +32,10 @@ import { triggerHaptic } from '../lib/haptics';
 
 type Cliente = { id: string; name: string };
 type Lavoro = { id: string; title: string; cliente_id: string; status?: string | null; clienti?: any };
-type Costo = { id: string; description: string; quantity: number; unit_price: number; tax_rate: number; unit?: string | null };
+/** Common Italian VAT rates for a single line. */
+const LINE_VAT_PRESETS = ['22', '10', '5', '4', '0'];
+
+type Costo = { id: string; description: string; quantity: number; unit_price: number; tax_rate: number; unit?: string | null; vat_percent?: number | null };
 
 export default function DashboardScreen() {
   const { t, i18n } = useTranslation();
@@ -177,7 +180,7 @@ export default function DashboardScreen() {
     setLavori((l || []).filter((job: Lavoro) => job.status !== 'approved'));
 
     if (selectedLavoro) {
-      const { data: costiData, error: costiErr } = await supabase.from('preventivi_dettaglio').select('id, description, quantity, unit_price, tax_rate, unit').eq('lavoro_id', selectedLavoro.id);
+      const { data: costiData, error: costiErr } = await supabase.from('preventivi_dettaglio').select('id, description, quantity, unit_price, tax_rate, unit, vat_percent').eq('lavoro_id', selectedLavoro.id);
       if (costiErr) console.warn('preventivi_dettaglio error', costiErr);
       setCosti(costiData || []);
     }
@@ -938,6 +941,9 @@ export default function DashboardScreen() {
   const [editMarkup, setEditMarkup] = useState('');
   const [editFinal, setEditFinal] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
+  /** '' = the quote's VAT; otherwise this line's own rate. */
+  const [editVat, setEditVat] = useState('');
+  const [editVatCustom, setEditVatCustom] = useState('');
   const num = (value: string) => {
     const n = Number(String(value).replace(',', '.'));
     return Number.isFinite(n) ? n : 0;
@@ -951,6 +957,14 @@ export default function DashboardScreen() {
     setEditCost(r2(Number(item.unit_price)));
     setEditMarkup(r2(Number(item.tax_rate) || 0));
     setEditFinal(r2(Number(item.unit_price) * (1 + (Number(item.tax_rate) || 0) / 100)));
+    const ownVat = item.vat_percent === null || item.vat_percent === undefined ? '' : String(Number(item.vat_percent));
+    if (!ownVat || LINE_VAT_PRESETS.includes(ownVat)) {
+      setEditVat(ownVat);
+      setEditVatCustom('');
+    } else {
+      setEditVat('custom');
+      setEditVatCustom(ownVat.replace('.', ','));
+    }
   };
   const changeEditCost = (value: string) => {
     setEditCost(value);
@@ -979,7 +993,13 @@ export default function DashboardScreen() {
       unit: editUnit.trim() || null,
       unit_price: purchase > 0 ? purchase : num(editFinal),
       tax_rate: purchase > 0 ? num(editMarkup) : 0,
+      vat_percent: editVat === '' ? null : editVat === 'custom' ? num(editVatCustom) : num(editVat),
     };
+    if (changes.vat_percent !== null && (changes.vat_percent < 0 || changes.vat_percent > 100)) {
+      setSavingEdit(false);
+      Alert.alert(t('messages.error'), "L'IVA deve essere tra 0 e 100");
+      return;
+    }
     const { error } = await supabase.from('preventivi_dettaglio').update(changes).eq('id', editCosto.id);
     setSavingEdit(false);
     if (error) {
@@ -1302,6 +1322,23 @@ export default function DashboardScreen() {
               </View>
               <Text style={[styles.editLabel, { color: colors.text }]}>Prezzo al cliente (€)</Text>
               <TextInput style={[styles.editInput, styles.editFinal, { backgroundColor: colors.inputBg, borderColor: colors.primary, color: colors.text }]} value={editFinal} onChangeText={changeEditFinal} keyboardType="decimal-pad" accessibilityLabel="Prezzo al cliente" />
+              <Text style={[styles.editLabel, { color: colors.text }]}>IVA di questa voce</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+                {[['', 'Del preventivo'], ...LINE_VAT_PRESETS.map((rate) => [rate, `${rate}%`]), ['custom', 'Altra']].map(([value, label]) => (
+                  <TouchableOpacity
+                    key={value || 'quote'}
+                    onPress={() => setEditVat(value)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: editVat === value }}
+                    style={[styles.vatChip, { borderColor: editVat === value ? colors.primary : colors.border, backgroundColor: editVat === value ? colors.primary : colors.inputBg }]}
+                  >
+                    <Text style={[styles.vatChipText, { color: editVat === value ? '#fff' : colors.text }]}>{label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {editVat === 'custom' ? (
+                <TextInput style={[styles.editInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} value={editVatCustom} onChangeText={setEditVatCustom} keyboardType="decimal-pad" placeholder="Aliquota in %" placeholderTextColor={colors.textTertiary} accessibilityLabel="Aliquota IVA della voce" />
+              ) : null}
               <Text style={[styles.editHint, { color: colors.textSecondary }]}>
                 Il cliente vede solo il prezzo al cliente. Totale riga: € {(num(editQty) * num(editFinal)).toFixed(2).replace('.', ',')}
               </Text>
@@ -1399,6 +1436,8 @@ const styles = StyleSheet.create({
   editInput: { borderWidth: 2, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, minHeight: 56, fontSize: 18, marginBottom: 14 },
   editFinal: { fontSize: 22, fontWeight: '700' },
   editHint: { fontSize: 16, marginBottom: 8 },
+  vatChip: { minHeight: 52, minWidth: 64, paddingHorizontal: 14, borderRadius: 12, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  vatChipText: { fontSize: 17, fontWeight: '700' },
   editButton: { flex: 1, minHeight: 64, borderRadius: 14, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   editButtonPrimary: { backgroundColor: '#c2410c', borderColor: '#c2410c' },
   editButtonText: { fontSize: 18, fontWeight: '700' },

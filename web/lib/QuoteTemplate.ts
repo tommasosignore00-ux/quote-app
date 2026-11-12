@@ -160,6 +160,8 @@ export type QuoteLineExtras = {
   code?: string | null;
   unit?: string | null;
   discount_percent?: number | null;
+  /** VAT rate of this line; null = the quote's rate. */
+  vat_percent?: number | null;
 };
 
 const CODE_SUFFIX_RE = /\s*\(cod\.\s*([^)]+)\)\s*$/i;
@@ -178,6 +180,7 @@ function inferUnit(description: string): string {
 export function quoteLineExtras(line: {
   description?: string | null;
   discount_percent?: unknown;
+  vat_percent?: unknown;
   unit?: string | null;
 }): QuoteLineExtras {
   const description = String(line.description || '');
@@ -186,9 +189,21 @@ export function quoteLineExtras(line: {
     // Unit saved on the line (from the price list or typed in); else read from the description.
     unit: String(line.unit || '').trim() || inferUnit(description) || null,
     discount_percent: Number(line.discount_percent) || 0,
+    vat_percent:
+      line.vat_percent === null ||
+      line.vat_percent === undefined ||
+      line.vat_percent === ''
+        ? null
+        : Number(line.vat_percent),
   };
 }
 
+/** VAT of one line: its own rate, else the quote's. */
+function lineVatPercent(item: { vat_percent?: number | null }, quoteVat: number): number {
+  return item.vat_percent === null || item.vat_percent === undefined
+    ? quoteVat
+    : Number(item.vat_percent) || 0;
+}
 function lineDiscountFactor(item: { discount_percent?: number | null }): number {
   return 1 - (Number(item.discount_percent) || 0) / 100;
 }
@@ -238,7 +253,7 @@ function renderItemRows(
             }),
             price: formatMoney(currency, price, cc),
             discount: discount ? `${discount.toLocaleString(quoteLocale(cc))}%` : '',
-            vat: `${vatPercent}%`,
+            vat: `${lineVatPercent(item, vatPercent)}%`,
             total: formatMoney(currency, quantity * price * lineDiscountFactor(item), cc),
           };
           return row.replace(
@@ -893,7 +908,12 @@ function processCustomTemplate(template: string, data: QuoteData): string {
   const totalLabel = TOTAL_LABEL[cc] || TOTAL_LABEL.default;
 
   const subtotal = data.items.reduce((sum, item) => sum + getRowSubtotal(item), 0);
-  const taxes = subtotal * (Number(data.vat_percent) / 100);
+  const taxes = data.items.reduce(
+    (sum, item) =>
+      sum +
+      getRowSubtotal(item) * (lineVatPercent(item, Number(data.vat_percent) || 0) / 100),
+    0
+  );
   const total = subtotal + taxes;
 
   const itemsTableHtml = `
@@ -1092,6 +1112,7 @@ export function generateQuoteHTML(rawData: QuoteData): string {
       unit: item.unit,
       unitPrice: getCustomerUnitPrice(item),
       discountPercent: item.discount_percent,
+      vatPercent: item.vat_percent,
     })),
     vatPercent: Number(data.vat_percent),
     taxLabel: TAX_LABELS[cc] || TAX_LABELS.default,

@@ -11,6 +11,8 @@ export type StandardQuoteLine = {
   /** Unit price the client pays, markup included, before the line discount. */
   unitPrice: number;
   discountPercent?: number | null;
+  /** VAT rate of this line; null/undefined = the quote's rate. */
+  vatPercent?: number | null;
 };
 
 export type StandardQuoteInput = {
@@ -64,7 +66,16 @@ export function renderStandardQuote(input: StandardQuoteInput): string {
   const qty = (value: number) =>
     (Number(value) || 0).toLocaleString(locale, { maximumFractionDigits: 2 });
 
+  const quoteVat = Number(input.vatPercent) || 0;
+  const lineVat = (line: StandardQuoteLine) =>
+    line.vatPercent === null || line.vatPercent === undefined
+      ? quoteVat
+      : Number(line.vatPercent) || 0;
+  // A VAT column only when the lines don't all share one rate.
+  const mixedVat = !input.reverseCharge && new Set(input.lines.map(lineVat)).size > 1;
+
   let imponibile = 0;
+  const vatBases = new Map<number, number>();
   const rows = input.lines
     .map((line) => {
       const discount = Number(line.discountPercent) || 0;
@@ -73,6 +84,8 @@ export function renderStandardQuote(input: StandardQuoteInput): string {
         (Number(line.unitPrice) || 0) *
         (1 - discount / 100);
       imponibile += amount;
+      const rate = lineVat(line);
+      vatBases.set(rate, (vatBases.get(rate) || 0) + amount);
       const unit = String(line.unit || '').trim();
       const lumpSum = /^a\s*corpo$/i.test(unit);
       const quantity = lumpSum
@@ -83,16 +96,25 @@ export function renderStandardQuote(input: StandardQuoteInput): string {
           <td class="desc">${line.description}${discount ? `<div class="note">sconto ${qty(discount)}%</div>` : ''}</td>
           <td class="num">${quantity}</td>
           <td class="num unit-col">${money(line.unitPrice)}</td>
+          ${mixedVat ? `<td class="num">${qty(rate)}%</td>` : ''}
           <td class="num">${money(amount)}</td>
         </tr>`;
     })
     .join('');
 
-  const vat = input.reverseCharge ? 0 : imponibile * (Number(input.vatPercent) / 100);
+  const rates = [...vatBases.entries()].sort((a, b) => b[0] - a[0]);
+  const vat = input.reverseCharge
+    ? 0
+    : rates.reduce((sum, [rate, base]) => sum + base * (rate / 100), 0);
   const total = imponibile + vat;
   const vatRow = input.reverseCharge
     ? `<tr><td>${input.reverseCharge}</td><td class="num">${money(0)}</td></tr>`
-    : `<tr><td>${input.taxLabel} ${qty(input.vatPercent)}%</td><td class="num">${money(vat)}</td></tr>`;
+    : rates
+        .map(
+          ([rate, base]) =>
+            `<tr><td>${input.taxLabel} ${qty(rate)}%${rates.length > 1 ? `<div class="note">su ${money(base)}</div>` : ''}</td><td class="num">${money(base * (rate / 100))}</td></tr>`
+        )
+        .join('');
 
   const company = input.companyName || '';
   const mark = input.logoUrl
@@ -170,6 +192,7 @@ export function renderStandardQuote(input: StandardQuoteInput): string {
         <th>Descrizione</th>
         <th class="num">Q.tà</th>
         <th class="num unit-col">Prezzo unit.</th>
+        ${mixedVat ? `<th class="num">${input.taxLabel}</th>` : ''}
         <th class="num">Importo</th>
       </tr>
     </thead>

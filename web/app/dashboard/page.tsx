@@ -37,6 +37,7 @@ type Costo = {
   unit_price: number;
   tax_rate?: number;
   unit?: string | null;
+  vat_percent?: number | null;
 };
 type ListinoMatchItem = {
   id: string;
@@ -136,7 +137,7 @@ export default function DashboardPage() {
     if (selectedLavoro) {
       const { data: costiData } = await supabase
         .from('preventivi_dettaglio')
-        .select('id, description, quantity, unit_price, tax_rate, unit')
+        .select('id, description, quantity, unit_price, tax_rate, unit, vat_percent')
         .eq('lavoro_id', selectedLavoro.id);
       setCosti(costiData || []);
     }

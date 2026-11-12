@@ -15,6 +15,8 @@ type Costo = {
   unit_price: number;
   tax_rate?: number;
   unit?: string | null;
+  /** VAT of this line; null = the quote's rate. */
+  vat_percent?: number | null;
 };
 
 type Props = {
@@ -46,6 +48,8 @@ export default function CostoEditor({ costi, onUpdate }: Props) {
   const [markup, setMarkup] = useState('0');
   const [finalPrice, setFinalPrice] = useState('0');
   const [saving, setSaving] = useState(false);
+  /** '' = the quote's VAT; otherwise this line's own rate. */
+  const [vat, setVat] = useState('');
 
   const startEdit = (c: Costo) => {
     setEditing(c.id);
@@ -55,6 +59,11 @@ export default function CostoEditor({ costi, onUpdate }: Props) {
     setCost(String(round2(Number(c.unit_price))));
     setMarkup(String(Number(c.tax_rate) || 0));
     setFinalPrice(String(round2(clientUnitPrice(c))));
+    setVat(
+      c.vat_percent === null || c.vat_percent === undefined
+        ? ''
+        : String(Number(c.vat_percent))
+    );
   };
 
   // The three prices stay consistent whichever one is typed.
@@ -78,6 +87,11 @@ export default function CostoEditor({ costi, onUpdate }: Props) {
       toast.error('Scrivi la descrizione della voce');
       return;
     }
+    const lineVat = vat.trim() === '' ? null : parse(vat);
+    if (lineVat !== null && (lineVat < 0 || lineVat > 100)) {
+      toast.error("L'IVA deve essere tra 0 e 100");
+      return;
+    }
     setSaving(true);
     const purchase = parse(cost);
     const ricarico = purchase > 0 ? parse(markup) : 0;
@@ -89,6 +103,7 @@ export default function CostoEditor({ costi, onUpdate }: Props) {
         unit: unit.trim() || null,
         unit_price: purchase > 0 ? purchase : parse(finalPrice),
         tax_rate: ricarico,
+        vat_percent: lineVat,
       })
       .eq('id', id);
     setSaving(false);
@@ -114,8 +129,16 @@ export default function CostoEditor({ costi, onUpdate }: Props) {
     <div>
       <p className="mb-3 text-sm text-slate-500">
         Prezzo d&apos;acquisto e ricarico li vedi solo tu: il cliente vede solo il prezzo
-        finale.
+        finale. L&apos;IVA della voce, se lasciata vuota, è quella scelta per il
+        preventivo.
       </p>
+      <datalist id="aliquote-iva">
+        <option value="22" />
+        <option value="10" />
+        <option value="5" />
+        <option value="4" />
+        <option value="0" />
+      </datalist>
       <table className="w-full text-base">
         <thead>
           <tr className="border-b text-left">
@@ -125,6 +148,7 @@ export default function CostoEditor({ costi, onUpdate }: Props) {
             <th className="py-2 text-right">Acquisto</th>
             <th className="py-2 text-right">Ricarico</th>
             <th className="py-2 text-right">Al cliente</th>
+            <th className="py-2 text-right">IVA</th>
             <th className="py-2 text-right">Importo</th>
             <th className="w-28" />
           </tr>
@@ -187,6 +211,18 @@ export default function CostoEditor({ costi, onUpdate }: Props) {
                     className={`${input} w-24 text-right font-semibold`}
                   />
                 </td>
+                <td className="py-2 text-right">
+                  <input
+                    inputMode="decimal"
+                    value={vat}
+                    onChange={(e) => setVat(e.target.value)}
+                    list="aliquote-iva"
+                    placeholder="preventivo"
+                    title="Vuoto = IVA del preventivo"
+                    aria-label="IVA di questa voce, vuoto per usare quella del preventivo"
+                    className={`${input} w-28 text-right`}
+                  />
+                </td>
                 <td className="py-2 text-right font-semibold">
                   {euro(parse(quantity) * parse(finalPrice))}
                 </td>
@@ -220,6 +256,11 @@ export default function CostoEditor({ costi, onUpdate }: Props) {
                   {Number(c.tax_rate) || 0}%
                 </td>
                 <td className="py-2 text-right">{euro(clientUnitPrice(c))}</td>
+                <td className="py-2 text-right text-slate-500">
+                  {c.vat_percent === null || c.vat_percent === undefined
+                    ? 'preventivo'
+                    : `${Number(c.vat_percent)}%`}
+                </td>
                 <td className="py-2 text-right font-semibold">
                   {euro(Number(c.quantity) * clientUnitPrice(c))}
                 </td>
