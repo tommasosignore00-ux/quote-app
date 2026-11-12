@@ -1,6 +1,8 @@
 import { holdClientDecisions } from '../lib/notifications';
 import React, { useState, useRef, useEffect } from 'react';
-import { TouchableOpacity, Text, StyleSheet, Alert, View, Animated, AppState, DeviceEventEmitter, ActivityIndicator } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, Alert, View, Animated, AppState, DeviceEventEmitter, ActivityIndicator, AccessibilityInfo, Easing } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../lib/darkMode';
 import { useTranslation } from 'react-i18next';
 import {
   RecordingPresets,
@@ -34,6 +36,8 @@ const VOICE_RECORDING_PRESET: RecordingOptions = {
 };
 const MAX_RECORDING_MS = 120000;
 const MIN_RECORDING_MS = 700;
+// Preavviso a parole 10 s prima dello stop automatico (solo vista).
+const NEAR_LIMIT_SEC = 110;
 
 // Several buttons can be mounted: the question about stuck recordings is asked once.
 let attentionPromptOpen = false;
@@ -67,6 +71,10 @@ export default function VoiceButton({ onResult, context, size = 64, floating = f
   const onResultRef = useRef(onResult);
   onResultRef.current = onResult;
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const { colors } = useTheme();
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const [elapsedSec, setElapsedSec] = useState(0);
+  const nearLimitNotifiedRef = useRef(false);
 
   useEffect(() => {
     holdClientDecisions('recording', Boolean(recording));
@@ -172,7 +180,7 @@ export default function VoiceButton({ onResult, context, size = 64, floating = f
   const saveForLater = async (uri: string, message: string) => {
     await saveOfflineRecording(uri, context);
     setPendingOffline(await getPendingRecordingsCount());
-    Alert.alert('📡 Registrazione salvata', message);
+    Alert.alert('Registrazione salvata', message);
   };
 
   const stopRecording = async () => {
@@ -255,98 +263,243 @@ export default function VoiceButton({ onResult, context, size = 64, floating = f
     };
   }, [listenToWatchEvents, recording]);
 
+  // ---- Vista (lotto 3): forma, timer, pulsazione. La logica qui sopra non cambia. ----
+
+  // "Riduci movimento": letto all'avvio e aggiornato quando cambia.
+  useEffect(() => {
+    let alive = true;
+    AccessibilityInfo.isReduceMotionEnabled().then((v) => { if (alive) setReduceMotion(v); }).catch(() => {});
+    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    return () => { alive = false; sub.remove(); };
+  }, []);
+
+  // Timer "Registro m:ss": conta in avanti da 0, mai il tempo che manca.
+  useEffect(() => {
+    if (!recording) {
+      setElapsedSec(0);
+      return;
+    }
+    nearLimitNotifiedRef.current = false;
+    setElapsedSec(0);
+    AccessibilityInfo.announceForAccessibility('Registrazione avviata');
+    const id = setInterval(() => {
+      const sec = Math.floor((Date.now() - recordingStartedAtRef.current) / 1000);
+      setElapsedSec(sec);
+      if (sec >= NEAR_LIMIT_SEC && !nearLimitNotifiedRef.current) {
+        nearLimitNotifiedRef.current = true;
+        triggerHaptic('buttonTap');
+        AccessibilityInfo.announceForAccessibility('Sto per fermarmi');
+      }
+    }, 250);
+    return () => clearInterval(id);
+  }, [recording]);
+
+  // Cambio di forma: cerchio -> quadrato arrotondato in 150 ms (immediato con "Riduci movimento").
+  const restRadius = size / 2;
+  const recRadius = size >= 150 ? 56 : 24;
+  const shapeAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const to = recording ? 1 : 0;
+    if (reduceMotion) {
+      shapeAnim.setValue(to);
+      return;
+    }
+    Animated.timing(shapeAnim, { toValue: to, duration: 150, easing: Easing.out(Easing.ease), useNativeDriver: false }).start();
+  }, [recording, reduceMotion]);
+  const borderRadius = shapeAnim.interpolate({ inputRange: [0, 1], outputRange: [restRadius, recRadius] });
+
+  // Pulsazione dell'anello esterno, solo in registrazione e solo senza "Riduci movimento".
+  useEffect(() => {
+    if (!recording || reduceMotion) {
+      pulseAnim.stopAnimation();
+      pulseAnim.setValue(1);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.08, duration: 600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [recording, reduceMotion]);
+
+  const timerText = `Registro ${formatElapsed(elapsedSec)}`;
+  const nearLimit = recording && elapsedSec >= NEAR_LIMIT_SEC;
+  const iconSize = Math.max(28, Math.round(size * 0.42));
+  const ringWidth = floating ? 4 : 8;
+  const bg = processing ? colors.processing : recording ? colors.recording : colors.primary;
+  const showDarkRing = recording && colors.recordingRing !== 'transparent';
+  const pendingLabel = `${pendingOffline} ${pendingOffline === 1 ? 'registrazione' : 'registrazioni'} in attesa`;
+  const a11yLabel = processing
+    ? 'Sto capendo'
+    : recording
+      ? 'Ferma la registrazione'
+      : pendingOffline > 0
+        ? `Parla. ${pendingLabel} di invio`
+        : 'Parla';
+
   const buttonContent = (
-    <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-      <TouchableOpacity
-        onPress={handlePress}
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      {recording ? (
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: -ringWidth,
+            left: -ringWidth,
+            width: size + ringWidth * 2,
+            height: size + ringWidth * 2,
+            borderRadius: recRadius + ringWidth,
+            borderWidth: ringWidth,
+            borderColor: colors.recording,
+            opacity: reduceMotion ? 0.5 : 0.3,
+            transform: [{ scale: pulseAnim }],
+          }}
+        />
+      ) : null}
+      <Animated.View
         style={[
           styles.button,
-          { width: size, height: size, borderRadius: size / 2 },
-          recording && styles.recording,
-          processing && styles.processing,
+          {
+            width: size,
+            height: size,
+            borderRadius,
+            backgroundColor: bg,
+            shadowColor: colors.shadow,
+            borderWidth: showDarkRing ? 3 : 0,
+            borderColor: showDarkRing ? colors.recordingRing : 'transparent',
+          },
         ]}
-        activeOpacity={0.8}
-        disabled={processing}
-        accessibilityRole="button"
-        accessibilityLabel={processing ? 'Sto capendo' : recording ? 'Ferma la registrazione' : 'Parla'}
       >
-        {processing ? (
-          <ActivityIndicator color="#fff" size="large" />
-        ) : (
-          <Text style={[styles.icon, { fontSize: Math.max(28, Math.round(size * 0.42)) }]}>
-            {recording ? '⏹' : '🎤'}
-          </Text>
-        )}
-      </TouchableOpacity>
-    </Animated.View>
+        <TouchableOpacity
+          onPress={handlePress}
+          style={styles.touch}
+          activeOpacity={0.8}
+          disabled={processing}
+          accessibilityRole="button"
+          accessibilityLabel={a11yLabel}
+          accessibilityState={{ disabled: processing, busy: processing }}
+        >
+          {processing ? (
+            <ActivityIndicator color={colors.onPrimary} size="large" />
+          ) : (
+            <Ionicons name={recording ? 'stop' : 'mic'} size={iconSize} color={colors.onPrimary} />
+          )}
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
   );
 
-  const label = processing ? 'Sto capendo…' : recording ? 'Sto ascoltando: tocca per finire' : 'Tocca e di\' cosa aggiungere';
-
-  // Punto 2: Pulsante Rosso "Sticky" (FAB)
+  // Punto 2: microfono flottante (84). Il chip sopra dice lo stato a parole.
   if (floating) {
+    let chip: React.ReactNode = null;
+    if (processing) {
+      chip = (
+        <View style={[styles.chip, { backgroundColor: colors.processing }]}>
+          <Text style={[styles.chipText, { color: colors.onPrimary }]}>Sto capendo…</Text>
+        </View>
+      );
+    } else if (recording) {
+      chip = (
+        <View style={[styles.chip, { backgroundColor: colors.recording }]} accessibilityLiveRegion="polite">
+          <Text style={[styles.chipText, styles.tabular, { color: colors.onPrimary }]}>{timerText}</Text>
+        </View>
+      );
+    } else if (pendingOffline > 0) {
+      chip = (
+        <View style={[styles.chip, { backgroundColor: colors.warningBg, gap: 6 }]}>
+          <Ionicons name="cloud-offline-outline" size={20} color={colors.warningText} />
+          <Text style={[styles.chipText, { color: colors.warningText }]}>{pendingOffline} in attesa</Text>
+        </View>
+      );
+    }
     return (
       <View style={styles.fabContainer} pointerEvents="box-none">
-        {pendingOffline > 0 && (
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{pendingOffline}</Text>
-          </View>
-        )}
+        {chip}
         {buttonContent}
       </View>
     );
   }
 
   return (
-    <View>
-      {pendingOffline > 0 && (
-        <Text style={styles.pendingText}>
-          📡 {pendingOffline} {pendingOffline === 1 ? 'registrazione' : 'registrazioni'} in attesa
-        </Text>
-      )}
+    <View style={{ alignItems: 'center' }}>
+      {pendingOffline > 0 && !recording && !processing ? (
+        <View style={[styles.pill, { backgroundColor: colors.warningBg }]}>
+          <Ionicons name="cloud-offline-outline" size={20} color={colors.warningText} />
+          <Text style={[styles.pillText, { color: colors.warningText }]}>{pendingLabel}</Text>
+        </View>
+      ) : null}
       {buttonContent}
-      {showLabel ? <Text style={[styles.label, recording && styles.labelRecording]}>{label}</Text> : null}
+      {showLabel ? (
+        recording ? (
+          <View style={styles.labelBlock}>
+            <View style={styles.timerRow}>
+              <View style={[styles.dot, { backgroundColor: colors.recording }]} />
+              <Text style={[styles.timer, styles.tabular, { color: colors.dangerText }]}>{timerText}</Text>
+            </View>
+            <Text style={[styles.meta, { color: colors.textSecondary }]}>
+              {nearLimit ? 'Sto per fermarmi: tocca per finire' : 'Tocca per finire'}
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.labelBlock}>
+            <Text style={[styles.label, { color: colors.text }]}>
+              {processing ? 'Sto capendo…' : 'Tocca e di\' cosa aggiungere'}
+            </Text>
+            {pendingOffline > 0 && !processing ? (
+              <Text style={[styles.meta, { color: colors.textSecondary }]}>Partono da sole appena torna la rete.</Text>
+            ) : null}
+          </View>
+        )
+      ) : null}
     </View>
   );
 }
 
+function formatElapsed(totalSec: number): string {
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
 const styles = StyleSheet.create({
   button: {
-    backgroundColor: '#c2410c',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.18,
     shadowRadius: 8,
-    elevation: 6,
+    elevation: 4,
   },
-  recording: { backgroundColor: '#b91c1c' },
-  processing: { backgroundColor: '#64748b' },
-  label: { marginTop: 14, fontSize: 20, fontWeight: '700', textAlign: 'center', color: '#475569' },
-  labelRecording: { color: '#b91c1c' },
-  icon: { fontSize: 28 },
-  // FAB positioning
+  touch: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' },
+  labelBlock: { marginTop: 14, alignItems: 'center', gap: 4 },
+  label: { fontSize: 20, lineHeight: 26, fontWeight: '600', textAlign: 'center' },
+  timerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  dot: { width: 12, height: 12, borderRadius: 6 },
+  timer: { fontSize: 22, lineHeight: 28, fontWeight: '800' },
+  meta: { fontSize: 16, lineHeight: 22, fontWeight: '600', textAlign: 'center' },
+  tabular: { fontVariant: ['tabular-nums'] },
+  // "In coda": stato a parole, alto 36, non si tocca.
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36, paddingHorizontal: 12, borderRadius: 999, marginBottom: 12 },
+  pillText: { fontSize: 16, lineHeight: 22, fontWeight: '700' },
+  // Microfono flottante: posizione invariata.
   fabContainer: {
     position: 'absolute',
     bottom: 90,
     right: 20,
     zIndex: 1000,
-    alignItems: 'center',
+    alignItems: 'flex-end',
   },
-  badge: {
-    position: 'absolute',
-    top: -8,
-    right: -8,
-    backgroundColor: '#f59e0b',
-    borderRadius: 12,
-    minWidth: 24,
-    height: 24,
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1001,
-    paddingHorizontal: 6,
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    marginBottom: 8,
   },
-  badgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  pendingText: { textAlign: 'center', color: '#f59e0b', fontSize: 12, marginBottom: 4, fontWeight: '600' },
+  chipText: { fontSize: 18, fontWeight: '800' },
 });

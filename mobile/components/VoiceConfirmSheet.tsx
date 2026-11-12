@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../lib/darkMode';
 import { formatQuantity, normalizeName, parseItalianNumber, type JobRecord, type NamedRecord } from '../lib/voiceDraft';
 
@@ -221,9 +222,12 @@ export default function VoiceConfirmSheet({
             disabled={creatingCliente}
             accessibilityRole="button"
           >
-            <Text style={[styles.choiceText, text]} numberOfLines={2}>
-              {creatingCliente ? 'Creazione…' : `+ Nuovo cliente: ${search.trim()}`}
-            </Text>
+            <View style={[styles.iconRow, styles.iconRowStart]}>
+              {creatingCliente ? null : <Ionicons name="add-outline" size={24} color={colors.primaryStrong} />}
+              <Text style={[styles.choiceText, text, styles.flexText]} numberOfLines={2}>
+                {creatingCliente ? 'Creazione…' : `Nuovo cliente: ${search.trim()}`}
+              </Text>
+            </View>
           </TouchableOpacity>
         ) : null}
         {orderedClienti.length === 0 ? (
@@ -264,7 +268,10 @@ export default function VoiceConfirmSheet({
             onPress={() => setNewJobTitle(suggestedJobTitle || '')}
             accessibilityRole="button"
           >
-            <Text style={[styles.choiceText, { color: colors.primary }]}>＋ Nuovo lavoro</Text>
+            <View style={[styles.iconRow, styles.iconRowStart]}>
+              <Ionicons name="add-outline" size={24} color={colors.primaryText} />
+              <Text style={[styles.choiceText, { color: colors.primaryText }]}>Nuovo lavoro</Text>
+            </View>
           </TouchableOpacity>
         ) : (
           <View style={styles.newJobBox}>
@@ -277,11 +284,11 @@ export default function VoiceConfirmSheet({
               style={[styles.search, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
             />
             <TouchableOpacity
-              style={[styles.bigButton, styles.primary, (!newJobTitle.trim() || creatingJob) && styles.disabled]}
+              style={[styles.bigButton, { backgroundColor: colors.primary }, (!newJobTitle.trim() || creatingJob) && styles.disabled]}
               onPress={createJob}
               disabled={!newJobTitle.trim() || creatingJob}
             >
-              {creatingJob ? <ActivityIndicator color="#fff" /> : <Text style={styles.bigButtonText}>Crea lavoro</Text>}
+              {creatingJob ? <ActivityIndicator color={colors.onPrimary} /> : <Text style={[styles.bigButtonText, { color: colors.onPrimary }]}>Crea lavoro</Text>}
             </TouchableOpacity>
           </View>
         )}
@@ -290,7 +297,10 @@ export default function VoiceConfirmSheet({
         style={[styles.bigButton, styles.secondary, { borderColor: colors.border }]}
         onPress={() => setStep('cliente')}
       >
-        <Text style={[styles.secondaryText, text]}>← Cambia cliente</Text>
+        <View style={styles.iconRow}>
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
+          <Text style={[styles.secondaryText, text]}>Cambia cliente</Text>
+        </View>
       </TouchableOpacity>
     </>
   );
@@ -320,7 +330,10 @@ export default function VoiceConfirmSheet({
         </TouchableOpacity>
       </ScrollView>
       <TouchableOpacity style={[styles.bigButton, styles.secondary, { borderColor: colors.border }]} onPress={() => setChoosingItem(null)}>
-        <Text style={[styles.secondaryText, text]}>← Indietro</Text>
+        <View style={styles.iconRow}>
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
+          <Text style={[styles.secondaryText, text]}>Indietro</Text>
+        </View>
       </TouchableOpacity>
     </>
   );
@@ -339,7 +352,7 @@ export default function VoiceConfirmSheet({
           onPress={() => setStep(cliente ? 'lavoro' : 'cliente')}
           accessibilityLabel="Cambia cliente o lavoro"
         >
-          <Text style={[styles.changeText, { color: colors.primary }]}>Cambia</Text>
+          <Text style={[styles.changeText, { color: colors.primaryStrong }]}>Cambia</Text>
         </TouchableOpacity>
       </View>
 
@@ -361,18 +374,21 @@ export default function VoiceConfirmSheet({
                 >
                   <Text style={[styles.itemTitle, text]} numberOfLines={3}>{match?.description || item.spoken}</Text>
                   {match || draftItemOwnPrice(item) !== null ? (
-                    <Text style={[styles.itemPrice, { color: colors.primary }]}>
+                    <Text style={[styles.itemPrice, { color: colors.primaryStrong }]}>
                       {money(draftItemPrice(item, defaultMarkup) ?? 0)}
                       {unit ? ` / ${unit}` : ''}
                     </Text>
                   ) : (
-                    <Text style={styles.warning}>
+                    <View style={styles.warningRow}>
+                      <Ionicons name="alert-circle-outline" size={20} color={colors.warningText} style={styles.warningIcon} />
+                      <Text style={[styles.warning, styles.flexText, { color: colors.warningText }]}>
                       {item.matches.some((candidate) => candidate.fullMatch)
                         ? 'Più articoli possibili: scegli quello giusto'
                         : item.matches.length
                           ? 'Non trovato uguale nel listino'
                           : 'Non trovato nel listino: prezzo da inserire'}
-                    </Text>
+                      </Text>
+                    </View>
                   )}
                 </TouchableOpacity>
                 {/* Big enough for gloves: choosing another article is a real button. */}
@@ -382,7 +398,7 @@ export default function VoiceConfirmSheet({
                     onPress={() => setChoosingItem(item.key)}
                     accessibilityRole="button"
                   >
-                    <Text style={[styles.otherMatches, { color: colors.primary }]}>
+                    <Text style={[styles.otherMatches, { color: colors.primaryText }]}>
                       {match
                         ? `Scegli un altro articolo (${item.matches.length})`
                         : item.matches.some((candidate) => candidate.fullMatch)
@@ -402,14 +418,19 @@ export default function VoiceConfirmSheet({
                     style={[styles.search, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
                   />
                 ) : null}
-                {item.quantity === null ? <Text style={styles.warning}>Quantità da confermare: usa i tasti − e ＋</Text> : null}
+                {item.quantity === null ? (
+                  <View style={styles.warningRow}>
+                    <Ionicons name="alert-circle-outline" size={20} color={colors.warningText} style={styles.warningIcon} />
+                    <Text style={[styles.warning, styles.flexText, { color: colors.warningText }]}>Quantità da confermare: usa i tasti − e ＋</Text>
+                  </View>
+                ) : null}
                 <View style={styles.qtyRow}>
                   <TouchableOpacity
                     style={[styles.qtyButton, { backgroundColor: colors.surfaceSecondary }]}
                     onPress={() => changeQuantity(item.key, unit && QUANTITY_STEP_UNITS.has(unit.toLowerCase()) && (item.quantity ?? 0) <= 1 ? -0.5 : -1)}
                     accessibilityLabel="Diminuisci quantità"
                   >
-                    <Text style={[styles.qtyButtonText, text]}>−</Text>
+                    <Ionicons name="remove" size={32} color={colors.text} />
                   </TouchableOpacity>
                   <Text style={[styles.qtyText, text]}>{item.quantity === null ? 'quantità da confermare' : formatQuantity(item.quantity, unit)}</Text>
                   <TouchableOpacity
@@ -417,14 +438,14 @@ export default function VoiceConfirmSheet({
                     onPress={() => changeQuantity(item.key, 1)}
                     accessibilityLabel="Aumenta quantità"
                   >
-                    <Text style={[styles.qtyButtonText, text]}>＋</Text>
+                    <Ionicons name="add" size={32} color={colors.text} />
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={styles.removeButton}
+                    style={[styles.removeButton, { backgroundColor: colors.dangerBg }]}
                     onPress={() => removeItem(item.key)}
                     accessibilityLabel="Togli questa voce"
                   >
-                    <Text style={styles.removeText}>Togli</Text>
+                    <Text style={[styles.removeText, { color: colors.dangerBgText }]}>Togli</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -434,18 +455,21 @@ export default function VoiceConfirmSheet({
       </ScrollView>
 
       <TouchableOpacity
-        style={[styles.bigButton, styles.confirm, !canConfirm && styles.disabled]}
+        style={[styles.bigButton, styles.confirm, { backgroundColor: colors.primary }, !canConfirm && styles.disabled]}
         onPress={() => lavoro && canConfirm && onConfirm(lavoro)}
         disabled={!canConfirm}
       >
         {saving ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={colors.onPrimary} />
         ) : (
-          <Text style={styles.bigButtonText}>
-            {missingQuantity
-              ? 'Conferma le quantità'
-              : `✓ Aggiungi ${items.length === 1 ? '1 voce' : `${items.length} voci`}`}
-          </Text>
+          <View style={styles.iconRow}>
+            {missingQuantity ? null : <Ionicons name="checkmark" size={28} color={colors.onPrimary} />}
+            <Text style={[styles.bigButtonText, { color: colors.onPrimary }]}>
+              {missingQuantity
+                ? 'Conferma le quantità'
+                : `Aggiungi ${items.length === 1 ? '1 voce' : `${items.length} voci`}`}
+            </Text>
+          </View>
         )}
       </TouchableOpacity>
     </>
@@ -453,7 +477,7 @@ export default function VoiceConfirmSheet({
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onCancel}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.overlay}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.overlay, { backgroundColor: colors.overlay }]}>
         <View style={[styles.sheet, { backgroundColor: colors.modalBg }]}>
           {itemBeingChosen
             ? renderChooseMatch(itemBeingChosen)
@@ -473,7 +497,7 @@ export default function VoiceConfirmSheet({
 
 // Sized for gloves and dirty hands: every touch target is at least 64 points tall.
 const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+  overlay: { flex: 1, justifyContent: 'flex-end' },
   sheet: { maxHeight: '92%', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36, gap: 12 },
   header: { gap: 4 },
   stepTitle: { fontSize: 28, fontWeight: '800' },
@@ -487,11 +511,14 @@ const styles = StyleSheet.create({
   choiceText: { fontSize: 22, fontWeight: '700' },
   newJobBox: { gap: 10 },
   bigButton: { minHeight: 68, borderRadius: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
-  primary: { backgroundColor: '#c2410c' },
-  confirm: { backgroundColor: '#16a34a', minHeight: 76 },
+  // Colori dal tema (lotto 4): "Aggiungi" è arancio come ogni azione principale, mai verde.
+  confirm: { minHeight: 76 },
   secondary: { borderWidth: 2, backgroundColor: 'transparent', minHeight: 64 },
   disabled: { opacity: 0.45 },
-  bigButtonText: { color: '#fff', fontSize: 22, fontWeight: '800' },
+  bigButtonText: { fontSize: 22, fontWeight: '800' },
+  iconRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  iconRowStart: { justifyContent: 'flex-start' },
+  flexText: { flexShrink: 1 },
   secondaryText: { fontSize: 20, fontWeight: '700' },
   targetBox: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 2, borderRadius: 16, padding: 14 },
   targetLabel: { fontSize: 16, fontWeight: '600' },
@@ -502,13 +529,14 @@ const styles = StyleSheet.create({
   itemCard: { borderWidth: 2, borderRadius: 16, padding: 14, marginBottom: 10, gap: 10 },
   itemTitle: { fontSize: 20, fontWeight: '700' },
   itemPrice: { fontSize: 18, fontWeight: '700', marginTop: 4 },
-  warning: { fontSize: 17, fontWeight: '700', color: '#b45309', marginTop: 4 },
+  warning: { fontSize: 17, fontWeight: '700' },
+  warningRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 4 },
+  warningIcon: { marginTop: 2 },
   otherMatchesButton: { minHeight: 60, borderWidth: 2, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   otherMatches: { fontSize: 20, fontWeight: '800', textAlign: 'center' },
   qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   qtyButton: { width: 64, height: 64, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  qtyButtonText: { fontSize: 32, fontWeight: '800' },
   qtyText: { flex: 1, textAlign: 'center', fontSize: 22, fontWeight: '800' },
-  removeButton: { height: 64, minWidth: 80, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fee2e2', paddingHorizontal: 10 },
-  removeText: { color: '#b91c1c', fontSize: 18, fontWeight: '800' },
+  removeButton: { height: 64, minWidth: 80, borderRadius: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
+  removeText: { fontSize: 18, fontWeight: '800' },
 });

@@ -32,7 +32,7 @@ export default function AuthScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.headerBg }]}>
       <Text style={[styles.title, { color: colors.headerText }]}>{t('app.title')}</Text>
-      <Text style={[styles.subtitle, { color: colors.textTertiary }]}>{t('app.subtitle')}</Text>
+      <Text style={[styles.subtitle, { color: colors.headerText, opacity: 0.85 }]}>{t('app.subtitle')}</Text>
       <TouchableOpacity style={[styles.btnPrimary, { backgroundColor: colors.primary }]} onPress={() => (navigation as any).navigate('Register')}>
         <Text style={styles.btnText}>{t('auth.register')}</Text>
       </TouchableOpacity>

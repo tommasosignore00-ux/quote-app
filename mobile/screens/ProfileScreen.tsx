@@ -14,13 +14,15 @@ import * as Sharing from 'expo-sharing';
 import { validateIBAN, formatIBAN } from '../lib/ibanValidation';
 import { getFiscalConfig, FiscalField, US_STATE_TAX_RATES } from '../lib/fiscalSwitch';
 import { getTimeSavingsStats } from '../lib/timeSavings';
-import { useTheme } from '../lib/darkMode';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme, useThemedStyles, ThemeColors } from '../lib/darkMode';
 import { clearOfflineRecordings } from '../lib/offlineRecording';
 
 export default function ProfileScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation();
   const { colors, mode, setMode, isDark } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [profile, setProfile] = useState<Record<string, any>>({});
   const [convertingTemplate, setConvertingTemplate] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -429,69 +431,93 @@ export default function ProfileScreen() {
     setWebhooks(prev => prev.filter(w => w.id !== id));
   };
 
-  if (loading) return <View style={[styles.container, { backgroundColor: colors.background }]}><Text style={{ color: colors.text }}>{t('messages.loading')}</Text></View>;
+  if (loading) return <View style={[styles.container, { backgroundColor: colors.background }]}><Text style={{ color: colors.text, fontSize: 18 }}>{t('messages.loading')}</Text></View>;
+
+  const themeOptions = [
+    { key: 'system' as const, label: 'Automatico', icon: 'contrast-outline' as const },
+    { key: 'light' as const, label: 'Chiaro', icon: 'sunny-outline' as const },
+    { key: 'dark' as const, label: 'Scuro', icon: 'moon-outline' as const },
+  ];
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[styles.title, { color: colors.text }]}>{t('main.profile')}</Text>
+    <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.content}>
+      <Text style={styles.title} accessibilityRole="header">{t('main.profile')}</Text>
 
-      {/* Punto 7: Dark Mode Toggle */}
-      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
-        {(['system', 'light', 'dark'] as const).map((m) => (
-          <TouchableOpacity key={m} onPress={() => setMode(m)} style={[{ flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', borderWidth: 2 }, mode === m ? { backgroundColor: colors.primary, borderColor: colors.primary } : { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={{ color: mode === m ? '#fff' : colors.text, fontWeight: '600', fontSize: 13 }}>{m === 'system' ? '⚙️ Auto' : m === 'light' ? '☀️ Light' : '🌙 Dark'}</Text>
-          </TouchableOpacity>
-        ))}
+      {/* Punto 7: Aspetto (tema) */}
+      <Text style={styles.label}>Aspetto</Text>
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 24 }} accessibilityRole="radiogroup">
+        {themeOptions.map((opt) => {
+          const active = mode === opt.key;
+          return (
+            <TouchableOpacity
+              key={opt.key}
+              onPress={() => setMode(opt.key)}
+              style={[styles.segment, active ? styles.segmentActive : null]}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: active, checked: active }}
+              accessibilityLabel={`Aspetto: ${opt.label}`}
+            >
+              <Ionicons name={opt.icon} size={20} color={active ? colors.surface : colors.text} />
+              <Text style={[styles.segmentText, active ? { color: colors.surface, fontWeight: '700' } : null]} maxFontSizeMultiplier={1.3}>{opt.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
-      <Text style={[styles.label, { color: colors.text }]}>{t('profile.company')}</Text>
-      <TextInput style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} placeholder={t('profile.company')} value={profile.company_name || ''} onChangeText={(v) => setProfile({ ...profile, company_name: v })} placeholderTextColor={colors.textTertiary} />
-      <Text style={[styles.label, { color: colors.text }]}>{t('profile.vatNumber')}</Text>
-      <TextInput style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} placeholder={t('profile.vatNumber')} value={profile.vat_number || ''} onChangeText={(v) => setProfile({ ...profile, vat_number: v })} placeholderTextColor={colors.textTertiary} />
-      <Text style={[styles.label, { color: colors.text }]}>{t('profile.fiscalCode')}</Text>
-      <TextInput style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} placeholder={t('profile.fiscalCode')} value={profile.fiscal_code || ''} onChangeText={(v) => setProfile({ ...profile, fiscal_code: v })} placeholderTextColor={colors.textTertiary} />
-      <Text style={[styles.label, { color: colors.text }]}>{t('profile.country')}</Text>
-      <View style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, opacity: 0.8 }]}>
-        <Text style={{ color: colors.text }}>🇮🇹 Italia</Text>
+      <Text style={styles.label}>{t('profile.company')}</Text>
+      <TextInput style={styles.input} accessibilityLabel={t('profile.company')} placeholder={t('profile.company')} value={profile.company_name || ''} onChangeText={(v) => setProfile({ ...profile, company_name: v })} placeholderTextColor={colors.textTertiary} />
+      <Text style={styles.label}>{t('profile.vatNumber')}</Text>
+      <TextInput style={styles.input} accessibilityLabel={t('profile.vatNumber')} placeholder={t('profile.vatNumber')} value={profile.vat_number || ''} onChangeText={(v) => setProfile({ ...profile, vat_number: v })} placeholderTextColor={colors.textTertiary} />
+      <Text style={styles.label}>{t('profile.fiscalCode')}</Text>
+      <TextInput style={styles.input} accessibilityLabel={t('profile.fiscalCode')} placeholder={t('profile.fiscalCode')} value={profile.fiscal_code || ''} onChangeText={(v) => setProfile({ ...profile, fiscal_code: v })} placeholderTextColor={colors.textTertiary} />
+      <Text style={styles.label}>{t('profile.country')}</Text>
+      <View style={[styles.input, styles.inputReadonly]}>
+        <Text style={styles.inputText}>Italia</Text>
       </View>
-      <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: -6, marginBottom: 12 }}>Al momento il servizio è disponibile solo in Italia.</Text>
+      <Text style={styles.help}>Per ora il servizio è solo in Italia.</Text>
       <Text style={styles.label}>{t('profile.iban')}</Text>
-      <TextInput style={[styles.input, ibanError ? styles.inputError : null]} placeholder={t('profile.iban')} value={profile.iban || ''} onChangeText={(v) => { setProfile({ ...profile, iban: v.toUpperCase().replace(/\s/g, '') }); setIbanError(null); }} onBlur={() => { if (profile.iban) { const r = validateIBAN(profile.iban); if (!r.valid) setIbanError(r.error || 'IBAN non valido'); else { setIbanError(null); setProfile({ ...profile, iban: formatIBAN(profile.iban) }); } } }} autoCapitalize="characters" placeholderTextColor="#94a3b8" />
-      {ibanError && <Text style={styles.errorText}>⚠️ {ibanError}</Text>}
+      <TextInput style={[styles.input, ibanError ? styles.inputError : null]} accessibilityLabel={t('profile.iban')} accessibilityHint={ibanError || undefined} placeholder={t('profile.iban')} value={profile.iban || ''} onChangeText={(v) => { setProfile({ ...profile, iban: v.toUpperCase().replace(/\s/g, '') }); setIbanError(null); }} onBlur={() => { if (profile.iban) { const r = validateIBAN(profile.iban); if (!r.valid) setIbanError(r.error || 'IBAN non valido'); else { setIbanError(null); setProfile({ ...profile, iban: formatIBAN(profile.iban) }); } } }} autoCapitalize="characters" placeholderTextColor={colors.textTertiary} />
+      {ibanError && (
+        <View style={styles.errorRow}>
+          <Ionicons name="alert-circle-outline" size={20} color={colors.dangerText} />
+          <Text style={styles.errorText}>{ibanError}</Text>
+        </View>
+      )}
       <Text style={styles.label}>{t('profile.swiftBic')}</Text>
-      <TextInput style={styles.input} placeholder={t('profile.swiftBic')} value={profile.swift_bic || ''} onChangeText={(v) => setProfile({ ...profile, swift_bic: v })} placeholderTextColor="#94a3b8" />
+      <TextInput style={styles.input} accessibilityLabel={t('profile.swiftBic')} placeholder={t('profile.swiftBic')} value={profile.swift_bic || ''} onChangeText={(v) => setProfile({ ...profile, swift_bic: v })} placeholderTextColor={colors.textTertiary} />
       <Text style={styles.label}>Logo aziendale</Text>
-      <TouchableOpacity style={[styles.btn, { minHeight: 64, justifyContent: 'center' }]} onPress={handleLogoUpload} accessibilityRole="button">
-        <Text style={styles.btnText}>{profile.logo_url ? 'Sostituisci il logo' : 'Carica il logo'}</Text>
+      <TouchableOpacity style={[styles.btnSecondaryOutline, { marginBottom: 16 }]} onPress={handleLogoUpload} accessibilityRole="button">
+        <Ionicons name="image-outline" size={24} color={colors.text} />
+        <Text style={styles.btnSecondaryOutlineText}>{profile.logo_url ? 'Sostituisci il logo' : 'Carica il logo'}</Text>
       </TouchableOpacity>
       <Text style={styles.label}>Colore sui preventivi (es. #1f2937)</Text>
-      <TextInput style={styles.input} placeholder="#1f2937" autoCapitalize="none" value={profile.brand_color || ''} onChangeText={(v) => setProfile({ ...profile, brand_color: v })} placeholderTextColor="#94a3b8" />
+      <TextInput style={styles.input} accessibilityLabel="Colore sui preventivi" placeholder="#1f2937" autoCapitalize="none" value={profile.brand_color || ''} onChangeText={(v) => setProfile({ ...profile, brand_color: v })} placeholderTextColor={colors.textTertiary} />
       <Text style={styles.label}>{t('messages.address')}</Text>
-      <TextInput style={styles.input} placeholder={t('messages.address')} value={profile.address || ''} onChangeText={(v) => setProfile({ ...profile, address: v })} placeholderTextColor="#94a3b8" />
+      <TextInput style={styles.input} accessibilityLabel={t('messages.address')} placeholder={t('messages.address')} value={profile.address || ''} onChangeText={(v) => setProfile({ ...profile, address: v })} placeholderTextColor={colors.textTertiary} />
       <Text style={styles.label}>{t('messages.city')}</Text>
-      <TextInput style={styles.input} placeholder={t('messages.city')} value={profile.city || ''} onChangeText={(v) => setProfile({ ...profile, city: v })} placeholderTextColor="#94a3b8" />
+      <TextInput style={styles.input} accessibilityLabel={t('messages.city')} placeholder={t('messages.city')} value={profile.city || ''} onChangeText={(v) => setProfile({ ...profile, city: v })} placeholderTextColor={colors.textTertiary} />
       <Text style={styles.label}>{t('messages.postalCode')}</Text>
-      <TextInput style={styles.input} placeholder={t('messages.postalCode')} value={profile.postal_code || ''} onChangeText={(v) => setProfile({ ...profile, postal_code: v })} placeholderTextColor="#94a3b8" />
+      <TextInput style={styles.input} accessibilityLabel={t('messages.postalCode')} placeholder={t('messages.postalCode')} value={profile.postal_code || ''} onChangeText={(v) => setProfile({ ...profile, postal_code: v })} placeholderTextColor={colors.textTertiary} />
       <Text style={styles.label}>{t('profile.vatPercent')}</Text>
-      <TextInput keyboardType="numeric" style={styles.input} placeholder={t('profile.vatPercent')} value={String(profile.vat_percent ?? 22)} onChangeText={(v) => setProfile({ ...profile, vat_percent: parseFloat(v || '22') })} placeholderTextColor="#94a3b8" />
+      <TextInput keyboardType="numeric" style={styles.input} accessibilityLabel={t('profile.vatPercent')} placeholder={t('profile.vatPercent')} value={String(profile.vat_percent ?? 22)} onChangeText={(v) => setProfile({ ...profile, vat_percent: parseFloat(v || '22') })} placeholderTextColor={colors.textTertiary} />
       <Text style={styles.label}>{t('profile.materialMarkupVAT')}</Text>
-      <TextInput keyboardType="numeric" style={styles.input} placeholder={t('profile.materialMarkupVAT')} value={String(profile.material_markup_vat_percent || 0)} onChangeText={(v) => setProfile({ ...profile, material_markup_vat_percent: parseFloat(v || '0') })} placeholderTextColor="#94a3b8" />
+      <TextInput keyboardType="numeric" style={styles.input} accessibilityLabel={t('profile.materialMarkupVAT')} placeholder={t('profile.materialMarkupVAT')} value={String(profile.material_markup_vat_percent || 0)} onChangeText={(v) => setProfile({ ...profile, material_markup_vat_percent: parseFloat(v || '0') })} placeholderTextColor={colors.textTertiary} />
       
       {/* Punto 21: Dynamic Fiscal Fields */}
       {fiscalConfig.fields.length > 0 && (
-        <View style={styles.fiscalSection}>
-          <Text style={styles.sectionTitle}>📋 Campi fiscali ({fiscalConfig.countryCode})</Text>
+        <View style={styles.sectionBox}>
+          <Text style={styles.sectionTitle}>Campi fiscali ({fiscalConfig.countryCode})</Text>
           {fiscalConfig.fields.map((field: FiscalField) => (
             <View key={field.key}>
               <Text style={styles.label}>{field.label}{field.required ? ' *' : ''}</Text>
-              <TextInput style={styles.input} placeholder={field.placeholder || field.label} value={profile[field.key] || ''} onChangeText={(v) => setProfile({ ...profile, [field.key]: v })} placeholderTextColor="#94a3b8" />
+              <TextInput style={styles.input} accessibilityLabel={field.label} placeholder={field.placeholder || field.label} value={profile[field.key] || ''} onChangeText={(v) => setProfile({ ...profile, [field.key]: v })} placeholderTextColor={colors.textTertiary} />
             </View>
           ))}
           {fiscalConfig.reverseChargeApplicable && (
-            <Text style={styles.fiscalHint}>⚡ Reverse charge disponibile per operazioni intra-UE</Text>
+            <Text style={styles.help}>Reverse charge disponibile per operazioni intra-UE</Text>
           )}
           {fiscalConfig.electronicInvoicingRequired && fiscalConfig.electronicInvoicingSystem && (
-            <Text style={styles.fiscalHint}>📄 Fatturazione elettronica: {fiscalConfig.electronicInvoicingSystem}</Text>
+            <Text style={styles.help}>Fatturazione elettronica: {fiscalConfig.electronicInvoicingSystem}</Text>
           )}
         </View>
       )}
@@ -499,7 +525,7 @@ export default function ProfileScreen() {
       <TwoFactorSettings />
 
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 64, marginBottom: 12 }}>
-        <Text style={{ color: colors.text, fontSize: 15, flex: 1, paddingRight: 12 }}>Condividi statistiche anonime di utilizzo</Text>
+        <Text style={{ color: colors.text, fontSize: 18, flex: 1, paddingRight: 12 }}>Condividi statistiche anonime di utilizzo</Text>
         <Switch
           value={analyticsConsent}
           onValueChange={(value) => { setAnalyticsConsentState(value); setAnalyticsConsent(value); }}
@@ -509,40 +535,45 @@ export default function ProfileScreen() {
 
       {/* Punto 44: Time Savings Widget */}
       {timeSavedStats ? (
-        <View style={styles.timeSavedWidget}>
-          <Text style={styles.timeSavedTitle}>La tua attività</Text>
-          <Text style={styles.timeSavedValue}>{timeSavedStats}</Text>
+        <View style={styles.sectionBox}>
+          <Text style={styles.sectionTitle}>La tua attività</Text>
+          <Text style={styles.bodyText}>{timeSavedStats}</Text>
         </View>
       ) : null}
 
-      <Text style={styles.label}>Template Preventivo Personalizzato</Text>
-      <View style={styles.templateSection}>
+      <Text style={styles.label}>Il tuo modello di preventivo</Text>
+      <View style={styles.sectionBox}>
         {profile.custom_template_html ? (
           <View>
-            <Text style={styles.templateInfo}>✓ Template personalizzato caricato ({(profile.custom_template_html.length / 1024).toFixed(1)} KB)</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+              <Text style={styles.templateInfo}>Modello caricato ({(profile.custom_template_html.length / 1024).toFixed(1)} KB)</Text>
+            </View>
             <View style={styles.templateButtons}>
-              <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={handleUploadTemplate} disabled={convertingTemplate}>
-                <Text style={styles.btnText}>{convertingTemplate ? 'Leggo il preventivo...' : 'Sostituisci Template'}</Text>
+              <TouchableOpacity style={[styles.btnSecondaryOutline, { flex: 1 }]} onPress={handleUploadTemplate} disabled={convertingTemplate} accessibilityRole="button">
+                <Text style={styles.btnSecondaryOutlineText}>{convertingTemplate ? 'Leggo il preventivo...' : 'Sostituisci'}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.btn, styles.btnDanger]} onPress={handleRemoveTemplate}>
-                <Text style={styles.btnText}>Rimuovi</Text>
+              <TouchableOpacity style={[styles.btnDangerOutline, { flex: 1 }]} onPress={handleRemoveTemplate} accessibilityRole="button" accessibilityLabel="Rimuovi il modello di preventivo">
+                <Ionicons name="trash-outline" size={24} color={colors.dangerText} />
+                <Text style={styles.btnDangerOutlineText}>Rimuovi</Text>
               </TouchableOpacity>
             </View>
           </View>
         ) : (
-          <TouchableOpacity style={[styles.btn, styles.btnOutline]} onPress={handleUploadTemplate} disabled={convertingTemplate}>
-            <Text style={styles.btnOutlineText}>{convertingTemplate ? 'Leggo il preventivo...' : '📄 Carica il tuo preventivo (Word o HTML)'}</Text>
+          <TouchableOpacity style={styles.btnSecondaryOutline} onPress={handleUploadTemplate} disabled={convertingTemplate} accessibilityRole="button">
+            <Ionicons name="document-text-outline" size={24} color={colors.text} />
+            <Text style={styles.btnSecondaryOutlineText}>{convertingTemplate ? 'Leggo il preventivo...' : 'Carica il tuo preventivo (Word o HTML)'}</Text>
           </TouchableOpacity>
         )}
-        <Text style={styles.templateHint}>Carica il preventivo che usi già, anche uno vecchio compilato: l'app lo trasforma nel tuo modello, con cliente, voci e totali al posto giusto.</Text>
+        <Text style={styles.help}>Carica il preventivo che usi già, anche uno vecchio compilato: l'app lo trasforma nel tuo modello, con cliente, voci e totali al posto giusto.</Text>
       </View>
 
       {/* Punto 25: US State Picker (only shown for US country) */}
       {DEFAULT_COUNTRY_CODE !== 'IT' && (profile.country_code || '').toUpperCase() === 'US' && (
         <View style={styles.sectionBox}>
-          <Text style={[styles.sectionTitle, { color: '#1e40af' }]}>🇺🇸 US Sales Tax State</Text>
-          <TouchableOpacity style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border }]} onPress={() => setShowUsStatePicker(!showUsStatePicker)}>
-            <Text style={{ color: colors.text }}>{usState ? `${usState} (${US_STATE_TAX_RATES[usState] || 0}%)` : 'Seleziona stato'}</Text>
+          <Text style={styles.sectionTitle}>US Sales Tax State</Text>
+          <TouchableOpacity style={styles.input} onPress={() => setShowUsStatePicker(!showUsStatePicker)} accessibilityRole="button">
+            <Text style={styles.inputText}>{usState ? `${usState} (${US_STATE_TAX_RATES[usState] || 0}%)` : 'Seleziona stato'}</Text>
           </TouchableOpacity>
           {showUsStatePicker && (
             <View style={{ maxHeight: 200 }}>
@@ -550,8 +581,8 @@ export default function ProfileScreen() {
                 data={Object.entries(US_STATE_TAX_RATES).map(([code, rate]) => ({ code, rate }))}
                 keyExtractor={item => item.code}
                 renderItem={({ item }) => (
-                  <TouchableOpacity onPress={() => { setUsState(item.code); setShowUsStatePicker(false); }} style={[styles.langItem, { borderBottomColor: colors.border }, usState === item.code && styles.langItemSelected]}>
-                    <Text style={[{ color: colors.text }, usState === item.code ? styles.langItemSelectedText : undefined]}>{item.code} — {item.rate}%</Text>
+                  <TouchableOpacity onPress={() => { setUsState(item.code); setShowUsStatePicker(false); }} style={[styles.langItem, usState === item.code && styles.langItemSelected]} accessibilityState={{ selected: usState === item.code }}>
+                    <Text style={[styles.bodyText, usState === item.code ? styles.langItemSelectedText : undefined]}>{item.code} — {item.rate}%</Text>
                   </TouchableOpacity>
                 )}
               />
@@ -562,41 +593,43 @@ export default function ProfileScreen() {
 
       {/* Punto 35: Referral Program */}
       {profile.referral_code && (
-        <View style={[styles.sectionBox, { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }]}>
-          <Text style={{ fontWeight: '700', marginBottom: 8, fontSize: 16 }}>🎁 Programma Referral</Text>
-          <Text style={{ color: '#334155' }}>Il tuo codice: <Text style={{ fontWeight: '700' }}>{profile.referral_code}</Text></Text>
-          <TouchableOpacity onPress={() => {
+        <View style={styles.sectionBox}>
+          <Text style={styles.sectionTitle}>Programma Referral</Text>
+          <Text style={styles.bodyText}>Il tuo codice: <Text style={{ fontWeight: '700' }}>{profile.referral_code}</Text></Text>
+          <TouchableOpacity style={styles.linkBtn} accessibilityRole="button" onPress={() => {
             const link = `https://quoteapp.it/register?ref=${profile.referral_code}`;
             Alert.alert('Link Referral', link);
           }}>
-            <Text style={{ color: '#c2410c', marginTop: 8, fontWeight: '600' }}>📋 Mostra link invito</Text>
+            <Ionicons name="link-outline" size={20} color={colors.primaryText} />
+            <Text style={styles.linkText}>Mostra link invito</Text>
           </TouchableOpacity>
-          <Text style={{ color: '#64748b', fontSize: 12, marginTop: 8 }}>
+          <Text style={styles.help}>
             Guadagna il 20% su ogni abbonamento tramite il tuo link.
           </Text>
           {referralStats.total > 0 && (
-            <Text style={{ color: '#334155', marginTop: 8, fontSize: 13 }}>
-              👥 {referralStats.total} invitati · {referralStats.converted} convertiti
+            <Text style={styles.help}>
+              {referralStats.total} invitati · {referralStats.converted} convertiti
             </Text>
           )}
         </View>
       )}
 
       {/* Punto 14: Command Mappings Review */}
-      <TouchableOpacity onPress={() => setShowMappingsSection(!showMappingsSection)} style={styles.sectionHeader}>
-        <Text style={{ fontWeight: '700', fontSize: 16, color: colors.text }}>🎤 Mappature comandi vocali ({commandMappings.length})</Text>
-        <Text style={{ color: colors.textSecondary }}>{showMappingsSection ? '▲' : '▼'}</Text>
+      <TouchableOpacity onPress={() => setShowMappingsSection(!showMappingsSection)} style={styles.sectionHeader} accessibilityRole="button" accessibilityState={{ expanded: showMappingsSection }}>
+        <Ionicons name="chatbubble-ellipses-outline" size={24} color={colors.text} />
+        <Text style={styles.sectionHeaderText}>Parole che ho imparato ({commandMappings.length})</Text>
+        <Ionicons name={showMappingsSection ? 'chevron-up' : 'chevron-down'} size={24} color={colors.textSecondary} />
       </TouchableOpacity>
       {showMappingsSection && commandMappings.length > 0 && (
         <View style={[styles.sectionBox, { marginTop: 0, borderTopLeftRadius: 0, borderTopRightRadius: 0 }]}>
           {commandMappings.map(m => (
-            <View key={m.id} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }}>
+            <View key={m.id} style={styles.listRow}>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 14, color: colors.text }}>"{m.raw_text}" → {m.mapped_description}</Text>
-                <Text style={{ fontSize: 11, color: '#94a3b8' }}>Usato {m.usage_count}x</Text>
+                <Text style={styles.bodyText}>"{m.raw_text}" → {m.mapped_description}</Text>
+                <Text style={styles.help}>Usato {m.usage_count} volte</Text>
               </View>
-              <TouchableOpacity onPress={() => handleDeleteMapping(m.id)}>
-                <Text style={{ fontSize: 18, color: '#ef4444' }}>🗑</Text>
+              <TouchableOpacity onPress={() => handleDeleteMapping(m.id)} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel={`Elimina la parola «${m.raw_text}»`}>
+                <Ionicons name="trash-outline" size={24} color={colors.dangerText} />
               </TouchableOpacity>
             </View>
           ))}
@@ -605,49 +638,50 @@ export default function ProfileScreen() {
 
       {/* Punto 41: Team Management - solo per abbonamento team */}
       {teamInvitations.map(invitation => (
-        <View key={invitation.id} style={[styles.sectionBox, { marginBottom: 12 }]}>
-          <Text style={{ color: colors.text, fontSize: 15, marginBottom: 10 }}>
+        <View key={invitation.id} style={[styles.sectionBox, { marginTop: 16, marginBottom: 12 }]}>
+          <Text style={[styles.bodyText, { marginBottom: 10 }]}>
             {invitation.owner?.company_name || 'Un titolare'} ti ha invitato nel team
           </Text>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <TouchableOpacity style={{ flex: 1, minHeight: 64, justifyContent: 'center', alignItems: 'center', borderRadius: 10, backgroundColor: colors.primary }} onPress={() => handleRespondInvitation(invitation.id, true)} accessibilityRole="button">
-              <Text style={{ color: '#fff', fontWeight: '700' }}>Accetta</Text>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <TouchableOpacity style={[styles.btnSecondaryOutline, { flex: 1, minHeight: 64 }]} onPress={() => handleRespondInvitation(invitation.id, false)} accessibilityRole="button">
+              <Text style={styles.btnSecondaryOutlineText}>Rifiuta</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={{ flex: 1, minHeight: 64, justifyContent: 'center', alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: colors.border }} onPress={() => handleRespondInvitation(invitation.id, false)} accessibilityRole="button">
-              <Text style={{ color: colors.text, fontWeight: '700' }}>Rifiuta</Text>
+            <TouchableOpacity style={[styles.btn, { flex: 1, minHeight: 64 }]} onPress={() => handleRespondInvitation(invitation.id, true)} accessibilityRole="button">
+              <Text style={styles.btnText}>Accetta</Text>
             </TouchableOpacity>
           </View>
         </View>
       ))}
 
       {profile.team_plan === true && <>
-      <TouchableOpacity onPress={() => setShowTeamSection(!showTeamSection)} style={styles.sectionHeader}>
-        <Text style={{ fontWeight: '700', fontSize: 16, color: colors.text }}>👥 Team ({teamMembers.length}/{TEAM_MEMBERS_INCLUDED} inclusi oltre a te{teamMembers.length > TEAM_MEMBERS_INCLUDED ? ` + ${teamMembers.length - TEAM_MEMBERS_INCLUDED} extra` : ''})</Text>
-        <Text style={{ color: colors.textSecondary }}>{showTeamSection ? '▲' : '▼'}</Text>
+      <TouchableOpacity onPress={() => setShowTeamSection(!showTeamSection)} style={styles.sectionHeader} accessibilityRole="button" accessibilityState={{ expanded: showTeamSection }}>
+        <Ionicons name="people-outline" size={24} color={colors.text} />
+        <Text style={styles.sectionHeaderText}>Squadra ({teamMembers.length}/{TEAM_MEMBERS_INCLUDED} inclusi oltre a te{teamMembers.length > TEAM_MEMBERS_INCLUDED ? ` + ${teamMembers.length - TEAM_MEMBERS_INCLUDED} extra` : ''})</Text>
+        <Ionicons name={showTeamSection ? 'chevron-up' : 'chevron-down'} size={24} color={colors.textSecondary} />
       </TouchableOpacity>
       {showTeamSection && (
         <View style={[styles.sectionBox, { marginTop: 0, borderTopLeftRadius: 0, borderTopRightRadius: 0 }]}>
           {teamMembers.map(m => (
-            <View key={m.id} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }}>
-              <View>
-                <Text style={{ fontSize: 14, color: colors.text }}>{m.member?.email || 'N/A'}</Text>
-                <Text style={{ fontSize: 12, color: '#64748b' }}>{m.role}{!m.accepted_at ? ' · in attesa di accettazione' : ''}</Text>
+            <View key={m.id} style={styles.listRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.bodyText}>{m.member?.email || 'N/A'}</Text>
+                <Text style={styles.help}>{m.role}{!m.accepted_at ? ' · in attesa di accettazione' : ''}</Text>
               </View>
-              <TouchableOpacity onPress={() => handleRemoveTeamMember(m.id)}>
-                <Text style={{ fontSize: 18, color: '#ef4444' }}>✕</Text>
+              <TouchableOpacity onPress={() => handleRemoveTeamMember(m.id)} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel={`Togli ${m.member?.email || 'il membro'} dalla squadra`}>
+                <Ionicons name="close-outline" size={28} color={colors.dangerText} />
               </TouchableOpacity>
             </View>
           ))}
-          <Text style={{ marginTop: 12, marginBottom: 6, fontWeight: '600', color: colors.text }}>Invita membro</Text>
-          <TextInput style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} placeholder="email@example.com" value={inviteEmail} onChangeText={setInviteEmail} keyboardType="email-address" autoCapitalize="none" placeholderTextColor={colors.textTertiary} />
+          <Text style={[styles.label, { marginTop: 12 }]}>Invita membro</Text>
+          <TextInput style={styles.input} accessibilityLabel="Email del membro da invitare" placeholder="email@example.com" value={inviteEmail} onChangeText={setInviteEmail} keyboardType="email-address" autoCapitalize="none" placeholderTextColor={colors.textTertiary} />
           <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
             {['admin', 'technician', 'readonly'].map(role => (
-              <TouchableOpacity key={role} onPress={() => setInviteRole(role)} style={{ flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center', backgroundColor: inviteRole === role ? '#c2410c' : '#f1f5f9' }}>
-                <Text style={{ color: inviteRole === role ? '#fff' : '#374151', fontSize: 12, fontWeight: '600' }}>{role}</Text>
+              <TouchableOpacity key={role} onPress={() => setInviteRole(role)} style={[styles.chip, inviteRole === role ? styles.chipActive : null]} accessibilityRole="radio" accessibilityState={{ selected: inviteRole === role, checked: inviteRole === role }}>
+                <Text style={[styles.chipText, inviteRole === role ? { color: colors.surface } : null]}>{role}</Text>
               </TouchableOpacity>
             ))}
           </View>
-          <TouchableOpacity style={[styles.btn, { marginBottom: 0 }]} onPress={handleInviteMember}>
+          <TouchableOpacity style={[styles.btn, { marginBottom: 0 }]} onPress={handleInviteMember} accessibilityRole="button">
             <Text style={styles.btnText}>Invita</Text>
           </TouchableOpacity>
         </View>
@@ -657,45 +691,52 @@ export default function ProfileScreen() {
       {/* Punto 43: Webhooks - solo per abbonamento pro/team */}
       {(profile.subscription_status === 'active' || profile.subscription_status === 'team') && <View style={[styles.sectionBox, { marginTop: 16 }]}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <Text style={{ fontWeight: '700', fontSize: 16, color: colors.text }}>🔗 Webhook / Integrazioni</Text>
-          <TouchableOpacity onPress={() => setShowWebhookModal(true)}>
-            <Text style={{ color: '#c2410c', fontWeight: '600' }}>➕ Aggiungi</Text>
+          <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Integrazioni</Text>
+          <TouchableOpacity onPress={() => setShowWebhookModal(true)} style={styles.linkBtn} accessibilityRole="button" accessibilityLabel="Aggiungi un'integrazione">
+            <Ionicons name="add-outline" size={24} color={colors.primaryText} />
+            <Text style={styles.linkText}>Aggiungi</Text>
           </TouchableOpacity>
         </View>
         {webhooks.map(w => (
-          <View key={w.id} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }}>
+          <View key={w.id} style={styles.listRow}>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13, color: colors.text }} numberOfLines={1}>{w.url}</Text>
-              <Text style={{ fontSize: 11, color: '#94a3b8' }}>{(w.events || []).join(', ')}</Text>
+              <Text style={styles.bodyText} numberOfLines={1}>{w.url}</Text>
+              <Text style={styles.help}>{(w.events || []).join(', ')}</Text>
             </View>
-            <TouchableOpacity onPress={() => handleDeleteWebhook(w.id)}>
-              <Text style={{ fontSize: 18, color: '#ef4444' }}>🗑</Text>
+            <TouchableOpacity onPress={() => handleDeleteWebhook(w.id)} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Elimina l'integrazione">
+              <Ionicons name="trash-outline" size={24} color={colors.dangerText} />
             </TouchableOpacity>
           </View>
         ))}
-        {webhooks.length === 0 && <Text style={{ color: '#94a3b8', fontSize: 13 }}>Nessun webhook configurato</Text>}
+        {webhooks.length === 0 && <Text style={styles.help}>Nessuna integrazione configurata</Text>}
       </View>}
 
       {/* Punto 43: Add Webhook Modal */}
-      <Modal visible={showWebhookModal} transparent animationType="fade">
+      <Modal visible={showWebhookModal} transparent animationType="fade" onRequestClose={() => setShowWebhookModal(false)}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modal, { backgroundColor: colors.modalBg }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Nuovo Webhook</Text>
-            <TextInput style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} placeholder="https://hooks.zapier.com/..." value={newWebhookUrl} onChangeText={setNewWebhookUrl} autoCapitalize="none" keyboardType="url" placeholderTextColor={colors.textTertiary} />
-            <Text style={{ marginBottom: 8, fontWeight: '600', color: colors.text }}>Eventi:</Text>
-            {['quote_approved', 'quote_sent', 'client_created'].map(evt => (
-              <TouchableOpacity key={evt} onPress={() => {
-                setNewWebhookEvents(prev => prev.includes(evt) ? prev.filter(e => e !== evt) : [...prev, evt]);
-              }} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-                <Text style={{ fontSize: 18, marginRight: 8 }}>{newWebhookEvents.includes(evt) ? '☑️' : '⬜'}</Text>
-                <Text style={{ color: colors.text }}>{evt}</Text>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Nuova integrazione</Text>
+            <Text style={styles.label}>Indirizzo</Text>
+            <TextInput style={styles.input} accessibilityLabel="Indirizzo dell'integrazione" placeholder="https://hooks.zapier.com/..." value={newWebhookUrl} onChangeText={setNewWebhookUrl} autoCapitalize="none" keyboardType="url" placeholderTextColor={colors.textTertiary} />
+            <Text style={styles.label}>Eventi</Text>
+            {['quote_approved', 'quote_sent', 'client_created'].map(evt => {
+              const checked = newWebhookEvents.includes(evt);
+              return (
+                <TouchableOpacity key={evt} onPress={() => {
+                  setNewWebhookEvents(prev => prev.includes(evt) ? prev.filter(e => e !== evt) : [...prev, evt]);
+                }} style={styles.checkRow} accessibilityRole="checkbox" accessibilityState={{ checked }}>
+                  <View style={[styles.checkBox, checked ? styles.checkBoxOn : null]}>
+                    {checked ? <Ionicons name="checkmark" size={20} color={colors.onPrimary} /> : null}
+                  </View>
+                  <Text style={styles.bodyText}>{evt}</Text>
+                </TouchableOpacity>
+              );
+            })}
             <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
-              <TouchableOpacity style={[styles.btn, styles.btnSecondary, { flex: 1 }]} onPress={() => setShowWebhookModal(false)}>
-                <Text style={styles.btnText}>Annulla</Text>
+              <TouchableOpacity style={[styles.btnSecondaryOutline, { flex: 1 }]} onPress={() => setShowWebhookModal(false)} accessibilityRole="button">
+                <Text style={styles.btnSecondaryOutlineText}>Annulla</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.btn, { flex: 1 }]} onPress={handleAddWebhook}>
+              <TouchableOpacity style={[styles.btn, { flex: 1 }]} onPress={handleAddWebhook} accessibilityRole="button">
                 <Text style={styles.btnText}>Salva</Text>
               </TouchableOpacity>
             </View>
@@ -704,57 +745,76 @@ export default function ProfileScreen() {
       </Modal>
 
       {/* Punto 27: GDPR Data Export & Delete */}
-      <View style={[styles.sectionBox, { marginTop: 16, backgroundColor: '#fef2f2', borderColor: '#fecaca' }]}>
-        <Text style={{ fontWeight: '700', fontSize: 16, color: '#991b1b', marginBottom: 12 }}>🔒 Privacy & GDPR</Text>
-        <TouchableOpacity style={[styles.btn, { backgroundColor: '#1e40af', marginBottom: 12 }]} onPress={handleExportMyData}>
-          <Text style={styles.btnText}>📥 Esporta i miei dati</Text>
+      <View style={[styles.sectionBox, { marginTop: 16 }]}>
+        <Text style={styles.sectionTitle}>Privacy e dati personali</Text>
+        <TouchableOpacity style={[styles.btnSecondaryOutline, { marginBottom: 24 }]} onPress={handleExportMyData} accessibilityRole="button">
+          <Ionicons name="download-outline" size={24} color={colors.text} />
+          <Text style={styles.btnSecondaryOutlineText}>Esporta i miei dati</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.btn, styles.btnDanger]} onPress={handleDeleteAccount}>
-          <Text style={styles.btnText}>🗑 Elimina account</Text>
+        <TouchableOpacity style={styles.btnDangerOutline} onPress={handleDeleteAccount} accessibilityRole="button">
+          <Ionicons name="trash-outline" size={24} color={colors.dangerText} />
+          <Text style={styles.btnDangerOutlineText}>Elimina l'account</Text>
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={[styles.btn, styles.btnSubscription]} onPress={() => (navigation as any).navigate('Subscription')}>
-        <Text style={styles.btnText}>{t('navigation.subscription') || 'Abbonamento'}</Text>
+      <TouchableOpacity style={[styles.btnSecondaryOutline, { marginBottom: 12 }]} onPress={() => (navigation as any).navigate('Subscription')} accessibilityRole="button">
+        <Ionicons name="id-card-outline" size={24} color={colors.text} />
+        <Text style={styles.btnSecondaryOutlineText}>{t('navigation.subscription') || 'Abbonamento'}</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={[styles.btn, saving && styles.disabled]} onPress={handleSave} disabled={saving}>
+      <TouchableOpacity style={[styles.btn, { minHeight: 64 }, saving && styles.disabled]} onPress={handleSave} disabled={saving} accessibilityRole="button" accessibilityState={{ disabled: saving, busy: saving }}>
         <Text style={styles.btnText}>{saving ? t('buttons.loading') : t('buttons.save')}</Text>
       </TouchableOpacity>
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f1f5f9', padding: 24 },
-  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 24 },
-  label: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
-  input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 16, marginBottom: 16, fontSize: 16, justifyContent: 'center' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modal: { backgroundColor: '#fff', borderRadius: 16, padding: 24, maxHeight: '80%' },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
-  langItem: { padding: 12, borderRadius: 8, marginBottom: 8, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
-  langItemSelected: { backgroundColor: '#c2410c' },
-  langItemSelectedText: { color: '#fff' },
-  templateSection: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 16, marginBottom: 20 },
-  templateInfo: { fontSize: 14, color: '#059669', marginBottom: 12, fontWeight: '600' },
-  templateButtons: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-  templateHint: { fontSize: 12, color: '#64748b', marginTop: 8, lineHeight: 18 },
-  btn: { backgroundColor: '#c2410c', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  btnSubscription: { backgroundColor: '#0f172a', marginBottom: 12 },
-  btnSecondary: { backgroundColor: '#64748b', flex: 1 },
-  btnDanger: { backgroundColor: '#ef4444', flex: 1 },
-  btnOutline: { backgroundColor: 'transparent', borderWidth: 2, borderColor: '#c2410c' },
-  btnOutlineText: { color: '#c2410c', fontWeight: '600', fontSize: 16 },
-  btnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  disabled: { opacity: 0.6 },
-  inputError: { borderColor: '#ef4444', borderWidth: 2 },
-  errorText: { color: '#ef4444', fontSize: 12, marginTop: -12, marginBottom: 12, marginLeft: 4 },
-  fiscalSection: { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0', borderRadius: 12, padding: 16, marginBottom: 20 },
-  sectionTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 12, color: '#166534' },
-  fiscalHint: { fontSize: 12, color: '#059669', fontStyle: 'italic', marginTop: 4 },
-  timeSavedWidget: { backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', borderRadius: 12, padding: 16, marginBottom: 20 },
-  timeSavedTitle: { fontSize: 16, fontWeight: 'bold', color: '#1e40af', marginBottom: 4 },
-  timeSavedValue: { fontSize: 14, color: '#1e3a5f' },
-  sectionBox: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 16, marginBottom: 16 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 16, marginTop: 16, marginBottom: 0 },
+/**
+ * Stili dal tema (lotto 2): niente colori scritti a mano, così etichette e campi
+ * restano leggibili anche al buio. Testo mai sotto 16pt, campi alti almeno 56.
+ */
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.background },
+  content: { padding: 16, paddingBottom: 48 },
+  title: { fontSize: 24, fontWeight: '800', marginBottom: 24, color: c.text },
+  label: { fontSize: 16, fontWeight: '600', marginBottom: 6, color: c.text },
+  help: { fontSize: 16, color: c.textSecondary, marginTop: -8, marginBottom: 16, lineHeight: 22 },
+  bodyText: { fontSize: 18, color: c.text, lineHeight: 24 },
+  input: { backgroundColor: c.inputBg, borderWidth: 2, borderColor: c.inputBorder, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, minHeight: 56, marginBottom: 16, fontSize: 18, color: c.text, justifyContent: 'center' },
+  inputReadonly: { backgroundColor: c.surfaceSecondary, borderColor: c.border },
+  inputText: { fontSize: 18, color: c.text },
+  inputError: { borderColor: c.dangerText, borderWidth: 3 },
+  errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: -8, marginBottom: 16 },
+  errorText: { color: c.dangerText, fontSize: 16, flex: 1 },
+  segment: { flex: 1, minHeight: 56, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6, borderWidth: 2, borderColor: c.inputBorder, backgroundColor: c.surface, paddingHorizontal: 4 },
+  segmentActive: { backgroundColor: c.text, borderColor: c.text },
+  segmentText: { color: c.text, fontWeight: '600', fontSize: 16 },
+  modalOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'flex-end' },
+  modal: { backgroundColor: c.modalBg, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, paddingBottom: 32, maxHeight: '80%' },
+  modalTitle: { fontSize: 22, fontWeight: '700', marginBottom: 16, color: c.text },
+  langItem: { padding: 12, minHeight: 48, justifyContent: 'center', borderRadius: 8, marginBottom: 8, borderBottomWidth: 1, borderBottomColor: c.border },
+  langItemSelected: { backgroundColor: c.mark },
+  langItemSelectedText: { color: c.primaryStrong, fontWeight: '700' },
+  templateInfo: { fontSize: 16, color: c.text, fontWeight: '600', flex: 1 },
+  templateButtons: { flexDirection: 'row', gap: 16, marginBottom: 16 },
+  btn: { backgroundColor: c.primary, minHeight: 56, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  btnText: { color: c.onPrimary, fontWeight: '700', fontSize: 18 },
+  btnSecondaryOutline: { minHeight: 56, borderRadius: 12, borderWidth: 2, borderColor: c.text, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 12 },
+  btnSecondaryOutlineText: { color: c.text, fontWeight: '700', fontSize: 18, flexShrink: 1, textAlign: 'center' },
+  btnDangerOutline: { minHeight: 56, borderRadius: 12, borderWidth: 2, borderColor: c.dangerText, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 12 },
+  btnDangerOutlineText: { color: c.dangerText, fontWeight: '700', fontSize: 18 },
+  linkBtn: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start' },
+  linkText: { color: c.primaryText, fontWeight: '700', fontSize: 18, textDecorationLine: 'underline' },
+  iconBtn: { minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
+  listRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, gap: 8, borderBottomWidth: 1, borderBottomColor: c.border },
+  chip: { flex: 1, minHeight: 48, paddingHorizontal: 4, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: c.inputBorder, backgroundColor: c.surface },
+  chipActive: { backgroundColor: c.text, borderColor: c.text },
+  chipText: { color: c.text, fontSize: 16, fontWeight: '600' },
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56 },
+  checkBox: { width: 28, height: 28, borderRadius: 6, borderWidth: 2, borderColor: c.inputBorder, alignItems: 'center', justifyContent: 'center' },
+  checkBoxOn: { backgroundColor: c.primary, borderColor: c.primary },
+  disabled: { opacity: 0.45 },
+  sectionTitle: { fontSize: 20, fontWeight: '700', marginBottom: 12, color: c.text },
+  sectionBox: { backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: 12, padding: 16, marginBottom: 16 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, marginTop: 16, marginBottom: 0 },
+  sectionHeaderText: { flex: 1, fontWeight: '600', fontSize: 18, color: c.text },
 });
