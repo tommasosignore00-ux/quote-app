@@ -32,7 +32,7 @@ import { triggerHaptic } from '../lib/haptics';
 
 type Cliente = { id: string; name: string };
 type Lavoro = { id: string; title: string; cliente_id: string; status?: string | null; clienti?: any };
-type Costo = { id: string; description: string; quantity: number; unit_price: number; tax_rate: number };
+type Costo = { id: string; description: string; quantity: number; unit_price: number; tax_rate: number; unit?: string | null };
 
 export default function DashboardScreen() {
   const { t, i18n } = useTranslation();
@@ -177,7 +177,7 @@ export default function DashboardScreen() {
     setLavori((l || []).filter((job: Lavoro) => job.status !== 'approved'));
 
     if (selectedLavoro) {
-      const { data: costiData, error: costiErr } = await supabase.from('preventivi_dettaglio').select('id, description, quantity, unit_price, tax_rate').eq('lavoro_id', selectedLavoro.id);
+      const { data: costiData, error: costiErr } = await supabase.from('preventivi_dettaglio').select('id, description, quantity, unit_price, tax_rate, unit').eq('lavoro_id', selectedLavoro.id);
       if (costiErr) console.warn('preventivi_dettaglio error', costiErr);
       setCosti(costiData || []);
     }
@@ -699,7 +699,8 @@ export default function DashboardScreen() {
       const quantity = parseFloat(newCostoQty) || 1;
       let unitPrice = parseFloat(newCostoPrice) || 0;
       let description = newCostoDesc;
-      let taxRate = profileMaterialMarkup;
+      // A typed price is already the final one: no markup on top.
+      let taxRate = 0;
       let listinoItemId = null;
 
       if (matchedItem) {
@@ -928,6 +929,68 @@ export default function DashboardScreen() {
     }
   };
 
+  /* Editing a line: purchase price and markup stay private, the client sees the final price. */
+  const [editCosto, setEditCosto] = useState<Costo | null>(null);
+  const [editDesc, setEditDesc] = useState('');
+  const [editQty, setEditQty] = useState('');
+  const [editUnit, setEditUnit] = useState('');
+  const [editCost, setEditCost] = useState('');
+  const [editMarkup, setEditMarkup] = useState('');
+  const [editFinal, setEditFinal] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const num = (value: string) => {
+    const n = Number(String(value).replace(',', '.'));
+    return Number.isFinite(n) ? n : 0;
+  };
+  const r2 = (value: number) => String(Math.round(value * 100) / 100).replace('.', ',');
+  const openEditCosto = (item: Costo) => {
+    setEditCosto(item);
+    setEditDesc(item.description);
+    setEditQty(r2(Number(item.quantity)));
+    setEditUnit(item.unit || '');
+    setEditCost(r2(Number(item.unit_price)));
+    setEditMarkup(r2(Number(item.tax_rate) || 0));
+    setEditFinal(r2(Number(item.unit_price) * (1 + (Number(item.tax_rate) || 0) / 100)));
+  };
+  const changeEditCost = (value: string) => {
+    setEditCost(value);
+    setEditFinal(r2(num(value) * (1 + num(editMarkup) / 100)));
+  };
+  const changeEditMarkup = (value: string) => {
+    setEditMarkup(value);
+    setEditFinal(r2(num(editCost) * (1 + num(value) / 100)));
+  };
+  const changeEditFinal = (value: string) => {
+    setEditFinal(value);
+    if (num(editCost) > 0) setEditMarkup(r2((num(value) / num(editCost) - 1) * 100));
+    else setEditCost(value);
+  };
+  const saveEditCosto = async () => {
+    if (!editCosto) return;
+    if (!editDesc.trim()) {
+      Alert.alert(t('messages.error'), 'Scrivi la descrizione della voce');
+      return;
+    }
+    setSavingEdit(true);
+    const purchase = num(editCost);
+    const changes = {
+      description: editDesc.trim(),
+      quantity: num(editQty),
+      unit: editUnit.trim() || null,
+      unit_price: purchase > 0 ? purchase : num(editFinal),
+      tax_rate: purchase > 0 ? num(editMarkup) : 0,
+    };
+    const { error } = await supabase.from('preventivi_dettaglio').update(changes).eq('id', editCosto.id);
+    setSavingEdit(false);
+    if (error) {
+      Alert.alert(t('messages.error'), 'Modifica non salvata');
+      return;
+    }
+    setCosti((prev) => prev.map((c) => (c.id === editCosto.id ? { ...c, ...changes } : c)));
+    triggerHaptic('aiSuccess');
+    setEditCosto(null);
+  };
+
   const handleDeleteCosto = async (costoId: string) => {
     Alert.alert(
       t('actions.deleteConfirm'),
@@ -1102,10 +1165,15 @@ export default function DashboardScreen() {
           </View>
           {costi.map((item) => (
             <View key={item.id} style={styles.costoRowContainer}>
-              <View style={[styles.costoRow, { borderBottomColor: colors.border }]}>
+              <TouchableOpacity
+                onPress={() => openEditCosto(item)}
+                accessibilityRole="button"
+                accessibilityLabel={`Modifica ${item.description}`}
+                style={[styles.costoRow, { borderBottomColor: colors.border }]}
+              >
                 <Text style={[styles.costoDesc, { color: colors.text }]}>{item.description}</Text>
                 <Text style={[styles.costoPrice, { color: colors.primary }]}>€{(item.quantity * item.unit_price * (1 + (Number(item.tax_rate) || 0) / 100)).toFixed(2)}</Text>
-              </View>
+              </TouchableOpacity>
               <TouchableOpacity onPress={() => handleDeleteCosto(item.id)} style={styles.deleteBtnContainer}>
                 <Text style={styles.deleteBtn}>Elimina</Text>
               </TouchableOpacity>
@@ -1191,13 +1259,58 @@ export default function DashboardScreen() {
 
               <TextInput style={styles.input} placeholder={t('dashboard.quantity')} value={newCostoQty} onChangeText={setNewCostoQty} keyboardType="decimal-pad" />
               <TextInput style={styles.input} placeholder="Unità di misura (pz, m, kg, h...)" value={newCostoUnit} onChangeText={setNewCostoUnit} maxLength={20} autoCapitalize="none" />
-              <TextInput style={styles.input} placeholder={t('dashboard.unitPrice')} value={newCostoPrice} onChangeText={setNewCostoPrice} keyboardType="decimal-pad" />
+              <TextInput style={styles.input} placeholder="Prezzo al cliente (se non è a listino)" value={newCostoPrice} onChangeText={setNewCostoPrice} keyboardType="decimal-pad" />
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 <TouchableOpacity style={styles.btn} onPress={() => { setShowCostoModal(false); setShowListinoSelector(false); setSearchResults([]); setMatchedItem(null); }}>
                   <Text style={styles.btnText}>{t('buttons.cancel')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.btn} onPress={handleCreateCosto} disabled={creatingCosto}>
                   <Text style={styles.btnText}>{creatingCosto ? t('buttons.loading') : t('buttons.save')}</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={Boolean(editCosto)} transparent animationType="fade" onRequestClose={() => setEditCosto(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+          <View style={[styles.modal, { maxHeight: '90%', backgroundColor: colors.modalBg }]}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Modifica voce</Text>
+              <Text style={[styles.editLabel, { color: colors.text }]}>Descrizione</Text>
+              <TextInput style={[styles.editInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} value={editDesc} onChangeText={setEditDesc} multiline accessibilityLabel="Descrizione" />
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.editLabel, { color: colors.text }]}>Quantità</Text>
+                  <TextInput style={[styles.editInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} value={editQty} onChangeText={setEditQty} keyboardType="decimal-pad" accessibilityLabel="Quantità" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.editLabel, { color: colors.text }]}>Unità</Text>
+                  <TextInput style={[styles.editInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} value={editUnit} onChangeText={setEditUnit} placeholder="pz, m, h…" placeholderTextColor={colors.textTertiary} autoCapitalize="none" maxLength={20} accessibilityLabel="Unità di misura" />
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.editLabel, { color: colors.text }]}>Lo paghi (€)</Text>
+                  <TextInput style={[styles.editInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} value={editCost} onChangeText={changeEditCost} keyboardType="decimal-pad" accessibilityLabel="Prezzo d'acquisto" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.editLabel, { color: colors.text }]}>Ricarico (%)</Text>
+                  <TextInput style={[styles.editInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} value={editMarkup} onChangeText={changeEditMarkup} keyboardType="decimal-pad" accessibilityLabel="Ricarico percentuale" />
+                </View>
+              </View>
+              <Text style={[styles.editLabel, { color: colors.text }]}>Prezzo al cliente (€)</Text>
+              <TextInput style={[styles.editInput, styles.editFinal, { backgroundColor: colors.inputBg, borderColor: colors.primary, color: colors.text }]} value={editFinal} onChangeText={changeEditFinal} keyboardType="decimal-pad" accessibilityLabel="Prezzo al cliente" />
+              <Text style={[styles.editHint, { color: colors.textSecondary }]}>
+                Il cliente vede solo il prezzo al cliente. Totale riga: € {(num(editQty) * num(editFinal)).toFixed(2).replace('.', ',')}
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+                <TouchableOpacity style={[styles.editButton, { borderColor: colors.border }]} onPress={() => setEditCosto(null)} accessibilityRole="button">
+                  <Text style={[styles.editButtonText, { color: colors.text }]}>{t('buttons.cancel')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.editButton, styles.editButtonPrimary]} onPress={saveEditCosto} disabled={savingEdit} accessibilityRole="button">
+                  <Text style={[styles.editButtonText, { color: '#fff' }]}>{savingEdit ? t('buttons.loading') : t('buttons.save')}</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -1282,6 +1395,13 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 },
   modal: { backgroundColor: '#fff', borderRadius: 16, padding: 24 },
   modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
+  editLabel: { fontSize: 16, fontWeight: '600', marginBottom: 6 },
+  editInput: { borderWidth: 2, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, minHeight: 56, fontSize: 18, marginBottom: 14 },
+  editFinal: { fontSize: 22, fontWeight: '700' },
+  editHint: { fontSize: 16, marginBottom: 8 },
+  editButton: { flex: 1, minHeight: 64, borderRadius: 14, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  editButtonPrimary: { backgroundColor: '#c2410c', borderColor: '#c2410c' },
+  editButtonText: { fontSize: 18, fontWeight: '700' },
   input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 12, marginBottom: 12 },
   btn: { backgroundColor: '#c2410c', paddingVertical: 12, borderRadius: 12, alignItems: 'center', flex: 1 },
   btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },

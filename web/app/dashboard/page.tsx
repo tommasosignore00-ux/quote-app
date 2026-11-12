@@ -36,6 +36,7 @@ type Costo = {
   quantity: number;
   unit_price: number;
   tax_rate?: number;
+  unit?: string | null;
 };
 type ListinoMatchItem = {
   id: string;
@@ -135,7 +136,7 @@ export default function DashboardPage() {
     if (selectedLavoro) {
       const { data: costiData } = await supabase
         .from('preventivi_dettaglio')
-        .select('id, description, quantity, unit_price, tax_rate')
+        .select('id, description, quantity, unit_price, tax_rate, unit')
         .eq('lavoro_id', selectedLavoro.id);
       setCosti(costiData || []);
     }
@@ -154,9 +155,11 @@ export default function DashboardPage() {
     fetchData();
   }, [fetchData]);
 
+  /** Markup applied to a price list item: its own, else the profile's. */
+  const listinoMarkup = (item: { markup_percent?: number }) =>
+    Number(item.markup_percent) || profileMaterialMarkup;
   const listinoSalePrice = (item: { unit_price: number; markup_percent?: number }) =>
-    Number(item.unit_price) *
-    (1 + (Number(item.markup_percent) || profileMaterialMarkup) / 100);
+    Number(item.unit_price) * (1 + listinoMarkup(item) / 100);
 
   // Auto-search listino when typing cost description
   useEffect(() => {
@@ -276,15 +279,15 @@ export default function DashboardPage() {
 
       // Use matched item if available
       if (matchedListinoItem) {
-        const price = listinoSalePrice(matchedListinoItem);
         const { data: created, error } = await supabase
           .from('preventivi_dettaglio')
           .insert({
             lavoro_id: selectedLavoro.id,
             description: matchedListinoItem.description,
             quantity,
-            unit_price: price,
-            tax_rate: profileVatPercent,
+            // Purchase price and markup: the client sees only their product.
+            unit_price: Number(matchedListinoItem.unit_price),
+            tax_rate: listinoMarkup(matchedListinoItem),
             listino_item_id: matchedListinoItem.id,
             // Empty: the database copies the unit of the price list item.
             unit: newCostoUnit.trim() || null,
@@ -312,7 +315,8 @@ export default function DashboardPage() {
           description: newCostoDesc,
           quantity,
           unit_price: unitPrice,
-          tax_rate: profileVatPercent,
+          // A typed price is already the final one: no markup on top.
+          tax_rate: 0,
           unit: newCostoUnit.trim() || null,
         })
         .select('*');
@@ -372,8 +376,9 @@ export default function DashboardPage() {
             id: costo.id,
             description: costo.description,
             quantity: costo.quantity,
-            unitPrice: costo.unit_price,
-            vatRate: costo.tax_rate,
+            unitPrice:
+              Number(costo.unit_price) * (1 + (Number(costo.tax_rate) || 0) / 100),
+            vatRate: profileVatPercent,
           })),
         }
       : null,
@@ -504,8 +509,9 @@ export default function DashboardPage() {
             lavoro_id: selectedLavoro.id,
             description: match?.description || item.spoken,
             quantity: parseItalianNumber(item.quantity) as number,
-            unit_price: ownPrice ?? (match ? listinoSalePrice(match) : 0),
-            tax_rate: profileVatPercent,
+            // A price said or typed is final; a price list price gets its markup.
+            unit_price: ownPrice ?? (match ? Number(match.unit_price) : 0),
+            tax_rate: ownPrice !== null ? 0 : match ? listinoMarkup(match) : 0,
             listino_item_id: match?.id || null,
             // Empty: the database copies the unit of the price list item.
             unit: item.unit.trim() || null,
@@ -652,7 +658,6 @@ export default function DashboardPage() {
                 costi={costi}
                 lavoroId={selectedLavoro.id}
                 onUpdate={fetchData}
-                defaultVatPercent={profileVatPercent}
               />
             </div>
           )}

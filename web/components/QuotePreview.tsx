@@ -38,6 +38,9 @@ function renderForCapture(html: string): Promise<HTMLIFrameElement> {
   });
 }
 
+/** Common Italian VAT rates; any other value can be typed. */
+const VAT_PRESETS = ['22', '10', '5', '4', '0'];
+
 export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
   const { t } = useTranslation();
   const [showPreview, setShowPreview] = useState(false);
@@ -51,15 +54,26 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
     'classic' | 'minimal' | 'professional' | 'custom'
   >('classic');
   const [hasCustomTemplate, setHasCustomTemplate] = useState(false);
+  /** VAT chosen for this job's quote; '' = the profile's rate. */
+  const [vatChoice, setVatChoice] = useState('');
+  const [customVat, setCustomVat] = useState('');
 
   useEffect(() => {
     const loadRevision = async () => {
       const { data } = await supabase
         .from('lavori')
-        .select('current_revision')
+        .select('current_revision, vat_percent')
         .eq('id', lavoroId)
         .single();
       if (data?.current_revision) setRevision(data.current_revision);
+      if (data?.vat_percent !== null && data?.vat_percent !== undefined) {
+        const rate = String(Number(data.vat_percent));
+        if (VAT_PRESETS.includes(rate)) setVatChoice(rate);
+        else {
+          setVatChoice('custom');
+          setCustomVat(rate);
+        }
+      }
     };
     loadRevision();
   }, [lavoroId]);
@@ -79,6 +93,27 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
     };
     checkCustomTemplate();
   }, []);
+
+  /** The VAT rate chosen for this quote, or null for the profile's. */
+  const chosenVat = (): number | null => {
+    if (!vatChoice) return null;
+    const value = Number(
+      (vatChoice === 'custom' ? customVat : vatChoice).replace(',', '.')
+    );
+    return Number.isFinite(value) && value >= 0 && value <= 100 ? value : null;
+  };
+
+  /** Saved on the job, so the next revision keeps the same rate. */
+  const saveVat = async (choice: string, custom: string) => {
+    const raw = choice === 'custom' ? custom : choice;
+    const value = raw ? Number(raw.replace(',', '.')) : null;
+    if (value !== null && (!Number.isFinite(value) || value < 0 || value > 100)) return;
+    const { error } = await supabase
+      .from('lavori')
+      .update({ vat_percent: value })
+      .eq('id', lavoroId);
+    if (error) toast.error('Aliquota IVA non salvata');
+  };
 
   const generatePreview = async () => {
     setLoading(true);
@@ -125,10 +160,11 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
         items: (dettaglio || []).map((d: any) => ({
           description: d.description,
           quantity: Number(d.quantity),
-          unit_price: Number(d.unit_price),
+          // unit_price is the purchase price; the client sees it with the markup.
+          unit_price: Number(d.unit_price) * (1 + (Number(d.tax_rate) || 0) / 100),
           ...quoteLineExtras(d),
         })),
-        vat_percent: resolveVatPercent(profile?.vat_percent),
+        vat_percent: chosenVat() ?? resolveVatPercent(profile?.vat_percent),
         companyName: profile?.company_name,
         vatNumber: profile?.vat_number,
         fiscalCode: profile?.fiscal_code,
@@ -285,6 +321,37 @@ export default function QuotePreview({ lavoroId, lavoro }: QuotePreviewProps) {
         <option value="professional">Template: Professionale</option>
         {hasCustomTemplate && <option value="custom">Template: Personalizzato</option>}
       </select>
+      <label className="flex items-center gap-2 text-sm">
+        <span>IVA</span>
+        <select
+          value={vatChoice}
+          onChange={(e) => {
+            setVatChoice(e.target.value);
+            if (e.target.value !== 'custom') saveVat(e.target.value, '');
+          }}
+          className="px-3 py-2 border rounded-lg text-sm"
+          aria-label="Aliquota IVA del preventivo"
+        >
+          <option value="">Del profilo</option>
+          {VAT_PRESETS.map((rate) => (
+            <option key={rate} value={rate}>
+              {rate}%
+            </option>
+          ))}
+          <option value="custom">Altra…</option>
+        </select>
+        {vatChoice === 'custom' ? (
+          <input
+            inputMode="decimal"
+            value={customVat}
+            onChange={(e) => setCustomVat(e.target.value)}
+            onBlur={() => saveVat('custom', customVat)}
+            placeholder="%"
+            aria-label="Aliquota IVA personalizzata"
+            className="w-16 px-2 py-2 border rounded-lg text-sm"
+          />
+        ) : null}
+      </label>
       <button onClick={generatePreview} disabled={loading} className="btn-primary">
         {loading ? '...' : t('main.generateQuote')}
       </button>

@@ -739,7 +739,16 @@ const APPROVED_LABEL: Record<string, string> = {
 export const ACCEPTANCE_LINK_MARKER = '<!--QUOTE_ACCEPTANCE_LINK-->';
 export const ACCEPTANCE_URL_MARKER = 'https://accettazione.invalid/preventivo';
 
-function processCustomTemplate(template: string, data: QuoteData): string {
+function processCustomTemplate(template: string, rawData: QuoteData): string {
+  // The client sees only final prices: the markup goes inside each unit price.
+  const data: QuoteData = {
+    ...rawData,
+    items: rawData.items.map((item) => ({
+      ...item,
+      unit_price: Number(item.unit_price) * (1 + Number(item.material_markup) / 100),
+      material_markup: 0,
+    })),
+  };
   const cc = data.countryCode?.toUpperCase() || 'IT';
   const currency = CURRENCIES[cc] || CURRENCIES.default;
   const taxLabel = TAX_LABELS[cc] || TAX_LABELS.default;
@@ -758,7 +767,6 @@ function processCustomTemplate(template: string, data: QuoteData): string {
         <td>${item.description}</td>
         <td>${item.quantity}</td>
         <td>${formatMoney(currency, Number(item.unit_price), cc)}</td>
-        <td>${item.material_markup}%</td>
         <td>${formatMoney(currency, rowWithMarkup, cc)}</td>
       </tr>
     `.trim();

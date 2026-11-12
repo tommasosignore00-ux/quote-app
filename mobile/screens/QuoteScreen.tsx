@@ -18,6 +18,9 @@ import { exportAsJSON, exportAsXML, exportAsCSV } from '../lib/exportFormats';
 import { roundForCountry } from '../lib/roundingUtils';
 import { useTheme } from '../lib/darkMode';
 import { trackTimeSaving } from '../lib/timeSavings';
+
+/** Common Italian VAT rates; any other value can be typed. */
+const VAT_PRESETS = ['22', '10', '5', '4', '0'];
 import SignaturePad from '../components/SignaturePad';
 
 type Lavoro = { id: string; title: string; clienti?: { name?: string; email?: string } };
@@ -34,6 +37,9 @@ export default function QuoteScreen() {
   const [approved, setApproved] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<'classic' | 'minimal' | 'professional' | 'custom'>('classic');
+  /** VAT chosen for this job's quote; '' = the profile's rate. Saved on the job. */
+  const [vatChoice, setVatChoice] = useState('');
+  const [customVat, setCustomVat] = useState('');
   const [hasCustomTemplate, setHasCustomTemplate] = useState(false);
   const [revision, setRevision] = useState(1);
   const [showEmailModal, setShowEmailModal] = useState(false);
@@ -57,8 +63,16 @@ export default function QuoteScreen() {
   useEffect(() => {
     const loadRev = async () => {
       if (!lavoro) return;
-      const { data } = await supabase.from('lavori').select('current_revision').eq('id', lavoro.id).single();
+      const { data } = await supabase.from('lavori').select('current_revision, vat_percent').eq('id', lavoro.id).single();
       if (data?.current_revision) setRevision(data.current_revision);
+      if (data?.vat_percent !== null && data?.vat_percent !== undefined) {
+        const rate = String(Number(data.vat_percent));
+        if (VAT_PRESETS.includes(rate)) setVatChoice(rate);
+        else {
+          setVatChoice('custom');
+          setCustomVat(rate);
+        }
+      }
     };
     loadRev();
   }, [lavoro?.id]);
@@ -109,7 +123,7 @@ export default function QuoteScreen() {
           unit_price: Number(d.unit_price),
           tax_rate: Number(d.tax_rate || 0),
         })),
-        resolveVatPercent(profile?.vat_percent)
+        chosenVat() ?? resolveVatPercent(profile?.vat_percent)
       );
 
       if (!validationResult.valid) {
@@ -149,10 +163,11 @@ export default function QuoteScreen() {
           description: d.description,
           quantity: Number(d.quantity),
           unit_price: roundForCountry(Number(d.unit_price), countryCode),
-          material_markup: Number(d.tax_rate || profile?.material_markup || 0),
+          // tax_rate is the line's own markup; 0 means the price is already final.
+          material_markup: Number(d.tax_rate) || 0,
           ...quoteLineExtras(d),
         })),
-        vat_percent: resolveVatPercent(profile?.vat_percent),
+        vat_percent: chosenVat() ?? resolveVatPercent(profile?.vat_percent),
         companyName: profile?.company_name,
         vatNumber: profile?.vat_number,
         fiscalCode: profile?.fiscal_code,
@@ -287,12 +302,30 @@ export default function QuoteScreen() {
     }
   };
 
+  const chosenVat = (): number | null => {
+    if (!vatChoice) return null;
+    const value = Number((vatChoice === 'custom' ? customVat : vatChoice).replace(',', '.'));
+    return Number.isFinite(value) && value >= 0 && value <= 100 ? value : null;
+  };
+
+  const saveVat = async (choice: string, custom: string) => {
+    if (!lavoro) return;
+    const raw = choice === 'custom' ? custom : choice;
+    const value = raw ? Number(raw.replace(',', '.')) : null;
+    if (value !== null && (!Number.isFinite(value) || value < 0 || value > 100)) {
+      Alert.alert('Aliquota non valida', 'Scrivi un numero da 0 a 100.');
+      return;
+    }
+    const { error } = await supabase.from('lavori').update({ vat_percent: value }).eq('id', lavoro.id);
+    if (error) Alert.alert(t('messages.error'), 'Aliquota IVA non salvata');
+  };
+
   if (!lavoro) return null;
 
   // Punto 46: Export helper
   const handleExport = async (format: 'json' | 'xml' | 'csv') => {
     if (!profileData || !dettaglioItems.length || !lavoro) return;
-    const vatPercent = resolveVatPercent(profileData?.vat_percent);
+    const vatPercent = chosenVat() ?? resolveVatPercent(profileData?.vat_percent);
     const items = dettaglioItems.map((d: any) => {
       const qty = Number(d.quantity);
       const price = Number(d.unit_price);
@@ -360,6 +393,39 @@ export default function QuoteScreen() {
             </TouchableOpacity>
           ))}
         </View>
+      </View>
+
+      <View style={styles.templateSelector}>
+        <Text style={[styles.vatLabel, { color: colors.text }]}>IVA del preventivo</Text>
+        <View style={styles.templateOptions}>
+          {[['', 'Del profilo'], ...VAT_PRESETS.map((rate) => [rate, `${rate}%`]), ['custom', 'Altra']].map(([value, label]) => (
+            <TouchableOpacity
+              key={value || 'profile'}
+              style={[styles.vatOption, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }, vatChoice === value && styles.templateOptionSelected]}
+              onPress={() => {
+                setVatChoice(value);
+                if (value !== 'custom') saveVat(value, '');
+              }}
+              accessibilityRole="button"
+              accessibilityState={{ selected: vatChoice === value }}
+              accessibilityLabel={value === 'custom' ? 'Altra aliquota IVA' : value ? `IVA ${label}` : "IVA del profilo"}
+            >
+              <Text style={[styles.vatOptionText, { color: colors.text }, vatChoice === value && styles.templateOptionTextSelected]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {vatChoice === 'custom' ? (
+          <TextInput
+            value={customVat}
+            onChangeText={setCustomVat}
+            onEndEditing={() => saveVat('custom', customVat)}
+            keyboardType="decimal-pad"
+            placeholder="Aliquota in %"
+            placeholderTextColor={colors.textSecondary}
+            accessibilityLabel="Aliquota IVA personalizzata"
+            style={[styles.vatInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surfaceSecondary }]}
+          />
+        ) : null}
       </View>
 
       {/* Punto 9: Firma Digitale - signature before approval */}
@@ -517,6 +583,10 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: 'bold', marginBottom: 4 },
   subtitle: { fontSize: 16, color: '#64748b', marginBottom: 20 },
   templateSelector: { marginBottom: 20 },
+  vatLabel: { fontSize: 18, fontWeight: '700', marginBottom: 10 },
+  vatOption: { minHeight: 56, minWidth: 64, paddingHorizontal: 16, borderRadius: 12, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  vatOptionText: { fontSize: 18, fontWeight: '700' },
+  vatInput: { marginTop: 10, minHeight: 56, borderWidth: 2, borderRadius: 12, paddingHorizontal: 16, fontSize: 20 },
   templateLabel: { fontSize: 14, fontWeight: '600', marginBottom: 10, color: '#374151' },
   templateOptions: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   templateOption: {
