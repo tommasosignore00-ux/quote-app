@@ -65,15 +65,6 @@ export default function DashboardScreen() {
   const newClientCountry = DEFAULT_COUNTRY_CODE;
   const newClientLanguage = DEFAULT_LANGUAGE;
 
-  // Punto 24: Currency selector for new job modal
-  const CURRENCY_OPTIONS = [
-    { code: 'EUR', symbol: '€', name: 'Euro' },
-    { code: 'USD', symbol: '$', name: 'US Dollar' },
-    { code: 'GBP', symbol: '£', name: 'British Pound' },
-    { code: 'CHF', symbol: 'CHF', name: 'Swiss Franc' },
-  ];
-  const [selectedCurrency, setSelectedCurrency] = useState('EUR');
-  const [exchangeRate, setExchangeRate] = useState(1.0);
 
   const [showCostoModal, setShowCostoModal] = useState(false);
   const [newCostoDesc, setNewCostoDesc] = useState('');
@@ -668,17 +659,6 @@ export default function DashboardScreen() {
     }
   };
 
-  // Punto 24: Fetch exchange rate for selected currency
-  const fetchExchangeRate = async (currency: string) => {
-    if (currency === 'EUR') { setExchangeRate(1.0); return; }
-    try {
-      const res = await fetch('https://api.exchangerate-api.com/v4/latest/EUR');
-      const data = await res.json();
-      setExchangeRate(data.rates?.[currency] || 1.0);
-    } catch {
-      setExchangeRate(1.0);
-    }
-  };
 
   const handleCreateJob = async () => {
     if (!newJobTitle.trim() || !jobClienteId) {
@@ -691,13 +671,11 @@ export default function DashboardScreen() {
       if (!user) throw new Error('Not authenticated');
       const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).single();
       if (!profile) throw new Error('Profile not found');
-      const { data: created, error } = await supabase.from('lavori').insert({ profile_id: profile.id, title: newJobTitle, cliente_id: jobClienteId, original_currency: selectedCurrency, exchange_rate: exchangeRate }).select('*');
+      const { data: created, error } = await supabase.from('lavori').insert({ profile_id: profile.id, title: newJobTitle, cliente_id: jobClienteId, original_currency: 'EUR', exchange_rate: 1 }).select('*');
       if (error) throw error;
       if (created && created[0]) setLavori((p) => [created[0], ...p]);
       setNewJobTitle('');
       setJobClienteId(null);
-      setSelectedCurrency('EUR');
-      setExchangeRate(1.0);
       setShowJobModal(false);
     } catch (err) {
       Alert.alert(t('messages.error'), (err as Error).message);
@@ -1070,6 +1048,15 @@ export default function DashboardScreen() {
           {canUseVoice && (
             <VoiceButton onResult={handleVoiceResult} context={voiceContext} size={220} onMicDenied={handleMicDenied} showLabel />
           )}
+          {/* No price, link or purchase button here: the app sells nothing (store rules). */}
+          {profileId && !canUseVoice ? (
+            <View style={[styles.voiceOffBox, { backgroundColor: colors.card, borderColor: colors.border }]} accessibilityRole="text">
+              <Text style={[styles.voiceOffTitle, { color: colors.text }]}>Dettatura non attiva</Text>
+              <Text style={[styles.voiceOffText, { color: colors.textSecondary }]}>
+                La dettatura è attiva con l&apos;abbonamento o la prova gratuita. Lo stato del tuo account è nella pagina Abbonamento del Profilo.
+              </Text>
+            </View>
+          ) : null}
         </View>
       )}
 
@@ -1156,18 +1143,6 @@ export default function DashboardScreen() {
                 <Text style={jobClienteId === item.id ? styles.listinoSelectedText : undefined}>{item.name}</Text>
               </TouchableOpacity>
             )} />
-            {/* Punto 24: Currency selector */}
-            <Text style={{ marginTop: 12, marginBottom: 6, color: colors.textSecondary, fontSize: 13 }}>Valuta / Currency</Text>
-            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
-              {CURRENCY_OPTIONS.map(cur => (
-                <TouchableOpacity key={cur.code} onPress={() => { setSelectedCurrency(cur.code); fetchExchangeRate(cur.code); }} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: selectedCurrency === cur.code ? '#c2410c' : '#f1f5f9' }}>
-                  <Text style={{ color: selectedCurrency === cur.code ? '#fff' : '#374151', fontWeight: selectedCurrency === cur.code ? '700' : '400', fontSize: 14 }}>{cur.symbol} {cur.code}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            {selectedCurrency !== 'EUR' && (
-              <Text style={{ color: colors.textSecondary, fontSize: 12, marginBottom: 12 }}>Tasso di cambio: 1 EUR = {exchangeRate.toFixed(4)} {selectedCurrency}</Text>
-            )}
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <TouchableOpacity style={styles.btn} onPress={() => setShowJobModal(false)}>
                 <Text style={styles.btnText}>{t('buttons.cancel')}</Text>
@@ -1257,7 +1232,7 @@ export default function DashboardScreen() {
         onCancel={closeVoiceDraft}
       />
 
-      {/* Scrolls sideways: the items no longer fit on a phone. */}
+      {/* Only what a tradesman uses daily: invoices and integrations stay reachable from the website. */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.navScroll, { borderTopColor: colors.border, backgroundColor: colors.navBg }]} contentContainerStyle={styles.navContent}>
         <TouchableOpacity style={styles.navBtn} onPress={() => (navigation as any).navigate('Dashboard')}>
           <Ionicons name="home-outline" size={22} color={colors.textSecondary} />
@@ -1270,14 +1245,6 @@ export default function DashboardScreen() {
         <TouchableOpacity style={styles.navBtn} onPress={() => (navigation as any).navigate('Listini')}>
           <Ionicons name="list-outline" size={22} color={colors.textSecondary} />
           <Text style={[styles.navText, { color: colors.textSecondary }]}>{t('main.listini')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navBtn} onPress={() => (navigation as any).navigate('Fatture')}>
-          <Ionicons name="receipt-outline" size={22} color={colors.textSecondary} />
-          <Text style={[styles.navText, { color: colors.textSecondary }]}>Fatture</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navBtn} onPress={() => (navigation as any).navigate('Integrazioni')}>
-          <Ionicons name="link-outline" size={22} color={colors.textSecondary} />
-          <Text style={[styles.navText, { color: colors.textSecondary }]}>Integrazioni</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navBtn} onPress={() => (navigation as any).navigate('Profile')}>
           <Ionicons name="person-outline" size={22} color={colors.textSecondary} />
@@ -1324,6 +1291,9 @@ const styles = StyleSheet.create({
   nav: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 18, borderTopWidth: 1, borderTopColor: '#e2e8f0', marginTop: 'auto' },
   navScroll: { flexGrow: 0, borderTopWidth: 1, marginTop: 'auto' },
   navContent: { paddingVertical: 18, gap: 4 },
+  voiceOffBox: { marginHorizontal: 24, padding: 20, borderRadius: 16, borderWidth: 2, gap: 8 },
+  voiceOffTitle: { fontSize: 20, fontWeight: '800' },
+  voiceOffText: { fontSize: 17, lineHeight: 24 },
   navBtn: { minHeight: 64, minWidth: 72, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
   navText: { fontSize: 14, color: '#64748b', fontWeight: '600' },
   voiceCenterWrap: { alignItems: 'center', justifyContent: 'center', marginBottom: 16 },

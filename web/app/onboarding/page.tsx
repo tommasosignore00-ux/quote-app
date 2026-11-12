@@ -35,6 +35,10 @@ const TUTORIAL_STEPS = [
 ];
 
 const LEGAL_DOCUMENT_TYPES = ['privacy_policy', 'terms_of_service'] as const;
+
+/** Store pages of the phone app: links appear only once these are filled. */
+const APP_STORE_URL = '';
+const PLAY_STORE_URL = '';
 type LegalDocumentType = (typeof LEGAL_DOCUMENT_TYPES)[number];
 
 export default function OnboardingPage() {
@@ -54,6 +58,8 @@ export default function OnboardingPage() {
     country_code: DEFAULT_COUNTRY_CODE,
     language: DEFAULT_LANGUAGE,
   });
+  // Consent already recorded at sign-up for the current documents: the step is skipped.
+  const [consentOnFile, setConsentOnFile] = useState(false);
   const [legalConsent, setLegalConsent] = useState<{
     privacy_policy: boolean;
     terms_of_service: boolean;
@@ -77,6 +83,8 @@ export default function OnboardingPage() {
         .select('*')
         .eq('id', data.session.user.id)
         .single();
+
+      setConsentOnFile(await hasCurrentConsent(data.session.user.id));
 
       if (profileData) {
         setProfile(profileData);
@@ -150,8 +158,52 @@ export default function OnboardingPage() {
     await finishOnboarding();
   };
 
+  /** Latest privacy policy and terms for the user's country. */
+  const loadLatestLegalDocs = async () => {
+    const legalDocs = await Promise.all(
+      LEGAL_DOCUMENT_TYPES.map(async (type) => {
+        const { data } = await supabase
+          .from('legal_documents')
+          .select('id, version')
+          .eq('type', type)
+          .eq('country_code', formData.country_code)
+          .order('effective_date', { ascending: false })
+          .limit(1)
+          .single();
+        return data ? { type, id: data.id, version: data.version } : null;
+      })
+    );
+    return legalDocs.filter(Boolean) as Array<{
+      type: LegalDocumentType;
+      id: string;
+      version: string;
+    }>;
+  };
+
+  /** True only when sign-up recorded acceptance of every current document. */
+  const hasCurrentConsent = async (userId: string): Promise<boolean> => {
+    try {
+      const docs = await loadLatestLegalDocs();
+      if (docs.length < LEGAL_DOCUMENT_TYPES.length) return false;
+      const { data, error } = await supabase
+        .from('legal_acceptances')
+        .select('document_id')
+        .eq('user_id', userId)
+        .in(
+          'document_id',
+          docs.map((doc) => doc.id)
+        );
+      if (error || !data) return false;
+      const accepted = new Set(data.map((row) => row.document_id));
+      return docs.every((doc) => accepted.has(doc.id));
+    } catch {
+      return false;
+    }
+  };
+
   /** False when the consent was not recorded: the user must not move on. */
   const handleSaveLegalConsent = async (): Promise<boolean> => {
+    if (consentOnFile) return true;
     try {
       const legalDocs = await Promise.all(
         LEGAL_DOCUMENT_TYPES.map(async (type) => {
@@ -216,8 +268,8 @@ export default function OnboardingPage() {
       if (error) throw error;
 
       await setLanguage(formData.language);
+      // No automatic redirect: step 6 explains where to find the phone app.
       setMainStep(6);
-      setTimeout(() => router.push('/dashboard'), 2000);
     } catch (err: any) {
       console.error('Finish onboarding error:', err);
       toast.error('Non è stato possibile completare la configurazione');
@@ -258,7 +310,7 @@ export default function OnboardingPage() {
             onClick={() => setMainStep(2)}
             className="w-full bg-primary hover:bg-primary-dark text-white font-semibold py-3 px-4 rounded-lg transition"
           >
-            Get Started
+            Inizia
           </button>
         </div>
       </div>
@@ -307,10 +359,10 @@ export default function OnboardingPage() {
               </button>
             ) : (
               <button
-                onClick={() => setMainStep(3)}
+                onClick={() => setMainStep(consentOnFile ? 4 : 3)}
                 className="flex-1 bg-primary hover:bg-primary-dark text-white font-semibold py-3 rounded-lg transition"
               >
-                Continue
+                Continua
               </button>
             )}
           </div>
@@ -391,7 +443,7 @@ export default function OnboardingPage() {
               }}
               className="flex-1 bg-primary hover:bg-primary-dark text-white font-semibold py-3 rounded-lg transition"
             >
-              Continue
+              Continua
             </button>
           </div>
         </div>
@@ -422,7 +474,7 @@ export default function OnboardingPage() {
 
             <div>
               <label className="block text-sm font-medium mb-1">
-                VAT Number (optional)
+                Partita IVA (facoltativa)
               </label>
               <input
                 type="text"
@@ -447,7 +499,7 @@ export default function OnboardingPage() {
 
           <div className="flex gap-4 mt-8">
             <button
-              onClick={() => setMainStep(3)}
+              onClick={() => setMainStep(consentOnFile ? 2 : 3)}
               className="flex-1 py-3 rounded-lg bg-white/20 hover:bg-white/30 transition"
             >
               Indietro
@@ -569,6 +621,11 @@ export default function OnboardingPage() {
               Decido più tardi
             </button>
           </div>
+          <p className="mt-4 text-base text-slate-300">
+            Se decidi più tardi, l&apos;account resta attivo ma la dettatura rimane spenta
+            finché non avvii la prova o un abbonamento. Puoi farlo in qualsiasi momento
+            dalla pagina Abbonamento del sito.
+          </p>
         </div>
       </div>
     );
@@ -582,8 +639,34 @@ export default function OnboardingPage() {
           <div className="text-6xl mb-6">✅</div>
           <h1 className="text-3xl font-bold mb-4">Tutto pronto</h1>
           <p className="text-slate-200 mb-8">
-            Your account is ready. Let&apos;s start creating amazing quotes.
+            Il tuo account è pronto. Puoi iniziare a preparare i tuoi preventivi.
           </p>
+          <p className="text-slate-200 mb-8">
+            In cantiere userai l&apos;app Mastrovoce sul telefono, con lo stesso account.
+            {APP_STORE_URL || PLAY_STORE_URL
+              ? ' Scaricala da qui:'
+              : ' Sarà disponibile su App Store e Google Play: ti avviseremo appena è pubblicata.'}
+          </p>
+          {APP_STORE_URL || PLAY_STORE_URL ? (
+            <div className="mb-8 flex flex-col gap-3">
+              {APP_STORE_URL ? (
+                <a
+                  href={APP_STORE_URL}
+                  className="min-h-[48px] rounded-lg bg-white/20 px-4 py-3 font-semibold hover:bg-white/30"
+                >
+                  Scarica da App Store
+                </a>
+              ) : null}
+              {PLAY_STORE_URL ? (
+                <a
+                  href={PLAY_STORE_URL}
+                  className="min-h-[48px] rounded-lg bg-white/20 px-4 py-3 font-semibold hover:bg-white/30"
+                >
+                  Scarica da Google Play
+                </a>
+              ) : null}
+            </div>
+          ) : null}
           <button
             onClick={() => router.push('/dashboard')}
             className="w-full bg-primary hover:bg-primary-dark text-white font-semibold py-3 px-4 rounded-lg transition"

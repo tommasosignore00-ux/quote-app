@@ -90,13 +90,24 @@ export default async function PublicQuotePage({ params }: { params: { token: str
         {lavoro?.title ? `: ${lavoro.title}` : ''}
       </h1>
       {/* sandbox with no permissions: the quote HTML can neither run scripts nor navigate. */}
+      {canAnswer ? (
+        <p className="text-base text-slate-700">
+          Leggi il preventivo qui sotto, poi rispondi.{' '}
+          <a href="#risposta" className="font-semibold text-slate-900 underline">
+            Vai alla risposta
+          </a>
+        </p>
+      ) : null}
       <iframe
         title="Testo del preventivo"
         sandbox=""
         srcDoc={version.html_content}
-        className="h-[70vh] w-full rounded-lg border border-slate-200 bg-white"
+        className="h-[60vh] w-full rounded-lg border border-slate-200 bg-white sm:h-[70vh]"
       />
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section
+        id="risposta"
+        className="scroll-mt-4 rounded-lg border border-slate-200 bg-white p-4"
+      >
         {canAnswer ? (
           <DecisionForm token={params.token} />
         ) : (
@@ -106,6 +117,17 @@ export default async function PublicQuotePage({ params }: { params: { token: str
         )}
       </section>
       {privacyNotice}
+      {canAnswer ? (
+        // Phones: the answer stays one tap away while the quote is being read.
+        <div className="sticky bottom-0 -mx-4 border-t border-slate-200 bg-white/95 p-3 sm:hidden">
+          <a
+            href="#risposta"
+            className="flex min-h-[48px] items-center justify-center rounded-lg bg-green-700 font-medium text-white"
+          >
+            Rispondi al preventivo
+          </a>
+        </div>
+      ) : null}
     </div>
   );
 }

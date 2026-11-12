@@ -231,7 +231,7 @@ function uploadWithXhr(url: string, formData: FormData): Promise<UploadRequestRe
     };
 
     xhr.onerror = () =>
-      reject(new Error('Safari non e riuscito a completare l upload del PDF.'));
+      reject(new Error('Safari non è riuscito a completare il caricamento del PDF.'));
     xhr.onabort = () => reject(new Error('Upload PDF interrotto in Safari.'));
     xhr.send(formData);
   });
@@ -564,8 +564,8 @@ export default function ListiniPage() {
   }, [selectedListino?.id, profileId]);
 
   const handleCreateListino = async () => {
-    const name = prompt(t('listini.promptNewListino'));
-    if (!name) return;
+    // No browser prompt: a default name, renamed later from the list.
+    const name = `Listino ${listini.length + 1}`;
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -634,10 +634,8 @@ export default function ListiniPage() {
     }
   };
 
-  const handleUploadCsv = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedListino) return;
-
+  /** Imports one file (PDF, Excel, CSV or METEL) into the given price list. */
+  const importFile = async (file: File, target: Listino) => {
     try {
       setUploading(true);
       const {
@@ -658,7 +656,7 @@ export default function ListiniPage() {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('profileId', resolvedProfileId);
-        formData.append('listinoId', selectedListino.id);
+        formData.append('listinoId', target.id);
         formData.append('originalFileName', file.name);
         formData.append('mimeType', file.type || 'application/pdf');
 
@@ -666,7 +664,7 @@ export default function ListiniPage() {
           uploadResult = await uploadPdfViaStorageReference({
             file,
             profileId: resolvedProfileId,
-            listinoId: selectedListino.id,
+            listinoId: target.id,
           });
         } catch (storageUploadError) {
           if (isSafariBrowser()) {
@@ -682,7 +680,7 @@ export default function ListiniPage() {
                   fileName: file.name,
                   mimeType: file.type || 'application/pdf',
                   profileId: resolvedProfileId,
-                  listinoId: selectedListino.id,
+                  listinoId: target.id,
                   originalFileName: file.name,
                 }),
               });
@@ -698,13 +696,13 @@ export default function ListiniPage() {
         uploadResult = await uploadPdfViaStorageReference({
           file,
           profileId: resolvedProfileId,
-          listinoId: selectedListino.id,
+          listinoId: target.id,
         });
       } else {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('profileId', resolvedProfileId);
-        formData.append('listinoId', selectedListino.id);
+        formData.append('listinoId', target.id);
         uploadResult = await uploadWithFetch('/api/listini/upload', {
           method: 'POST',
           body: formData,
@@ -747,7 +745,7 @@ export default function ListiniPage() {
       }
 
       if (payload?.sourceStored) {
-        await fetchSourceInfo(selectedListino.id, resolvedProfileId);
+        await fetchSourceInfo(target.id, resolvedProfileId);
       } else if (payload?.sourceInfo) {
         setSelectedSourceInfo(payload.sourceInfo as ListinoSourceInfo);
       }
@@ -769,8 +767,8 @@ export default function ListiniPage() {
         );
         toast.success(
           candidateCount > 0
-            ? `PDF salvato come sorgente tecnica: ${candidateCount} voci candidate${pendingCount > 0 ? `, ${pendingCount} da completare con regole prezzo` : ''}`
-            : 'PDF salvato come sorgente del listino'
+            ? `PDF caricato: abbiamo riconosciuto ${candidateCount} articoli${pendingCount > 0 ? `, di cui ${pendingCount} senza un prezzo chiaro da completare` : ''}.`
+            : 'PDF caricato. Non abbiamo ancora trovato articoli con prezzo: controlla il file o aggiungi le voci a mano.'
         );
         if (payload?.aiFeedback || payload?.warning) {
           toast(payload.aiFeedback || payload.warning, { duration: 8000, icon: 'ℹ️' });
@@ -785,7 +783,7 @@ export default function ListiniPage() {
             { icon: '🧠', duration: 8000 }
           );
         }
-        await fetchItems(selectedListino.id);
+        await fetchItems(target.id);
         return;
       }
 
@@ -807,12 +805,12 @@ export default function ListiniPage() {
       const skippedLabel = pricingDiagnostics?.unresolved
         ? ` · ${pricingDiagnostics.unresolved} righe senza prezzo non importate`
         : '';
-      toast.success(`Listino importato: ${savedLabel}${skippedLabel}${sourceLabel}`);
+      toast.success(`Listino caricato: ${savedLabel}${skippedLabel}${sourceLabel}`);
       const changesLabel = describeListinoChanges(payload?.changes);
       if (changesLabel) {
         toast(`Aggiornamento listino: ${changesLabel}`, { duration: 12000, icon: '📈' });
       }
-      await fetchItems(selectedListino.id);
+      await fetchItems(target.id);
       if (Number(payload?.summary?.parsedRows || 0) > AUTO_ORGANIZE_MAX_ITEMS) {
         toast(
           'Listino molto grande: categorie AI non avviate in automatico. Puoi lanciarle con "Riorganizza con AI".',
@@ -823,21 +821,67 @@ export default function ListiniPage() {
         );
         return;
       }
-      toast.success('Organizzazione AI avviata automaticamente');
+      toast.success(
+        'Ora ordiniamo gli articoli per categoria: ci vuole qualche istante.'
+      );
       try {
-        await runAiOrganize(selectedListino.id, resolvedProfileId, {
+        await runAiOrganize(target.id, resolvedProfileId, {
           suppressErrorToast: true,
         });
       } catch (err) {
         const message =
           err instanceof Error ? err.message : 'Organizzazione AI non riuscita';
-        toast.error(`Import completato, ma AI non riuscita: ${message}`);
+        toast.error(
+          `Listino caricato, ma l'ordinamento per categoria non è riuscito: ${message}`
+        );
       }
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
-      e.target.value = '';
       setUploading(false);
+    }
+  };
+
+  const handleUploadCsv = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    try {
+      if (file && selectedListino) await importFile(file, selectedListino);
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  /** One button: the price list is created from the file name, then the file is imported. */
+  const handleUploadNew = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    try {
+      if (!file) return;
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      const name =
+        file.name
+          .replace(/\.[^.]+$/, '')
+          .replace(/[_-]+/g, ' ')
+          .trim()
+          .slice(0, 80) || 'Il mio listino';
+      const { data: created, error } = await supabase
+        .from('listini')
+        .insert({ profile_id: user.id, name })
+        .select('id, name, profile_id')
+        .single();
+      if (error || !created) {
+        toast.error('Non è stato possibile creare il listino. Riprova.');
+        return;
+      }
+      const listino: Listino = { ...created, canEdit: true, ownershipLabel: null };
+      await fetchListini();
+      setSelectedListino(listino);
+      toast.success(`Listino "${name}" creato: puoi rinominarlo quando vuoi.`);
+      await importFile(file, listino);
+    } finally {
+      e.target.value = '';
     }
   };
 
@@ -968,9 +1012,24 @@ export default function ListiniPage() {
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-6">{t('main.listini')}</h1>
-      <div className="flex gap-4 mb-6">
-        <button onClick={handleCreateListino} className="btn-primary">
-          {t('listini.newListino')}
+      <div className="mb-6 flex flex-wrap gap-4">
+        <label
+          htmlFor="listini-upload-new"
+          className={`btn-primary min-h-[48px] ${uploading ? 'pointer-events-none opacity-60' : 'cursor-pointer'}`}
+          aria-disabled={uploading}
+        >
+          {uploading ? 'Caricamento in corso…' : 'Carica il tuo listino'}
+        </label>
+        <input
+          id="listini-upload-new"
+          type="file"
+          accept=".pdf,.csv,.txt,.met,.xlsx,.xls"
+          onChange={handleUploadNew}
+          className="sr-only"
+          disabled={uploading}
+        />
+        <button onClick={handleCreateListino} className="btn-secondary">
+          Listino vuoto (voci a mano)
         </button>
         {selectedListino?.canEdit && (
           <>
@@ -979,7 +1038,7 @@ export default function ListiniPage() {
               className={`btn-primary ${uploading ? 'pointer-events-none opacity-60' : 'cursor-pointer'}`}
               aria-disabled={uploading}
             >
-              {uploading ? 'Import in corso...' : 'Carica CSV/Excel'}
+              {uploading ? 'Caricamento in corso…' : 'Aggiorna da Excel o CSV'}
             </label>
             <label
               htmlFor="listini-upload-pdf"
@@ -987,7 +1046,7 @@ export default function ListiniPage() {
               aria-disabled={uploading}
               onClick={() => {}}
             >
-              {uploading ? 'Import in corso...' : 'Carica PDF'}
+              {uploading ? 'Caricamento in corso…' : 'Aggiorna da PDF'}
             </label>
             <input
               id="listini-upload-table"

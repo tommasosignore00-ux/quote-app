@@ -89,6 +89,9 @@ export default function QuoteScreen() {
 
       const { data: lavoroData, error: lavoroErr } = await supabase.from('lavori').select('*, clienti(*)').eq('id', lavoro.id).single();
       if (lavoroErr) throw lavoroErr;
+      // The client's saved address is ready in the send dialog; it can still be changed.
+      const savedEmail = (lavoroData.clienti as { email?: string } | null)?.email?.trim();
+      if (savedEmail) setRecipientEmail((current) => current || savedEmail);
       
       const { data: profile, error: profileErr } = await supabase.from('profiles').select('*').eq('id', lavoroData.profile_id).single();
       if (profileErr) throw profileErr;
@@ -396,16 +399,7 @@ export default function QuoteScreen() {
           <TouchableOpacity style={[styles.btn, { backgroundColor: '#059669' }]} onPress={shareAsPdf}>
             <Text style={styles.btnText}>📄 Condividi PDF</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={shareAsFile}>
-            <Text style={styles.btnText}>📤 {t('quote.share') || 'Condividi HTML'}</Text>
-          </TouchableOpacity>
-
-          {/* Export multi-formato solo per abbonati */}
-          {isProOrTeam && (
-            <TouchableOpacity style={[styles.btn, styles.btnExport]} onPress={() => setShowExportMenu(true)}>
-              <Text style={styles.btnText}>📊 Esporta (Excel/JSON/XML)</Text>
-            </TouchableOpacity>
-          )}
+          {/* Only email and PDF: HTML, JSON and XML exports are not for the site. */}
         </View>
       )}
 
