@@ -11,7 +11,7 @@ export type QuoteVersionRow = {
   client_decision_at: string | null;
   client_signer_name: string | null;
   client_note: string | null;
-  lavori: { title: string; clienti: { name: string } | null } | null;
+  lavori: { title: string; clienti: { name: string; phone?: string | null } | null } | null;
 };
 
 export type QuoteStage = 'accepted' | 'rejected' | 'sent' | 'validated';
@@ -24,7 +24,7 @@ export const STAGE_LABELS: Record<QuoteStage, string> = {
 };
 
 const COLUMNS =
-  'id, lavoro_id, revision, created_at, sent_at, recipient_email, client_decision, client_decision_at, client_signer_name, client_note, lavori(title, clienti(name))';
+  'id, lavoro_id, revision, created_at, sent_at, recipient_email, client_decision, client_decision_at, client_signer_name, client_note, lavori(title, clienti(name, phone))';
 
 export function quoteStage(row: QuoteVersionRow): QuoteStage {
   if (row.client_decision) return row.client_decision;

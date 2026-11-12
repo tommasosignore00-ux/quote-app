@@ -2,7 +2,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { adminClient, corsHeaders, getRequestUser, jsonResponse } from '../_shared/auth.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
-const EMAIL_FROM = Deno.env.get('EMAIL_FROM') || 'noreply@quoteapp.it'
+const EMAIL_FROM = Deno.env.get('EMAIL_FROM') || 'Mastrovoce <noreply@mastrovoce.it>'
 // Same values as lib/QuoteTemplate.ts on web and mobile.
 const ACCEPTANCE_LINK_MARKER = '<!--QUOTE_ACCEPTANCE_LINK-->'
 const ACCEPTANCE_URL_MARKER = 'https://accettazione.invalid/preventivo'

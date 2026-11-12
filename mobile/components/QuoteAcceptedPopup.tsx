@@ -59,6 +59,9 @@ export default function QuoteAcceptedPopup() {
           <Text style={[styles.body, { color: colors.text }]}>
             {current.lavori?.clienti?.name || 'Il cliente'} {accepted ? 'ha accettato' : 'ha rifiutato'} «{current.lavori?.title || 'il preventivo'}»
           </Text>
+          {accepted ? (
+            <Text style={[styles.signer, { color: colors.textSecondary }]}>Il preventivo è bloccato: non si può più modificare.</Text>
+          ) : null}
           {current.client_signer_name ? (
             <Text style={[styles.signer, { color: colors.textSecondary }]}>Firmato da {current.client_signer_name}</Text>
           ) : null}

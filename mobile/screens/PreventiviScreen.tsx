@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Modal, StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Linking, Modal, StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { WebView } from 'react-native-webview';
 import { supabase } from '../lib/supabase';
@@ -27,6 +27,14 @@ const FILTERS: Array<{ key: QuoteStage | 'all'; label: string }> = [
   { key: 'validated', label: 'Da inviare' },
   { key: 'rejected', label: 'Rifiutati' },
 ];
+
+/** Days a sent quote has been waiting for an answer; shown from the third day. */
+const WAITING_DAYS = 3;
+
+function daysWaiting(row: QuoteVersionRow): number {
+  if (!row.sent_at || row.client_decision) return 0;
+  return Math.floor((Date.now() - new Date(row.sent_at).getTime()) / 86400000);
+}
 
 function formatDate(value: string | null): string {
   if (!value) return '—';
@@ -65,6 +73,9 @@ export default function PreventiviScreen() {
 
   const renderItem = ({ item }: { item: QuoteVersionRow }) => {
     const stage = quoteStage(item);
+    // Only a label and a call the user makes himself: nothing is ever sent to the client.
+    const waiting = daysWaiting(item);
+    const phone = item.lavori?.clienti?.phone?.trim();
     return (
       <TouchableOpacity
         style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -91,6 +102,21 @@ export default function PreventiviScreen() {
           </Text>
         ) : null}
         {item.client_note ? <Text style={[styles.detail, { color: colors.textSecondary }]}>{item.client_note}</Text> : null}
+        {waiting >= WAITING_DAYS ? (
+          <View style={styles.waiting}>
+            <Text style={styles.waitingText}>In attesa da {waiting} giorni</Text>
+            {phone ? (
+              <TouchableOpacity
+                style={styles.callButton}
+                onPress={() => Linking.openURL(`tel:${phone.replace(/[^+\d]/g, '')}`)}
+                accessibilityRole="button"
+                accessibilityLabel={`Chiama ${item.lavori?.clienti?.name || 'il cliente'}`}
+              >
+                <Text style={styles.callButtonText}>Chiama il cliente</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
       </TouchableOpacity>
     );
   };
@@ -150,4 +176,8 @@ const styles = StyleSheet.create({
   viewer: { flex: 1, paddingTop: 54 },
   close: { minHeight: 72, margin: 16, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   closeText: { color: '#fff', fontSize: 22, fontWeight: '800' },
+  waiting: { gap: 10, marginTop: 4 },
+  waitingText: { fontSize: 17, fontWeight: '700', color: '#92400e' },
+  callButton: { minHeight: 64, borderRadius: 16, backgroundColor: '#c2410c', alignItems: 'center', justifyContent: 'center' },
+  callButtonText: { color: '#fff', fontSize: 20, fontWeight: '800' },
 });

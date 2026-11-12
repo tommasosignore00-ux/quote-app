@@ -1,6 +1,6 @@
 import { trackEvent } from '../lib/analytics';
 import { Ionicons } from '@expo/vector-icons';
-import { countUnmatchedItems, firstTime } from '../lib/nudges';
+import { firstTime } from '../lib/nudges';
 import { holdClientDecisions } from '../lib/notifications';
 import { loadEntitlement } from '../lib/entitlement';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -26,7 +26,6 @@ import {
 import { buildListinoFilters, parseListinoQuery, rankListinoMatches } from '../lib/listinoSearch';
 import { useFocusEffect } from '@react-navigation/native';
 import { trackTimeSaving, getTimeSavingsStats } from '../lib/timeSavings';
-import { findCrossSellInListino } from '../lib/crossSelling';
 import { startNetworkListener, stopNetworkListener } from '../lib/offline';
 import { useTheme } from '../lib/darkMode';
 import { triggerHaptic } from '../lib/haptics';
@@ -86,8 +85,6 @@ export default function DashboardScreen() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [showListinoSelector, setShowListinoSelector] = useState(false);
   const [clientSearch, setClientSearch] = useState('');
-  const [crossSellItems, setCrossSellItems] = useState<any[]>([]);
-  const [showCrossSell, setShowCrossSell] = useState(false);
   const [timeSaved, setTimeSaved] = useState<string>('');
 
   // Voice: draft waiting for confirmation, and the job dictations go to for a while.
@@ -177,6 +174,7 @@ export default function DashboardScreen() {
       console.warn('profiles select error', profileErr);
     }
     setProfileId(pid);
+    showListinoIntroOnce();
 
     const { data: c, error: cErr } = await supabase.from('clienti').select('id, name').eq('profile_id', pid);
     if (cErr) console.warn('clienti error', cErr);
@@ -221,10 +219,26 @@ export default function DashboardScreen() {
   // Gating: AI/cross-selling solo Pro/Team
   const canUseAI = isProOrTeam;
   const canUseVoice = isProOrTeam;
-  const canUseCrossSelling = isProOrTeam;
   const canUseBranding = isProOrTeam;
   const canUseAdvancedNotifications = isProOrTeam;
   const canUseTeamFeatures = isTeam;
+
+  /** Once, on entry, to whoever has no price list yet: what it is for and what it gives. */
+  const showListinoIntroOnce = async () => {
+    // RLS returns the price lists this user can read, team ones included.
+    const { count, error } = await supabase.from('listini').select('id', { count: 'exact', head: true });
+    if (error || (count ?? 0) > 0 || !(await firstTime('listino-intro'))) return;
+    Alert.alert(
+      'Carica il tuo listino',
+      'Il listino è l\'elenco dei tuoi prezzi: il PDF del grossista, il tuo Excel o un file METEL.\n\n' +
+        'Come funziona: lo carichi una volta dalla sezione Listini, più comodo dal computer. Quando detti una voce, Mastrovoce trova da solo il prezzo nel tuo listino.\n\n' +
+        'Cosa ci guadagni: niente prezzi ricopiati a mano, preventivi con i tuoi prezzi e il tuo ricarico, meno errori.',
+      [
+        { text: 'Più tardi', style: 'cancel' },
+        { text: 'Carica il listino', onPress: () => (navigation as any).navigate('Listini') },
+      ]
+    );
+  };
 
   // Gating: mostra messaggio se utente Free tenta funzioni Pro/Team
   const showUpgradeAlert = (feature: string) => {
@@ -623,24 +637,6 @@ export default function DashboardScreen() {
       for (let i = 0; i < rows.length; i++) await trackTimeSaving('add_costo');
       refreshTimeSaved();
 
-      const unmatched = voiceDraft.items.filter((item) => !item.matches[item.choice]).length;
-      if (unmatched > 0 && (await countUnmatchedItems(unmatched)) >= 3 && (await firstTime('listino-prompt'))) {
-        Alert.alert('Vuoi caricare il tuo listino?', 'Alcune voci non hanno un prezzo: con il listino li trovi mentre detti.', [
-          { text: 'Carica listino', onPress: () => (navigation as any).navigate('Listini') },
-          { text: 'Non ora', style: 'cancel' },
-        ]);
-      }
-
-      // Punto 13: Cross-selling suggestions
-      if (profileId && rows[0]) {
-        if (canUseCrossSelling) {
-          const crossItems = await findCrossSellInListino(supabase, profileId, rows[0].description);
-          if (crossItems.length > 0) {
-            setCrossSellItems(crossItems);
-            setShowCrossSell(true);
-          }
-        }
-      }
       fetchData();
     } catch (err) {
       Alert.alert(t('messages.error'), (err as Error).message);
@@ -1104,49 +1100,6 @@ export default function DashboardScreen() {
         </View>
       )}
 
-      {/* Punto 13: Cross-Selling AI Suggestions */}
-      {showCrossSell && (
-        <View style={styles.card}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <Text style={styles.cardTitle}>💡 Prodotti correlati</Text>
-            <TouchableOpacity onPress={() => setShowCrossSell(false)}>
-              <Text style={{ fontSize: 18, color: '#64748b' }}>✕</Text>
-            </TouchableOpacity>
-          </View>
-          {canUseCrossSelling && crossSellItems.length > 0 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {crossSellItems.map((item, idx) => (
-                <TouchableOpacity
-                  key={`cross-${item.id}-${idx}`}
-                  style={styles.crossSellCard}
-                  onPress={async () => {
-                    if (selectedLavoro) {
-                      const { data: created } = await supabase.from('preventivi_dettaglio').insert({
-                        lavoro_id: selectedLavoro.id,
-                        description: item.description,
-                        quantity: 1,
-                        unit_price: Number(item.unit_price),
-                        tax_rate: Number(item.markup_percent) || profileMaterialMarkup,
-                        listino_item_id: item.id,
-                      }).select('*');
-                      if (created && created[0]) setCosti((prev) => [created[0], ...prev]);
-                      await trackTimeSaving('add_costo');
-                      fetchData();
-                    }
-                  }}
-                >
-                  <Text style={styles.crossSellDesc} numberOfLines={2}>{item.description}</Text>
-                  <Text style={styles.crossSellPrice}>€{Number(item.unit_price).toFixed(2)}</Text>
-                  <Text style={styles.crossSellAdd}>+ Aggiungi</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          ) : (
-            <Text style={{ color: '#c2410c', fontWeight: '600', padding: 12 }}>Funzione riservata agli abbonati Pro/Team</Text>
-          )}
-        </View>
-      )}
-
       {selectedLavoro && (
         <View style={[styles.card, { backgroundColor: colors.card, shadowColor: colors.cardShadow }]}>
           <View style={styles.cardHeader}>
@@ -1390,10 +1343,6 @@ const styles = StyleSheet.create({
   listinoSelectorListino: { fontSize: 14, color: '#64748b', marginBottom: 2 },
   listinoSelectorPrice: { fontSize: 15, fontWeight: '700', color: '#c2410c' },
   timeSavedBadge: { fontSize: 13, color: '#10b981', fontWeight: '600', backgroundColor: '#d1fae5', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  crossSellCard: { backgroundColor: '#f0fdf4', borderRadius: 12, padding: 14, marginRight: 10, width: 160, borderWidth: 1, borderColor: '#86efac' },
-  crossSellDesc: { fontSize: 14, fontWeight: '600', color: '#166534', marginBottom: 6 },
-  crossSellPrice: { fontSize: 15, fontWeight: '700', color: '#c2410c', marginBottom: 4 },
-  crossSellAdd: { fontSize: 13, color: '#10b981', fontWeight: '600' },
   carouselCard: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginRight: 8, minWidth: 120, borderWidth: 1, borderColor: '#e2e8f0' },
   carouselDesc: { fontWeight: '600', fontSize: 14, marginBottom: 4 },
   carouselPrice: { color: '#64748b', fontSize: 14 },

@@ -179,6 +179,58 @@ async function handleInvoice(invoice: Stripe.Invoice, action: string) {
   }
 }
 
+/** Sender until the domain is verified on Resend: EMAIL_FROM wins when set. */
+const EMAIL_FROM = process.env.EMAIL_FROM || 'Mastrovoce <noreply@mastrovoce.it>';
+
+const euro = (cents: number) =>
+  (cents / 100).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
+
+const romeDate = (date: Date) =>
+  date.toLocaleDateString('it-IT', {
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'Europe/Rome',
+  });
+
+/** What the next renewal charges, read from the subscription itself. */
+function renewalSummary(subscription: Stripe.Subscription) {
+  const amount = subscription.items.data.reduce(
+    (sum, item) => sum + (item.price.unit_amount ?? 0) * (item.quantity ?? 1),
+    0
+  );
+  const yearly = subscription.items.data.some(
+    (item) => item.price.recurring?.interval === 'year'
+  );
+  const plan = planFromSubscription(subscription);
+  const planName = plan === 'team' ? 'Team' : plan === 'yearly' ? 'Annuale' : 'Mensile';
+  return { amount, period: yearly ? "all'anno" : 'al mese', planName };
+}
+
+/** A courtesy email: a failure must not make Stripe retry the event. */
+async function sendAccountEmail(to: string, subject: string, html: string) {
+  if (!process.env.RESEND_API_KEY) return;
+  await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ from: EMAIL_FROM, to, subject, html }),
+  }).catch(() => console.warn('Account email not sent'));
+}
+
+const subscriptionPageUrl = () =>
+  `${process.env.NEXT_PUBLIC_APP_URL || 'https://project-cadu1.vercel.app'}/dashboard/subscription`;
+
+async function quotesSentSince(profileId: string, since: Date): Promise<number | null> {
+  const { count, error } = await supabase
+    .from('preventivi_versioni')
+    .select('id, lavori!inner(profile_id)', { count: 'exact', head: true })
+    .eq('lavori.profile_id', profileId)
+    .gte('sent_at', since.toISOString());
+  return error ? null : (count ?? 0);
+}
+
 async function handleTrialWillEnd(subscription: Stripe.Subscription) {
   const profile = await findProfile(
     idOf(subscription.customer)!,
@@ -190,27 +242,37 @@ async function handleTrialWillEnd(subscription: Stripe.Subscription) {
     subscription_id: subscription.id,
     trial_end: ends?.toISOString(),
   });
+  if (!profile.email || !ends) return;
 
-  if (!profile.email || !ends || !process.env.RESEND_API_KEY) return;
-  const date = ends.toLocaleDateString('it-IT', {
-    day: 'numeric',
-    month: 'long',
-    timeZone: 'Europe/Rome',
-  });
-  // A missing courtesy email must not make Stripe retry the event.
-  await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: process.env.EMAIL_FROM || 'noreply@quoteapp.it',
-      to: profile.email,
-      subject: `Il periodo di prova di Mastrovoce termina il ${date}`,
-      html: `<p>Il tuo periodo di prova termina il ${date}. Da quel giorno l'abbonamento si rinnova in automatico.</p><p>Se preferisci non continuare, puoi disdire dalla pagina Abbonamento dell'app.</p>`,
-    }),
-  }).catch(() => console.warn('Trial reminder not sent'));
+  const { amount, period, planName } = renewalSummary(subscription);
+  const started = subscription.trial_start
+    ? new Date(subscription.trial_start * 1000)
+    : null;
+  const quotes = started ? await quotesSentSince(profile.id, started) : null;
+  const date = romeDate(ends);
+  const link = subscriptionPageUrl();
+  await sendAccountEmail(
+    profile.email,
+    `La prova di Mastrovoce termina il ${date}`,
+    `<p>La tua prova gratuita termina il <strong>${date}</strong>.</p>` +
+      `<p>Da quel giorno parte il piano ${planName}: <strong>${euro(amount)} ${period}</strong>, addebitati sulla carta che hai inserito. Puoi disdire quando vuoi.</p>` +
+      (quotes !== null
+        ? `<p>Durante la prova hai inviato ${quotes} ${quotes === 1 ? 'preventivo' : 'preventivi'}.</p>`
+        : '') +
+      `<p>Per continuare non devi fare nulla. Per disdire, entra in Mastrovoce dal sito e apri la pagina Abbonamento: <a href="${link}">${link}</a>. Se disdici prima del ${date}, non paghi nulla.</p>`
+  );
+}
+
+async function handlePaymentFailedEmail(invoice: Stripe.Invoice) {
+  const profile = await findProfile(idOf(invoice.customer)!);
+  if (!profile?.email) return;
+  const link = subscriptionPageUrl();
+  await sendAccountEmail(
+    profile.email,
+    'Mastrovoce: il pagamento non è andato a buon fine',
+    `<p>Non siamo riusciti ad addebitare ${euro(invoice.amount_due)} sulla tua carta.</p>` +
+      `<p>Stripe riproverà nei prossimi giorni e intanto puoi continuare a usare Mastrovoce. Per aggiornare la carta, entra in Mastrovoce dal sito e apri la pagina Abbonamento: <a href="${link}">${link}</a>.</p>`
+  );
 }
 
 export async function POST(req: Request) {
@@ -261,6 +323,7 @@ export async function POST(req: Request) {
         break;
       case 'invoice.payment_failed':
         await handleInvoice(event.data.object as Stripe.Invoice, 'payment_failed');
+        await handlePaymentFailedEmail(event.data.object as Stripe.Invoice);
         break;
     }
 

@@ -10,6 +10,8 @@ import {
   type RecordingOptions,
 } from 'expo-audio';
 import { triggerHaptic } from '../lib/haptics';
+import { trackEvent } from '../lib/analytics';
+import { firstTime } from '../lib/nudges';
 import {
   deleteRecordings,
   getPendingRecordingsCount,
@@ -159,6 +161,8 @@ export default function VoiceButton({ onResult, context, size = 64, floating = f
       autoStopTimerRef.current = setTimeout(() => stopRecordingRef.current(), MAX_RECORDING_MS);
       // Punto 10: Feedback Aptico
       triggerHaptic('recordingStart');
+      // The first dictation ever on this phone: event name only, with consent.
+      firstTime('first-mic-tap').then((first) => { if (first) trackEvent('first_mic_tap'); }).catch(() => {});
     } catch (err) {
       triggerHaptic('aiError');
       Alert.alert(t('messages.error'), (err as Error).message);

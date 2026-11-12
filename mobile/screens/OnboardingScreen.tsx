@@ -42,23 +42,23 @@ export default function OnboardingScreen() {
     welcome: {
       title: '🚀 Benvenuto in Mastrovoce!',
       desc: 'Imposta il nome della tua azienda per iniziare. Potrai completare il profilo in seguito.',
-      tips: ['⚡ Setup in meno di 2 minuti', '🎯 Personalizza tutto dal Profilo'],
+      tips: ['Ci vogliono meno di 2 minuti', 'Il resto lo completi dal Profilo'],
     },
     voice: {
       title: t('onboarding.voice'),
       desc: t('onboarding.voiceDesc'),
       tips: [
-        '💬 Prova: "Aggiungi tubo rame 22mm, 3 metri a 15 euro"',
-        '🔄 L\'AI impara dal tuo modo di parlare',
-        '📡 Funziona anche offline!',
+        'Prova: "Aggiungi tubo rame 22mm, 3 metri a 15 euro"',
+        'Prima di salvare controlli sempre le voci',
+        'Senza rete la registrazione resta salvata e parte appena torna la connessione',
       ],
     },
     csv: {
-      title: '📁 Importa il tuo Listino',
-      desc: 'Carica un file CSV con i tuoi materiali e prezzi. Il sistema li indicizza automaticamente per la ricerca vocale.',
+      title: 'Il tuo listino',
+      desc: 'Carica i tuoi prezzi una volta: PDF del grossista, Excel o file METEL. Quando detti una voce, il prezzo arriva dal tuo listino.',
       tips: [
-        '📊 Formato: Codice;Descrizione;Prezzo',
-        '🔍 Trovi i materiali dettandoli a voce',
+        'Più comodo da caricare dal computer, nella sezione Listini',
+        'Trovi i materiali dettandoli a voce',
       ],
     },
     listini: { title: t('onboarding.listini'), desc: t('onboarding.listiniDesc') },
@@ -66,9 +66,9 @@ export default function OnboardingScreen() {
       title: t('onboarding.preventivo'),
       desc: t('onboarding.preventivoDesc'),
       tips: [
-        '✅ Validazione automatica prima dell\'invio',
-        '✍️ Firma digitale integrata',
-        '📧 Invio diretto via email al cliente',
+        'Controllo delle voci prima dell\'invio',
+        'Il preventivo esce con il tuo modello e il tuo nome',
+        'Il cliente lo accetta online dal link che riceve',
       ],
     },
   };
@@ -138,17 +138,17 @@ export default function OnboardingScreen() {
                 onPress={() => {
                   setTriedCsvDemo(true);
                   Alert.alert(
-                    '📁 Demo Importazione CSV',
+                    'Esempio di listino',
                     'Esempio file listino.csv:\n\n' +
                     'TRC22;Tubo rame 22mm;12.50\n' +
                     'RUB34;Rubinetto 3/4";28.90\n' +
                     'FLX16;Flessibile 16mm;8.75\n\n' +
-                    '→ 3 articoli importati\n→ Embedding AI generati\n→ Pronti per ricerca vocale!\n\nPotrai importare il CSV vero dal Listino.'
+                    '→ 3 articoli importati\n→ Pronti per la dettatura\n\nIl tuo listino vero lo carichi dalla sezione Listini.'
                   );
                 }}
               >
                 <Text style={styles.demoBtnIcon}>📊</Text>
-                <Text style={styles.demoBtnText}>{triedCsvDemo ? 'Visto! ✓' : 'Guarda esempio CSV'}</Text>
+                <Text style={styles.demoBtnText}>{triedCsvDemo ? 'Visto ✓' : 'Guarda un esempio'}</Text>
               </TouchableOpacity>
             </Animated.View>
           </View>
@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a', justifyContent: 'center', alignItems: 'center', padding: 24 },
   progressBarContainer: { width: '100%', maxWidth: 400, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 2, marginBottom: 8 },
   progressBar: { height: '100%', backgroundColor: '#c2410c', borderRadius: 2 },
-  progressText: { color: '#64748b', fontSize: 12, marginBottom: 16, alignSelf: 'center' },
+  progressText: { color: '#94a3b8', fontSize: 14, marginBottom: 16, alignSelf: 'center' },
   card: { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20, padding: 24, width: '100%', maxWidth: 400 },
   steps: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 24 },
   step: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
@@ -228,14 +228,14 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: 'bold', color: '#fff', marginBottom: 8 },
   desc: { fontSize: 16, color: '#cbd5e1', marginBottom: 16 },
   tipsContainer: { marginBottom: 16 },
-  tip: { fontSize: 13, color: '#94a3b8', marginBottom: 6, lineHeight: 18 },
+  tip: { fontSize: 16, color: '#cbd5e1', marginBottom: 8, lineHeight: 22 },
   interactiveArea: { marginBottom: 24, alignItems: 'center' },
   onboardingInput: { backgroundColor: 'rgba(255,255,255,0.15)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', borderRadius: 12, padding: 16, color: '#fff', fontSize: 16, width: '100%' },
-  checkmark: { marginTop: 8, fontSize: 14, color: '#4ade80' },
+  checkmark: { marginTop: 8, fontSize: 16, color: '#4ade80' },
   demoBtn: { backgroundColor: 'rgba(194,65,12,0.3)', borderWidth: 2, borderColor: '#c2410c', borderRadius: 16, paddingVertical: 16, paddingHorizontal: 32, alignItems: 'center' },
   demoBtnDone: { backgroundColor: 'rgba(5,150,105,0.3)', borderColor: '#059669' },
   demoBtnIcon: { fontSize: 32, marginBottom: 8 },
-  demoBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  demoBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   illustration: { height: 120, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
   illustrationIcon: { fontSize: 48 },
   buttons: { flexDirection: 'row', gap: 12 },

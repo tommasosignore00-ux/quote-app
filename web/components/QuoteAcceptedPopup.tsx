@@ -60,6 +60,9 @@ export default function QuoteAcceptedPopup() {
           {current.lavori?.clienti?.name || 'Il cliente'} ha accettato{' '}
           <strong>{current.lavori?.title || 'il preventivo'}</strong>
         </p>
+        <p className="mt-1 text-slate-500">
+          Il preventivo è bloccato: non si può più modificare.
+        </p>
         {current.client_signer_name ? (
           <p className="mt-1 text-slate-500">Firmato da {current.client_signer_name}</p>
         ) : null}

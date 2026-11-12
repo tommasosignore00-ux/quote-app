@@ -23,7 +23,9 @@ async function anonymousId(): Promise<string> {
 }
 
 /** Event names only: no text, client, amount or account data leaves the device. */
-export async function trackEvent(event: 'voice_item_confirmed' | 'quote_sent'): Promise<void> {
+export type AnalyticsEvent = 'first_mic_tap' | 'voice_item_confirmed' | 'quote_sent';
+
+export async function trackEvent(event: AnalyticsEvent): Promise<void> {
   if (!API_KEY || !(await getAnalyticsConsent())) return;
   fetch(`${HOST}/capture/`, {
     method: 'POST',

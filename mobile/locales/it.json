@@ -22,9 +22,9 @@
   "onboarding": {
     "title": "Guida Rapida",
     "voice": "Pulsante Vocale",
-    "voiceDesc": "Premi per registrare.",
+    "voiceDesc": "Tocca il microfono, di' cosa aggiungere, poi tocca di nuovo per finire.",
     "listini": "Listini Prezzi",
-    "listiniDesc": "Carica il tuo CSV.",
+    "listiniDesc": "Carica il tuo listino: PDF, Excel o METEL.",
     "preventivo": "Preventivo",
     "preventivoDesc": "Crea e invia il preventivo via email.",
     "next": "Avanti",
