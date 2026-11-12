@@ -5,7 +5,7 @@ export function founderPlacesText(left: number | null): string | null {
   if (left === null || left <= 0) return null;
   if (left === 1) return 'Resta 1 posto.';
   if (left <= 20) return `Restano ${left} posti.`;
-  return 'Vale per i primi 50 clienti che pagano.';
+  return 'Riservata ai primi 50 clienti paganti.';
 }
 
 const PLANS = [
@@ -13,13 +13,13 @@ const PLANS = [
   {
     name: 'Annuale',
     price: "€299,99 all'anno",
-    includes: '1 utente · 2 mesi gratis rispetto al mensile',
+    includes: '1 utente · equivale a 2 mesi gratuiti rispetto al mensile',
   },
   {
     name: 'Team',
     price: '€79,99 al mese',
     includes:
-      '5 utenti, titolare compreso · €9,99 al mese per ogni utente in più, fino a 10',
+      '5 utenti, titolare incluso · €9,99 al mese per ogni utente aggiuntivo, fino a 10',
   },
 ];
 
@@ -60,13 +60,13 @@ export function Pricing({ founderSlots }: { founderSlots: number | null }) {
         </tbody>
       </table>
       <p className="mt-4 text-base text-mv-muted sm:text-lg">
-        In tutti i piani i preventivi sono illimitati: non paghi a preventivo.
+        Tutti i piani includono preventivi illimitati, senza costi a preventivo.
       </p>
 
       <p className="mt-10 max-w-[65ch] text-lg font-semibold sm:text-xl">
         {showFounder
-          ? 'Per cominciare hai due strade. Scegli quella che ti torna meglio.'
-          : 'Per cominciare: 14 giorni di prova con i tuoi prezzi.'}
+          ? 'Puoi iniziare in due modi.'
+          : 'Puoi iniziare con 14 giorni di prova gratuita.'}
       </p>
 
       <div
@@ -76,19 +76,20 @@ export function Pricing({ founderSlots }: { founderSlots: number | null }) {
       >
         <div className={showFounder ? 'md:pr-10' : 'max-w-[65ch]'}>
           <h3 className="mv-display text-2xl font-bold sm:text-3xl">
-            Provi 14 giorni, poi decidi
+            Prova gratuita di 14 giorni
           </h3>
           <div className="mt-3 space-y-3 text-base leading-7 sm:text-lg">
-            <p>Vale per Mensile, Annuale e Team.</p>
+            <p>Disponibile per i piani Mensile, Annuale e Team.</p>
             <p>
-              Per 14 giorni lo usi con i tuoi prezzi. Al momento dell&apos;attivazione
-              serve la carta: se non disdici entro la fine della prova, parte il piano che
-              hai scelto. Disdici quando vuoi dalla tua area account.
+              Per 14 giorni usi Mastrovoce con i tuoi prezzi e i tuoi preventivi. La carta
+              è richiesta all&apos;attivazione: se non disdici entro la fine della prova,
+              si attiva il piano scelto. Puoi disdire in qualsiasi momento dall&apos;area
+              account.
             </p>
-            <p>La prova vale per il primo abbonamento.</p>
+            <p>La prova è valida per il primo abbonamento.</p>
           </div>
           <CtaLink href="/auth/register" className="mt-6 w-full sm:w-auto">
-            Inizia i 14 giorni di prova
+            Inizia la prova gratuita
           </CtaLink>
         </div>
 
@@ -98,27 +99,27 @@ export function Pricing({ founderSlots }: { founderSlots: number | null }) {
             className="border-t border-mv-line pt-10 md:border-t-0 md:pl-10 md:pt-0"
           >
             <h3 className="mv-display text-2xl font-bold sm:text-3xl">
-              Prezzo fondatori, per i primi 50 clienti
+              Offerta fondatori: primi 50 clienti
             </h3>
             <div className="mt-3 space-y-3 text-base leading-7 sm:text-lg">
               <p>
                 <span className="font-semibold tabular-nums">
                   €19,99 al mese o €199,99 all&apos;anno
                 </span>
-                , finché resti abbonato senza interruzioni.
+                , bloccati finché l&apos;abbonamento resta attivo.
               </p>
               <p>
-                Qui non c&apos;è la prova: paghi subito. Se entro 30 giorni non ti
-                convince, ti rimborsiamo il primo pagamento.
+                L&apos;offerta non prevede la prova gratuita: il pagamento è immediato e,
+                se lo richiedi entro 30 giorni, ti rimborsiamo il primo importo.
               </p>
-              <p>Vale per Mensile e Annuale, non per il Team.</p>
+              <p>Valida per i piani Mensile e Annuale, escluso il Team.</p>
               <p className="font-semibold">{places}</p>
             </div>
             <CtaLink
               href="/auth/register?offer=founder"
               className="mt-6 w-full sm:w-auto"
             >
-              Prendi il prezzo fondatori
+              Attiva l&apos;offerta fondatori
             </CtaLink>
           </div>
         ) : null}

@@ -136,30 +136,30 @@ export default function HomePage() {
         <div className="grid gap-7 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-12">
           <div className="lg:pt-6">
             <p className="text-base leading-6 text-mv-muted sm:text-lg">
-              Per fabbri, idraulici, elettricisti e piccole imprese edili.
+              Preventivi per fabbri, idraulici, elettricisti e imprese edili.
             </p>
             <h1
               id="titolo"
               className="mv-display mt-3 text-[2.25rem] font-bold leading-[1.05] sm:text-6xl lg:text-[4rem]"
             >
-              Detti le voci in cantiere. Il preventivo esce con i tuoi prezzi.
+              Preventivi dettati in cantiere, con i prezzi del tuo listino.
             </h1>
             <div className="mt-3 max-w-[38rem] space-y-3 text-base leading-[1.6] sm:mt-6 sm:text-lg sm:leading-8">
               <p>
-                Dal telefono dici materiali e lavorazioni. Le righe escono con i prezzi
-                del tuo listino, tu le controlli e il preventivo parte a nome della tua
-                azienda.
+                Durante il sopralluogo descrivi a voce materiali e lavorazioni. Mastrovoce
+                compila le righe con i tuoi prezzi: tu le verifichi e invii il preventivo
+                con il nome e il modello della tua azienda.
               </p>
               <p className="hidden sm:block">
-                Niente listino? Detti le voci e il prezzo lo scrivi tu.
+                Non hai un listino digitale? Puoi inserire i prezzi a mano.
               </p>
             </div>
             <div className="mt-4 sm:mt-8">
               <CtaLink href="/auth/register" className="w-full sm:w-auto">
-                Prova con i tuoi prezzi
+                Prova gratis per 14 giorni
               </CtaLink>
               <p className="mt-2 text-base text-mv-muted">
-                14 giorni di prova · serve la carta · disdici quando vuoi
+                Carta richiesta all&apos;attivazione · disdici in qualsiasi momento
               </p>
             </div>
             <div className="hidden lg:block">
@@ -173,12 +173,12 @@ export default function HomePage() {
                 <QuoteSheet variant="preview" />
               </ScreenSlot>
               <figcaption className={CAPTION}>
-                Il preventivo finito, con il nome e il modello della tua azienda.
+                Il preventivo pronto per l&apos;invio, con il modello della tua azienda.
               </figcaption>
             </figure>
             <div className="lg:hidden">
               <p className="mt-6 text-base leading-7">
-                Niente listino? Detti le voci e il prezzo lo scrivi tu.
+                Non hai un listino digitale? Puoi inserire i prezzi a mano.
               </p>
               <HeroLinks showFounder={showFounder} />
             </div>
@@ -187,7 +187,7 @@ export default function HomePage() {
                 <HeroDictationScreen />
               </ScreenSlot>
               <figcaption className={`${CAPTION} text-center lg:text-left`}>
-                La voce detta diventa una riga, con il prezzo del tuo listino.
+                Ogni voce dettata diventa una riga con il prezzo del tuo listino.
               </figcaption>
             </figure>
           </div>
@@ -205,11 +205,11 @@ export default function HomePage() {
           <div className="mt-10 grid items-center gap-8 lg:grid-cols-2 lg:gap-12">
             <div>
               <p className="mv-display text-3xl font-bold leading-tight sm:text-4xl">
-                Il preventivo, di solito, si fa la sera.
+                Oggi il preventivo si scrive a fine giornata.
               </p>
               <p className="mt-4 max-w-[38rem] text-base leading-7 sm:text-lg sm:leading-8">
-                Misure su un foglio, il listino del fornitore aperto sul tavolo, la
-                calcolatrice. E poi ricopiare tutto.
+                Appunti presi in cantiere, il listino del fornitore, la calcolatrice: ogni
+                voce va ricopiata e ricontrollata, spesso dopo l&apos;orario di lavoro.
               </p>
             </div>
             <PhotoSlot slot={MEDIA.seraPrima}>
@@ -224,20 +224,19 @@ export default function HomePage() {
             <div>
               <h3 className={H3}>
                 <StepNumber n={1} />
-                Prepari una volta il listino e il modello
+                Imposti listino e modello una sola volta
               </h3>
               <div className={`mt-4 ${BODY} max-w-[38rem]`}>
                 <p>
-                  Il listino lo carichi in PDF o Excel. Se il tuo grossista te lo dà in
-                  formato METEL, va bene anche quello.
+                  Carichi il listino in PDF, in Excel o nel formato METEL fornito dal tuo
+                  grossista.
                 </p>
                 <p>
-                  Per l&apos;aspetto del preventivo basta un tuo preventivo fatto in Word:
-                  prima di caricarlo togli nomi e indirizzi dei clienti.
+                  Per l&apos;impaginazione basta un tuo preventivo in Word, privo dei dati
+                  dei clienti.
                 </p>
                 <p>
-                  Niente listino? Si parte lo stesso: detti le voci e il prezzo lo scrivi
-                  tu.
+                  Anche senza listino puoi iniziare subito, inserendo i prezzi a mano.
                 </p>
               </div>
             </div>
@@ -246,7 +245,7 @@ export default function HomePage() {
                 <ListinoSample />
               </ScreenSlot>
               <figcaption className={CAPTION}>
-                Il tuo listino, così com&apos;è. Lo carichi una volta.
+                Il tuo listino, nel formato che usi già.
               </figcaption>
             </figure>
           </div>
@@ -258,15 +257,15 @@ export default function HomePage() {
             <div>
               <h3 className={H3}>
                 <StepNumber n={2} />
-                In cantiere lo dici. Non lo scrivi.
+                Durante il sopralluogo, detti le voci
               </h3>
               <div className={`mt-4 ${BODY} max-w-[38rem]`}>
                 <p>
-                  Tocchi il microfono e dici cosa serve, come lo diresti a un collega.
-                  Tocchi di nuovo per finire.
+                  Tocchi il microfono e descrivi materiali e lavorazioni con le parole che
+                  usi ogni giorno.
                 </p>
                 <p>
-                  Se lì non c&apos;è campo, la registrazione resta salvata e parte quando
+                  Senza copertura di rete la registrazione viene salvata e inviata appena
                   torna il segnale.
                 </p>
               </div>
@@ -277,7 +276,7 @@ export default function HomePage() {
                   <MicScreen />
                 </ScreenSlot>
                 <figcaption className={`${CAPTION} text-center`}>
-                  Un tocco per iniziare, uno per finire.
+                  Un tocco per iniziare, uno per terminare.
                 </figcaption>
               </figure>
               <PhotoSlot
@@ -293,16 +292,16 @@ export default function HomePage() {
           <div className="mt-10">
             <h3 className={`${H3} max-w-[46rem]`}>
               <StepNumber n={3} />
-              Il prezzo è il tuo. E niente si salva senza il tuo sì.
+              Verifichi ogni riga prima di salvarla
             </h3>
             <div className={`mt-4 ${BODY} max-w-[38rem]`}>
               <p>
-                Le righe escono con il prezzo del tuo listino. Prima di salvarle le
-                guardi: cambi la quantità, togli quella che non va.
+                Ogni riga riporta il prezzo del tuo listino. Puoi correggere le quantità o
+                eliminare una voce: nulla viene salvato senza la tua conferma.
               </p>
               <p>
-                Se una voce può essere più articoli, non tira a indovinare: ti chiede
-                quale.
+                Se una voce corrisponde a più articoli, Mastrovoce non sceglie al posto
+                tuo: ti chiede quale usare.
               </p>
             </div>
 
@@ -312,14 +311,14 @@ export default function HomePage() {
                   &ldquo;Sei metri di trave IPE 120, otto ancoranti chimici M12, e dodici
                   ore di manodopera.&rdquo;
                 </blockquote>
-                <figcaption className={CAPTION}>Quello che hai detto.</figcaption>
+                <figcaption className={CAPTION}>La frase dettata.</figcaption>
               </figure>
               <figure>
                 <ScreenSlot slot={MEDIA.conferma}>
                   <ConfirmScreen />
                 </ScreenSlot>
                 <figcaption className={`${CAPTION} text-center`}>
-                  Quello che esce. Lo salvi solo tu.
+                  Le righe proposte, da confermare.
                 </figcaption>
               </figure>
               <figure className="lg:pt-24">
@@ -327,7 +326,7 @@ export default function HomePage() {
                   <ChoiceBox />
                 </ScreenSlot>
                 <figcaption className={CAPTION}>
-                  Quando non è sicuro, chiede a te.
+                  In caso di dubbio, la scelta resta a te.
                 </figcaption>
               </figure>
             </div>
@@ -339,14 +338,14 @@ export default function HomePage() {
       <section aria-labelledby="a-nome-tuo" className="border-t border-mv-line">
         <div className={`${WRAP} py-14 sm:py-20`}>
           <h2 id="a-nome-tuo" className={`${H2} max-w-[46rem]`}>
-            Esce a nome tuo, con il tuo modello.
+            Un preventivo con l&apos;immagine della tua azienda
           </h2>
           <div className={`mt-4 ${BODY} max-w-[38rem]`}>
             <p>
-              Stesso logo, stessa intestazione, stesso piè di pagina del preventivo che
-              fai oggi in Word. Le righe sono quelle che hai detto in cantiere.
+              Logo, intestazione e piè di pagina restano quelli del tuo modello Word. Le
+              righe sono quelle dettate in cantiere.
             </p>
-            <p>Lo mandi come PDF o come link.</p>
+            <p>Puoi inviarlo come PDF o come link.</p>
           </div>
 
           <div className="mt-10 grid items-start gap-10 lg:grid-cols-[minmax(0,4fr)_minmax(0,7fr)] lg:gap-10">
@@ -356,7 +355,7 @@ export default function HomePage() {
                 <WordTemplateSheet />
               </ScreenSlot>
               <figcaption className={CAPTION}>
-                Esempio con modello fittizio. Come lo fai oggi.
+                Esempio con modello fittizio: il preventivo come lo prepari oggi.
               </figcaption>
             </figure>
             <figure>
@@ -370,7 +369,7 @@ export default function HomePage() {
                 <QuoteSheet variant="full" />
               </ScreenSlot>
               <figcaption className={CAPTION}>
-                Stessa faccia. Le righe dettate al passo 3 sono queste.
+                Stessa impaginazione, con le righe dettate al passo 3.
               </figcaption>
             </figure>
           </div>
@@ -381,21 +380,21 @@ export default function HomePage() {
           <div className="mt-10 grid items-start gap-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-12">
             <div>
               <h3 className={H3}>
-                Il cliente risponde dal link. La risposta resta registrata.
+                Il cliente risponde online e la risposta resta registrata
               </h3>
               <div className={`mt-4 ${BODY} max-w-[38rem]`}>
                 <p>
-                  Il cliente apre il link dal suo telefono, legge il preventivo e scrive
-                  nome e cognome per accettare. Se vuole, ti lascia una nota. Può anche
-                  rifiutare.
+                  Il cliente apre il link dal telefono, consulta il preventivo e lo
+                  accetta indicando nome e cognome. Può aggiungere una nota oppure
+                  rifiutarlo.
                 </p>
                 <p>
-                  Quando accetta, il preventivo si blocca: non lo cambia più nessuno.
-                  Resta scritto chi ha accettato, il giorno e l&apos;ora.
+                  Una volta accettato, il preventivo non è più modificabile e restano
+                  registrati nome, data e ora dell&apos;accettazione.
                 </p>
                 <p>
-                  Non è una firma e non è una garanzia legale: è la registrazione di
-                  quello che il cliente ha risposto.
+                  L&apos;accettazione non sostituisce una firma e non costituisce una
+                  garanzia legale: documenta la risposta del cliente.
                 </p>
               </div>
               <PhotoSlot
@@ -410,7 +409,7 @@ export default function HomePage() {
                   <ClientBeforeScreen />
                 </ScreenSlot>
                 <figcaption className={`${CAPTION} text-center`}>
-                  Quello che vede il cliente.
+                  La pagina che riceve il cliente.
                 </figcaption>
               </figure>
               <figure className="sm:pt-16">
@@ -418,7 +417,7 @@ export default function HomePage() {
                   <ClientAfterScreen />
                 </ScreenSlot>
                 <figcaption className={`${CAPTION} text-center`}>
-                  Dopo il sì, il preventivo è bloccato. Data d&apos;esempio.
+                  Dopo l&apos;accettazione il preventivo è bloccato. Data d&apos;esempio.
                 </figcaption>
               </figure>
             </div>
@@ -426,16 +425,14 @@ export default function HomePage() {
 
           {/* D3. E dopo? */}
           <div className="mt-14 max-w-[42rem] border-l-4 border-mv-ink pl-5">
-            <h3 className={H3}>E dopo?</h3>
+            <h3 className={H3}>Dopo l&apos;accettazione</h3>
             <div className={`mt-3 ${BODY}`}>
               <p>
-                Il preventivo accettato resta nella lista Preventivi, tra gli accettati,
-                con il PDF.
+                Il preventivo resta archiviato tra gli accettati, insieme al relativo PDF.
               </p>
               <p>
-                Mastrovoce non fa fatture, non manda fatture elettroniche e non si collega
-                al tuo gestionale. La fattura la fai come oggi, con il programma che usi
-                già.
+                Mastrovoce non emette fatture né fatture elettroniche e non si integra con
+                il gestionale: la fatturazione resta sul programma che usi oggi.
               </p>
             </div>
           </div>
@@ -446,7 +443,7 @@ export default function HomePage() {
       <section aria-labelledby="domande" className="border-t border-mv-line">
         <div className={`${WRAP} py-14 sm:py-20`}>
           <h2 id="domande" className={H2}>
-            Le domande che ci fanno
+            Domande frequenti
           </h2>
           <Faq />
         </div>
@@ -475,16 +472,17 @@ export default function HomePage() {
           >
             <div>
               <p className="mv-display text-[2.25rem] font-bold leading-[1.05] sm:text-5xl">
-                E la sera resta tua.
+                Il preventivo parte dal cantiere, non a fine giornata.
               </p>
               <p className="mt-4 text-base leading-7 text-stone-300 sm:text-lg sm:leading-8">
-                Il preventivo è partito dal cantiere. Il cliente ha risposto dal link.
+                Meno tempo davanti al foglio, risposte più rapide dai clienti e prezzi
+                sempre allineati al tuo listino.
               </p>
               <CtaLink href="/auth/register" className="mt-8 w-full sm:w-auto">
-                Prova con i tuoi prezzi
+                Prova gratis per 14 giorni
               </CtaLink>
               <p className="mt-2 text-base text-stone-300">
-                14 giorni di prova · serve la carta · disdici quando vuoi
+                Carta richiesta all&apos;attivazione · disdici in qualsiasi momento
               </p>
             </div>
             <figure>
@@ -492,7 +490,8 @@ export default function HomePage() {
                 <PreventiviScreen />
               </ScreenSlot>
               <figcaption className="mt-3 text-center text-base text-stone-300">
-                I preventivi accettati, tutti in una lista. Nomi e date d&apos;esempio.
+                Tutti i preventivi accettati in un&apos;unica lista. Nomi e date
+                d&apos;esempio.
               </figcaption>
             </figure>
             <PhotoSlot
@@ -514,12 +513,12 @@ export default function HomePage() {
         <div className={`${WRAP} py-14 sm:py-20`}>
           <div className="max-w-[42rem]">
             <h2 id="chi-ce-dietro" className={H2}>
-              Chi c&apos;è dietro
+              Chi siamo
             </h2>
             <p className="mt-5 text-lg leading-8 sm:text-xl sm:leading-9">
-              Mastrovoce lo facciamo noi{MADE_IN_ITALY_CONFIRMED ? ', in Italia,' : ''}{' '}
-              per chi i preventivi li fa tra un lavoro e l&apos;altro. Se hai un dubbio,
-              scrivici: risponde una persona.
+              Mastrovoce è sviluppato{MADE_IN_ITALY_CONFIRMED ? ' in Italia' : ''} per chi
+              prepara i preventivi tra un lavoro e l&apos;altro. Per qualsiasi domanda
+              puoi scriverci: ti risponde una persona del nostro team.
             </p>
             {FOUNDER_NAME ? (
               <p className="mt-5 text-lg font-semibold">— {FOUNDER_NAME}</p>
@@ -536,8 +535,8 @@ export default function HomePage() {
       {/* H. Piè di pagina */}
       <footer className={`${WRAP} pb-12 pt-10 text-base leading-7`}>
         <p>
-          <span className="font-semibold">Mastrovoce</span> · Il preventivo dettato in
-          cantiere, con i tuoi prezzi.
+          <span className="font-semibold">Mastrovoce</span> · Preventivi dettati in
+          cantiere, con i prezzi del tuo listino.
         </p>
         <p className="mt-2">
           Assistenza:{' '}
@@ -562,7 +561,7 @@ export default function HomePage() {
           </CtaLink>
         </nav>
         <p className="mt-2 text-mv-muted">
-          In cantiere lo usi dal telefono, in ufficio dal computer.
+          Disponibile da smartphone in cantiere e da computer in ufficio.
         </p>
       </footer>
 
@@ -578,7 +577,7 @@ function HeroLinks({ showFounder }: { showFounder: boolean }) {
       <div className="min-h-[48px]">
         {showFounder ? (
           <CtaLink href="#prezzi" variant="text">
-            Sei tra i primi 50? Guarda il prezzo fondatori
+            Offerta fondatori riservata ai primi 50 clienti
           </CtaLink>
         ) : null}
       </div>

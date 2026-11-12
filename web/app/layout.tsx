@@ -48,7 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta
           name="description"
-          content="Detti materiali e lavorazioni dal telefono. Il preventivo esce con i tuoi prezzi e il tuo modello Word, a nome della tua azienda. 14 giorni di prova."
+          content="Preventivi dettati in cantiere, con i prezzi del tuo listino e il modello Word della tua azienda. Per fabbri, idraulici, elettricisti e imprese edili. 14 giorni di prova gratuita."
         />
         <meta
           name="keywords"
@@ -61,11 +61,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta property="og:type" content="website" />
         <meta
           property="og:title"
-          content="Detti le voci in cantiere. Il preventivo esce con i tuoi prezzi."
+          content="Mastrovoce · Preventivi dettati in cantiere, con i prezzi del tuo listino"
         />
         <meta
           property="og:description"
-          content="Per fabbri, idraulici, elettricisti e piccole imprese edili. Parli, controlli le righe, mandi il preventivo a nome tuo."
+          content="Per fabbri, idraulici, elettricisti e imprese edili: detti le voci, verifichi le righe e invii il preventivo con il nome della tua azienda."
         />
         <meta property="og:site_name" content="Mastrovoce" />
         <meta property="og:locale" content="it_IT" />
@@ -74,11 +74,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="twitter:card" content="summary_large_image" />
         <meta
           name="twitter:title"
-          content="Detti le voci in cantiere. Il preventivo esce con i tuoi prezzi."
+          content="Mastrovoce · Preventivi dettati in cantiere, con i prezzi del tuo listino"
         />
         <meta
           name="twitter:description"
-          content="Per fabbri, idraulici, elettricisti e piccole imprese edili. Parli, controlli le righe, mandi il preventivo a nome tuo."
+          content="Per fabbri, idraulici, elettricisti e imprese edili: detti le voci, verifichi le righe e invii il preventivo con il nome della tua azienda."
         />
 
         <meta

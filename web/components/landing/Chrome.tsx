@@ -22,7 +22,7 @@ export function LandingHeader() {
             Accedi
           </CtaLink>
           <CtaLink href="/auth/register" className="min-h-[48px] px-5 text-base">
-            Prova
+            Prova gratis
           </CtaLink>
         </nav>
       </div>
@@ -71,7 +71,7 @@ export function StickyCta({
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 border-t border-mv-line bg-mv-paper px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:hidden">
       <CtaLink href="/auth/register" className="w-full">
-        Prova con i tuoi prezzi
+        Prova gratis per 14 giorni
       </CtaLink>
     </div>
   );

@@ -8,79 +8,79 @@ interface Qa {
 
 const WORK: Qa[] = [
   {
-    q: "Non ho tempo di stare dietro a un'altra app.",
-    a: "Listino e modello li prepari all'inizio, una volta. Dopo, sul lavoro, a te resta parlare e controllare.",
+    q: 'Quanto tempo richiede la configurazione?',
+    a: "Listino e modello si impostano una sola volta, all'inizio. Da quel momento, in cantiere, ti basta dettare e verificare le righe.",
   },
   {
-    q: 'Ho già il mio Excel.',
-    a: 'Tienilo: lo carichi come listino. Cambia che non ricopi più i prezzi a mano.',
+    q: 'Uso già un listino in Excel.',
+    a: "Puoi caricarlo così com'è: diventa il listino di Mastrovoce e non dovrai più ricopiare i prezzi a mano.",
   },
   {
-    q: 'Non ho un listino. I prezzi li ho in testa.',
-    a: 'Va bene lo stesso. Detti le voci e il prezzo lo scrivi tu.',
+    q: 'Non ho un listino digitale.',
+    a: 'Puoi usare Mastrovoce comunque: detti le voci e inserisci i prezzi a mano.',
   },
   {
-    q: "Non mi fido di un'app.",
-    a: 'Niente si salva senza il tuo sì: ogni riga la vedi prima. Il cliente vede il tuo nome, non il nostro. Quando accetta, resta registrato chi ha accettato e quando. È la registrazione di quello che ha risposto, non una garanzia legale.',
+    q: 'Chi controlla i preventivi?',
+    a: 'Sempre tu: nessuna riga viene salvata senza la tua conferma. Il cliente vede il nome della tua azienda, non il nostro. Quando accetta, restano registrati nome, data e ora: è la documentazione della sua risposta, non una garanzia legale.',
   },
   {
-    q: 'E se capisce male?',
-    a: 'Vedi sempre la frase che ha capito e le righe che ne escono. Se una riga è sbagliata la togli e la ridici. Se una voce può essere più articoli, ti chiede quale.',
+    q: 'Cosa succede se una voce viene interpretata male?',
+    a: 'Vedi sempre la frase trascritta e le righe proposte. Una riga errata si elimina o si detta di nuovo; se una voce corrisponde a più articoli, Mastrovoce ti chiede quale scegliere.',
   },
   {
-    q: "In cantiere non c'è campo.",
-    a: 'La registrazione resta salvata e parte quando torna il segnale.',
+    q: 'Funziona anche senza copertura di rete?',
+    a: 'Sì: la registrazione viene salvata sul telefono e inviata appena torna il segnale.',
   },
   {
     q: "Che cos'è METEL?",
-    a: "È il formato di listino che usano molti grossisti, soprattutto nel materiale elettrico. Se non sai cos'è, non ti serve: va bene anche un PDF o un Excel.",
+    a: 'È il formato standard con cui molti grossisti, soprattutto del materiale elettrico, forniscono i listini. Non è indispensabile: vanno bene anche PDF ed Excel.',
   },
   {
-    q: 'Devo mettermi al computer?',
-    a: 'In cantiere lo usi dal telefono, in ufficio dal computer.',
+    q: 'Serve un computer?',
+    a: 'No: in cantiere si usa dallo smartphone. Dal computer puoi gestire listini e preventivi in ufficio.',
   },
   {
-    q: 'Quanto mi costa?',
-    a: '€29,99 al mese, con 14 giorni di prova per provarlo con i tuoi prezzi. Disdici quando vuoi dalla tua area account. Se sei tra i primi 50 clienti puoi scegliere il prezzo fondatori: lo trovi qui sotto.',
+    q: 'Quanto costa?',
+    a: "€29,99 al mese, con 14 giorni di prova gratuita e disdetta in qualsiasi momento. I primi 50 clienti possono scegliere l'offerta fondatori, descritta nella sezione Prezzi.",
   },
 ];
 
 const OFFICE: Qa[] = [
   {
     q: 'Cosa succede quando il cliente accetta?',
-    a: 'Il preventivo si blocca e resta nella lista Preventivi come accettato. Mastrovoce non fa fatture e non manda fatture elettroniche: la fattura la fate con il programma che usate già.',
+    a: 'Il preventivo non è più modificabile e resta archiviato tra gli accettati. Mastrovoce non emette fatture né fatture elettroniche: la fatturazione resta sul programma che usate oggi.',
   },
   {
     q: 'Il modello Word va preparato in qualche modo?',
-    a: 'Basta un vostro preventivo fatto in Word. Prima di caricarlo togliete nomi e indirizzi dei clienti.',
+    a: 'Basta un vostro preventivo in Word, privo dei dati dei clienti.',
   },
   {
-    q: 'Siamo in più persone.',
-    a: "C'è il piano Team: 5 utenti, titolare compreso, a €79,99 al mese. Ogni utente in più costa €9,99 al mese, fino a 10.",
+    q: 'Siamo in più persone: come funziona?',
+    a: 'Il piano Team include 5 utenti, titolare compreso, a €79,99 al mese. Ogni utente aggiuntivo costa €9,99 al mese, fino a un massimo di 10.',
   },
   {
     q: 'Il prezzo fondatori vale anche per il Team?',
-    a: 'No. Vale solo per i piani Mensile e Annuale.',
+    a: "No, l'offerta è valida solo per i piani Mensile e Annuale.",
   },
   {
     q: 'Dove finiscono i dati?',
     a: (
       <>
-        I dati stanno su Supabase, nei server europei di Francoforte, e su Vercel. Per
-        trascrivere quello che detti, la voce viene elaborata da OpenAI. Tutti i dettagli
-        sono nella pagina Privacy.{' '}
+        I dati sono conservati su Supabase, in server europei a Francoforte, e su Vercel.
+        Per la trascrizione, l&apos;audio dettato viene elaborato da OpenAI. Tutti i
+        dettagli sono riportati nell&apos;informativa privacy.{' '}
         <Link
           href="/privacy"
           className="inline-flex min-h-[48px] items-center font-semibold text-mv-ink underline decoration-primary decoration-2 underline-offset-4 hover:text-primary-dark"
         >
-          Leggi la Privacy
+          Leggi l&apos;informativa
         </Link>
       </>
     ),
   },
   {
     q: "E l'IVA sui prezzi dell'abbonamento?",
-    a: "L'indicazione definitiva arriva a breve.",
+    a: 'Le condizioni fiscali definitive saranno indicate a breve.',
   },
 ];
 
@@ -104,13 +104,13 @@ function QaList({ items }: { items: Qa[] }) {
 export function Faq() {
   return (
     <div>
-      <p className="mt-8 text-lg font-semibold text-mv-muted">Sul lavoro</p>
+      <p className="mt-8 text-lg font-semibold text-mv-muted">Uso quotidiano</p>
       <div className="mt-3">
         <QaList items={WORK} />
       </div>
       <details className="group mt-10">
         <summary className="flex min-h-[56px] cursor-pointer list-none items-center justify-between gap-4 rounded-md border-2 border-mv-ink px-4 text-lg font-semibold [&::-webkit-details-marker]:hidden">
-          Per chi segue l&apos;ufficio
+          Per l&apos;ufficio e l&apos;amministrazione
           <span aria-hidden="true" className="text-2xl leading-none group-open:rotate-45">
             +
           </span>
