@@ -1,5 +1,6 @@
 import sanitizeHtml from 'sanitize-html';
 import { APP_NAME } from './brand';
+import { renderStandardQuote } from './standardQuoteHtml';
 
 export interface QuoteData {
   lavoroTitle: string;
@@ -1050,201 +1051,52 @@ export function generateQuoteHTML(rawData: QuoteData): string {
     return processCustomTemplate(data.customTemplateHtml, data);
   }
 
-  const templateType = data.templateType || 'classic';
   const cc = data.countryCode?.toUpperCase() || 'IT';
   const currency = CURRENCIES[cc] || CURRENCIES.default;
   const paymentTerms = PAYMENT_TERMS[cc] || PAYMENT_TERMS.default;
   const quoteLabel = QUOTE_LABEL[cc] || QUOTE_LABEL.default;
-  const clientLabel = CLIENT_LABEL[cc] || CLIENT_LABEL.default;
-  const subtotalLabel = SUBTOTAL_LABEL[cc] || SUBTOTAL_LABEL.default;
-  const taxLabelFull = TAX_LABEL_FULL[cc] || TAX_LABEL_FULL.default;
-  const totalLabel = TOTAL_LABEL[cc] || TOTAL_LABEL.default;
-  const descriptionLabel = DESCRIPTION_LABEL[cc] || DESCRIPTION_LABEL.default;
-  const quantityLabel = QUANTITY_LABEL[cc] || QUANTITY_LABEL.default;
-  const priceLabel = PRICE_LABEL[cc] || PRICE_LABEL.default;
-  const subtotalColLabel = SUBTOTAL_COL_LABEL[cc] || SUBTOTAL_COL_LABEL.default;
-  const signatureLabel = SIGNATURE_LABEL[cc] || SIGNATURE_LABEL.default;
-  const approvedLabel = APPROVED_LABEL[cc] || APPROVED_LABEL.default;
 
-  const subtotal = data.items.reduce((sum, item) => sum + getRowSubtotal(item), 0);
-  const taxes = subtotal * (Number(data.vat_percent) / 100);
-  const total = subtotal + taxes;
-
-  const itemsHtml = data.items
-    .map((item) => {
-      const rowSubtotal = getRowSubtotal(item);
-      return `
-      <tr style="border-bottom: 1px solid #ddd;">
-        <td style="padding: 10px; text-align: left;">${item.description}</td>
-        <td style="padding: 10px; text-align: center;">${item.quantity}</td>
-        <td style="padding: 10px; text-align: right;">${formatMoney(currency, getCustomerUnitPrice(item), cc)}</td>
-        <td style="padding: 10px; text-align: right;">${formatMoney(currency, rowSubtotal, cc)}</td>
-      </tr>
-    `;
-    })
-    .join('');
-
-  // Generate styles based on template type
-  const getStyles = (): string => {
-    const baseStyles = `
-      body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f9f9f9; }
-      .container { max-width: 800px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-      .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 20px; }
-      .logo-area { font-size: 24px; font-weight: bold; color: ${brandColor}; }
-      .company-info { text-align: right; font-size: 12px; color: #666; }
-      .title { font-size: 28px; font-weight: bold; margin: 20px 0; color: #1f2937; }
-      .client-section { margin-bottom: 30px; }
-      .client-label { font-weight: bold; color: #666; font-size: 12px; margin-bottom: 5px; }
-      .client-value { font-size: 16px; color: #1f2937; margin-bottom: 15px; }
-      .revision-date { font-size: 12px; color: #999; margin-bottom: 5px; }
-      table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-      th { padding: 12px; text-align: left; font-weight: bold; font-size: 13px; color: #374151; }
-      td { padding: 12px; font-size: 13px; }
-      .summary-section { padding: 20px; border-radius: 4px; margin: 20px 0; }
-      .summary-row { display: flex; justify-content: space-between; margin-bottom: 10px; }
-      .summary-label { font-weight: bold; }
-      .summary-value { text-align: right; }
-      .total-row { font-size: 16px; font-weight: bold; color: ${brandColor}; margin-top: 15px; }
-      .notes { margin-top: 30px; padding-top: 20px; font-size: 12px; color: #666; line-height: 1.6; }
-      .footer { margin-top: 40px; padding-top: 20px; font-size: 11px; color: #999; text-align: center; }
-      .signature-area { margin-top: 30px; display: flex; justify-content: space-between; }
-      .signature-box { text-align: center; }
-      .signature-line { margin-top: 40px; border-top: 1px solid #1f2937; width: 150px; }
-    `;
-
-    if (templateType === 'minimal') {
-      return (
-        baseStyles +
-        `
-        .container { padding: 20px; }
-        .header { margin-bottom: 15px; border-bottom: 1px solid #e5e7eb; }
-        th { background: transparent; padding: 8px; border-bottom: 1px solid #e5e7eb; }
-        td { border-bottom: 1px solid #f3f4f6; }
-        .summary-section { background: transparent; border-left: 2px solid #e5e7eb; padding-left: 15px; }
-        .notes { border-top: none; padding-top: 10px; }
-        .signature-area { margin-top: 20px; }
-        .signature-line { margin-top: 20px; }
-      `
-      );
-    } else if (templateType === 'professional') {
-      return (
-        baseStyles +
-        `
-        .container { padding: 60px; }
-        .header { margin-bottom: 50px; border-bottom: 3px solid ${brandColor}; padding-bottom: 30px; }
-        .logo-area { font-size: 32px; }
-        .title { font-size: 32px; margin: 40px 0; }
-        .client-section { margin-bottom: 50px; }
-        th { background: #1f2937; color: white; padding: 15px; border-bottom: 2px solid ${brandColor}; }
-        td { padding: 15px; }
-        tr { border-bottom: 1px solid #e5e7eb; }
-        .summary-section { background: #f9fafb; padding: 30px; border-radius: 8px; border-left: 4px solid ${brandColor}; margin: 40px 0; }
-        .notes { border-top: 2px solid #e5e7eb; padding-top: 30px; margin-top: 50px; }
-        .signature-area { margin-top: 60px; }
-      `
-      );
-    } else {
-      // classic template
-      return (
-        baseStyles +
-        `
-        .container { padding: 40px; }
-        .header { margin-bottom: 30px; border-bottom: 3px solid ${brandColor}; }
-        th { background: #f3f4f6; padding: 12px; border-bottom: 2px solid ${brandColor}; }
-        td { border-bottom: 1px solid #ddd; }
-        .summary-section { background: #f9fafb; }
-        .notes { border-top: 1px solid #e5e7eb; }
-      `
-      );
-    }
-  };
-
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <title>${quoteLabel} ${data.lavoroTitle}</title>
-      <style>
-        ${getStyles()}
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <div class="logo-area">${logoUrl ? `<img src="${logoUrl}" alt="" style="max-height:64px;max-width:220px">` : data.companyName || quoteLabel}</div>
-          <div class="company-info">
-            <strong>${data.companyName || ''}</strong><br>
-            ${data.vatNumber ? `P.IVA ${data.vatNumber}<br>` : ''}
-            ${data.address ? `${data.address}<br>` : ''}
-            ${data.city ? `${data.city}${data.postalCode ? ', ' + data.postalCode : ''}<br>` : ''}
-          </div>
-        </div>
-
-        <div class="title">${data.lavoroTitle}</div>
-
-        <div class="revision-date">Revisione ${String(data.revision).padStart(2, '0')} · Data ${formatQuoteDate(cc)}</div>
-
-        <div class="client-section">
-          <div class="client-label">${clientLabel}</div>
-          <div class="client-value">${data.clienteName}</div>
-          ${data.clienteEmail ? `<div class="client-value">${data.clienteEmail}</div>` : ''}
-        </div>
-
-        <table>
-          <thead>
-            <tr style="border-bottom: 2px solid ${brandColor};">
-              <th>${descriptionLabel}</th>
-              <th style="text-align: center;">${quantityLabel}</th>
-              <th style="text-align: right;">${priceLabel}</th>
-              <th style="text-align: right;">${subtotalColLabel}</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${itemsHtml}
-          </tbody>
-        </table>
-
-        <div class="summary-section">
-          <div class="summary-row">
-            <span class="summary-label">${subtotalLabel}</span>
-            <span class="summary-value">${formatMoney(currency, subtotal, cc)}</span>
-          </div>
-          <div class="summary-row">
-            <span class="summary-label">${taxLabelFull}</span>
-            <span class="summary-value">${formatMoney(currency, taxes, cc)}</span>
-          </div>
-          <div class="summary-row total-row">
-            <span>${totalLabel}</span>
-            <span>${formatMoney(currency, total, cc)}</span>
-          </div>
-        </div>
-
-        <div class="notes">
-          <strong>Pagamento:</strong><br>
-          ${paymentTerms}
-          ${data.iban ? `<br><br><strong>IBAN:</strong> ${data.iban}` : ''}
-          ${data.swift ? ` | <strong>SWIFT:</strong> ${data.swift}` : ''}
-        </div>
-
-        <div class="signature-area">
-          <div class="signature-box">
-            <strong>${signatureLabel}</strong>
-            <div class="signature-line"></div>
-          </div>
-          <div class="signature-box">
-            <strong>${approvedLabel}</strong>
-            <div class="signature-line"></div>
-          </div>
-        </div>
-
-        <div class="footer">
-          Preventivo preparato con ${APP_NAME}
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
-
-  return html;
+  const cityLine = [data.postalCode, data.city].filter(Boolean).join(' ');
+  return renderStandardQuote({
+    appName: APP_NAME,
+    locale: quoteLocale(cc),
+    currencySymbol: currency,
+    brandColor,
+    logoUrl,
+    companyName: data.companyName,
+    companyDetails: [
+      [data.address, cityLine].filter(Boolean).join(', '),
+      data.vatNumber ? `P.IVA ${data.vatNumber}` : '',
+      data.fiscalCode && data.fiscalCode !== data.vatNumber
+        ? `C.F. ${data.fiscalCode}`
+        : '',
+    ].filter(Boolean),
+    quoteLabel,
+    title: data.lavoroTitle,
+    revision: data.revision,
+    dateText: formatQuoteDate(cc),
+    clientName: data.clienteName,
+    clientDetails: [
+      [
+        data.clienteAddress,
+        [data.clientePostalCode, data.clienteCity].filter(Boolean).join(' '),
+      ]
+        .filter(Boolean)
+        .join(', '),
+      data.clienteVat ? `P.IVA ${data.clienteVat}` : '',
+      data.clienteEmail || '',
+    ].filter(Boolean),
+    lines: data.items.map((item) => ({
+      description: item.description,
+      quantity: Number(item.quantity),
+      unit: item.unit,
+      unitPrice: getCustomerUnitPrice(item),
+      discountPercent: item.discount_percent,
+    })),
+    vatPercent: Number(data.vat_percent),
+    taxLabel: TAX_LABELS[cc] || TAX_LABELS.default,
+    paymentTerms,
+    iban: data.iban,
+    swift: data.swift,
+  });
 }
