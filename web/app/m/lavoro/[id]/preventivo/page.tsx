@@ -169,6 +169,11 @@ export default function MobileQuote() {
       })
       .select('id, public_token')
       .single();
+    if (error?.code === '42501') {
+      throw new Error(
+        'Serve un abbonamento attivo per inviare il preventivo. Attivalo dal sito, nella pagina Abbonamento.'
+      );
+    }
     if (error || !data) throw new Error('Preventivo non salvato. Riprova.');
     return data;
   };
