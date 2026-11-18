@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { Text, StyleSheet, KeyboardAvoidingView, Platform, Pressable, ScrollView } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { Alert } from 'react-native';
 import { useTheme } from '../lib/darkMode';
+import { PrimaryButton, TertiaryButton, TextField, FONT_FAMILY, space, ufficio } from '../components/ui';
 
 export default function LoginScreen() {
   const { t } = useTranslation();
@@ -12,6 +14,7 @@ export default function LoginScreen() {
   const { colors } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [needsCode, setNeedsCode] = useState(false);
   const [code, setCode] = useState('');
@@ -65,34 +68,57 @@ export default function LoginScreen() {
   if (needsCode) {
     return (
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.container, { backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.text, fontSize: 18, marginBottom: 12 }}>Inserisci il codice a 6 cifre della tua app di autenticazione.</Text>
-        <TextInput style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} value={code} onChangeText={(v) => setCode(v.replace(/\D/g, ''))} keyboardType="number-pad" maxLength={6} textContentType="oneTimeCode" placeholderTextColor={colors.textTertiary} />
-        <TouchableOpacity style={[styles.btnPrimary, { backgroundColor: colors.primary, minHeight: 64, justifyContent: 'center' }, loading && styles.disabled]} onPress={handleCode} disabled={loading || code.length !== 6}>
-          <Text style={styles.btnText}>{loading ? '...' : 'Verifica'}</Text>
-        </TouchableOpacity>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <Text style={[ufficio.body, { color: colors.text, marginBottom: space.s4 }]}>Inserisci il codice a 6 cifre della tua app di autenticazione.</Text>
+          <TextField
+            label="Codice a 6 cifre"
+            scale="cantiere"
+            value={code}
+            onChangeText={(v) => setCode(v.replace(/\D/g, ''))}
+            keyboardType="number-pad"
+            maxLength={6}
+            textContentType="oneTimeCode"
+            style={styles.code}
+          />
+          <PrimaryButton label="Verifica" onPress={handleCode} loading={loading} loadingLabel="Verifico…" disabled={code.length !== 6} />
+        </ScrollView>
       </KeyboardAvoidingView>
     );
   }
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.container, { backgroundColor: colors.background }]}>
-      <TextInput style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} placeholder={t('auth.email')} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholderTextColor={colors.textTertiary} />
-      <TextInput style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} placeholder={t('auth.password')} value={password} onChangeText={setPassword} secureTextEntry placeholderTextColor={colors.textTertiary} />
-      <TouchableOpacity style={[styles.btnPrimary, { backgroundColor: colors.primary }, loading && styles.disabled]} onPress={handleLogin} disabled={loading}>
-        <Text style={styles.btnText}>{loading ? '...' : t('auth.login')}</Text>
-      </TouchableOpacity>
-      <TouchableOpacity onPress={() => (navigation as any).navigate('Register')}>
-        <Text style={[styles.link, { color: colors.primary }]}>{t('auth.register')}</Text>
-      </TouchableOpacity>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <TextField label={t('auth.email')} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoComplete="email" textContentType="emailAddress" placeholder="Es. mario.rossi@email.it" />
+        <TextField
+          label={t('auth.password')}
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry={!showPassword}
+          autoComplete="password"
+          textContentType="password"
+          right={
+            <Pressable
+              onPress={() => setShowPassword((v) => !v)}
+              accessibilityRole="button"
+              accessibilityLabel={showPassword ? 'Nascondi la password' : 'Mostra la password'}
+              style={styles.eye}
+            >
+              <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={24} color={colors.textSecondary} />
+            </Pressable>
+          }
+        />
+        <PrimaryButton label={t('auth.login')} onPress={handleLogin} loading={loading} loadingLabel="Accedo…" style={{ marginTop: space.s2 }} />
+        <TertiaryButton label="Non hai un account? Registrati" onPress={() => (navigation as any).navigate('Register')} style={styles.link} />
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: '#f1f5f9', justifyContent: 'center' },
-  input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 16, marginBottom: 16, fontSize: 16 },
-  btnPrimary: { backgroundColor: '#c2410c', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginBottom: 16 },
-  btnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  disabled: { opacity: 0.6 },
-  link: { color: '#c2410c', textAlign: 'center', fontSize: 14 },
+  container: { flex: 1 },
+  scroll: { padding: space.s5, flexGrow: 1, justifyContent: 'center' },
+  eye: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', marginRight: -8 },
+  code: { fontFamily: FONT_FAMILY.display, fontSize: 28, fontWeight: '800', letterSpacing: 4, fontVariant: ['tabular-nums'] },
+  link: { alignSelf: 'center', marginTop: space.s3 },
 });

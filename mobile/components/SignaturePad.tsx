@@ -3,6 +3,10 @@
  * Punto 9: Firma Digitale - client signs on smartphone screen for immediate approval.
  */
 import React, { useRef, useState, useCallback } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../lib/darkMode';
+import PrimaryButton from './ui/PrimaryButton';
+import SecondaryButton from './ui/SecondaryButton';
 import {
   View,
   PanResponder,
@@ -37,6 +41,9 @@ export default function SignaturePad({
   strokeWidth = 2.5,
   backgroundColor = '#ffffff',
 }: SignaturePadProps) {
+  const { colors } = useTheme();
+  const labelColor = colors.text;
+  const placeholderColor = colors.textTertiary;
   const [paths, setPaths] = useState<Point[][]>([]);
   const [currentPath, setCurrentPath] = useState<Point[]>([]);
   const containerRef = useRef<View>(null);
@@ -138,41 +145,30 @@ export default function SignaturePad({
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>Firma qui sotto / Sign below</Text>
+      <Text style={[styles.label, { color: labelColor }]}>Firma del cliente qui sotto</Text>
       <View
         ref={containerRef}
         onLayout={onLayout}
         style={[
           styles.canvas,
-          { width, height, backgroundColor },
+          // The canvas stays white paper in both themes; the border comes from the theme.
+          { width, height, backgroundColor, borderColor: colors.inputBorder },
         ]}
         {...panResponder.panHandlers}
       >
         {renderPaths()}
         {isEmpty && (
           <View style={styles.placeholder}>
-            <Text style={styles.placeholderText}>✍️</Text>
+            <Ionicons name="pencil-outline" size={40} color={placeholderColor} />
           </View>
         )}
       </View>
       <View style={styles.buttons}>
-        <TouchableOpacity style={styles.clearBtn} onPress={clearSignature}>
-          <Text style={styles.clearBtnText}>🗑️ Cancella</Text>
-        </TouchableOpacity>
-        {onCancel && (
-          <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
-            <Text style={styles.cancelBtnText}>Annulla</Text>
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          style={[styles.confirmBtn, isEmpty && styles.disabledBtn]}
-          onPress={handleConfirm}
-          disabled={isEmpty}
-        >
-          <Text style={styles.confirmBtnText}>
-            ✅ Conferma Firma
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.row}>
+          <SecondaryButton label="Cancella" icon="refresh-outline" scale="ufficio" onPress={clearSignature} style={{ flex: 1 }} accessibilityLabel="Cancella la firma e ricomincia" />
+          {onCancel ? <SecondaryButton label="Annulla" scale="ufficio" onPress={onCancel} style={{ flex: 1 }} /> : null}
+        </View>
+        <PrimaryButton label="Conferma la firma" icon="checkmark" onPress={handleConfirm} disabled={isEmpty} />
       </View>
     </View>
   );
@@ -181,15 +177,13 @@ export default function SignaturePad({
 const styles = StyleSheet.create({
   container: { marginVertical: 12 },
   label: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#64748b',
     marginBottom: 8,
     textAlign: 'center',
   },
   canvas: {
     borderWidth: 2,
-    borderColor: '#e2e8f0',
     borderRadius: 12,
     borderStyle: 'dashed',
     overflow: 'hidden',
@@ -205,34 +199,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     opacity: 0.3,
   },
-  placeholderText: { fontSize: 48 },
-  buttons: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-  },
-  clearBtn: {
-    backgroundColor: '#f1f5f9',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-  },
-  clearBtnText: { color: '#64748b', fontWeight: '600', fontSize: 14 },
-  cancelBtn: {
-    backgroundColor: '#f1f5f9',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-  },
-  cancelBtnText: { color: '#64748b', fontWeight: '600', fontSize: 14 },
-  confirmBtn: {
-    flex: 1,
-    backgroundColor: '#10b981',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  confirmBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  disabledBtn: { opacity: 0.4 },
+  buttons: { gap: 12, marginTop: 12 },
+  row: { flexDirection: 'row', gap: 12 },
 });

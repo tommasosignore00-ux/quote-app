@@ -1,6 +1,19 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Linking, Modal, StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { ActivityIndicator, Alert, FlatList, Linking, Modal, Pressable, SafeAreaView, StyleSheet, Text, View, ScrollView } from 'react-native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import {
+  BottomTabBar,
+  Chip,
+  EmptyState,
+  SecondaryButton,
+  StatusPill,
+  TertiaryButton,
+  cantiere,
+  radius,
+  space,
+  type PillKind,
+} from '../components/ui';
 import { WebView } from 'react-native-webview';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../lib/darkMode';
@@ -13,11 +26,11 @@ import {
   type QuoteVersionRow,
 } from '../lib/quoteTracking';
 
-const STAGE_COLORS: Record<QuoteStage, { bg: string; text: string }> = {
-  accepted: { bg: '#dcfce7', text: '#166534' },
-  rejected: { bg: '#fee2e2', text: '#991b1b' },
-  sent: { bg: '#fef3c7', text: '#92400e' },
-  validated: { bg: '#e2e8f0', text: '#334155' },
+const STAGE_PILL: Record<QuoteStage, PillKind> = {
+  accepted: 'accepted',
+  rejected: 'refused',
+  sent: 'waiting',
+  validated: 'toSend',
 };
 
 const FILTERS: Array<{ key: QuoteStage | 'all'; label: string }> = [
@@ -43,6 +56,7 @@ function formatDate(value: string | null): string {
 
 export default function PreventiviScreen() {
   const { colors } = useTheme();
+  const navigation = useNavigation<any>();
   const [rows, setRows] = useState<QuoteVersionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<QuoteStage | 'all'>('all');
@@ -76,64 +90,73 @@ export default function PreventiviScreen() {
     // Only a label and a call the user makes himself: nothing is ever sent to the client.
     const waiting = daysWaiting(item);
     const phone = item.lavori?.clienti?.phone?.trim();
+    const clientName = item.lavori?.clienti?.name || '—';
     return (
-      <TouchableOpacity
-        style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
-        onPress={() => openQuote(item)}
-        accessibilityRole="button"
-      >
-        <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>
-          {item.lavori?.clienti?.name || '—'} · {item.lavori?.title || '—'}
-        </Text>
-        <View style={[styles.stage, { backgroundColor: STAGE_COLORS[stage].bg }]}>
-          <Text style={[styles.stageText, { color: STAGE_COLORS[stage].text }]}>
-            {stage === 'accepted' ? '🔒 ' : ''}
-            {STAGE_LABELS[stage]}
+      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        {/* The tappable part and the call button are siblings, so VoiceOver reaches both. */}
+        <Pressable
+          onPress={() => openQuote(item)}
+          accessibilityRole="button"
+          accessibilityHint="Apre il preventivo"
+          style={({ pressed }) => [styles.cardMain, pressed && { opacity: 0.7 }]}
+        >
+          <Text style={[cantiere.titleSm, { color: colors.text }]} numberOfLines={2}>
+            {clientName} · {item.lavori?.title || '—'}
           </Text>
-        </View>
-        <Text style={[styles.detail, { color: colors.textSecondary }]}>
-          Revisione {item.revision}
-          {item.sent_at ? ` · Inviato il ${formatDate(item.sent_at)}` : ''}
-        </Text>
-        {item.client_decision ? (
-          <Text style={[styles.detail, { color: colors.text }]}>
-            {item.client_decision === 'accepted' ? 'Accettato' : 'Rifiutato'} il {formatDate(item.client_decision_at)}
-            {item.client_signer_name ? ` da ${item.client_signer_name}` : ''}
+          <StatusPill
+            kind={STAGE_PILL[stage]}
+            label={STAGE_LABELS[stage]}
+            icon={stage === 'accepted' ? 'lock-closed-outline' : undefined}
+          />
+          <Text style={[cantiere.meta, { color: colors.textSecondary }]}>
+            Revisione {item.revision}
+            {item.sent_at ? ` · Inviato il ${formatDate(item.sent_at)}` : ''}
           </Text>
-        ) : null}
-        {item.client_note ? <Text style={[styles.detail, { color: colors.textSecondary }]}>{item.client_note}</Text> : null}
+          {item.client_decision ? (
+            <Text style={[cantiere.meta, { color: colors.text }]}>
+              {item.client_decision === 'accepted' ? 'Accettato' : 'Rifiutato'} il {formatDate(item.client_decision_at)}
+              {item.client_signer_name ? ` da ${item.client_signer_name}` : ''}
+            </Text>
+          ) : null}
+          {item.client_note ? <Text style={[cantiere.meta, { color: colors.textSecondary, fontWeight: '400' }]}>{item.client_note}</Text> : null}
+        </Pressable>
         {waiting >= WAITING_DAYS ? (
           <View style={styles.waiting}>
-            <Text style={styles.waitingText}>In attesa da {waiting} giorni</Text>
+            <View style={styles.waitingRow}>
+              <Ionicons name="time-outline" size={22} color={colors.warningText} />
+              <Text style={[styles.waitingText, { color: colors.warningText }]}>In attesa da {waiting} giorni</Text>
+            </View>
             {phone ? (
-              <TouchableOpacity
-                style={styles.callButton}
+              <SecondaryButton
+                label="Chiama il cliente"
+                icon="call-outline"
+                minHeight={64}
                 onPress={() => Linking.openURL(`tel:${phone.replace(/[^+\d]/g, '')}`)}
-                accessibilityRole="button"
                 accessibilityLabel={`Chiama ${item.lavori?.clienti?.name || 'il cliente'}`}
-              >
-                <Text style={styles.callButtonText}>Chiama il cliente</Text>
-              </TouchableOpacity>
+              />
             ) : null}
           </View>
         ) : null}
-      </TouchableOpacity>
+      </View>
     );
   };
+
+  const filterLabel = FILTERS.find((f) => f.key === filter)?.label || '';
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
           {FILTERS.map((item) => (
-            <TouchableOpacity
+            <Chip
               key={item.key}
+              label={item.label}
+              selected={filter === item.key}
               onPress={() => setFilter(item.key)}
-              style={[styles.filter, { backgroundColor: filter === item.key ? colors.primary : colors.card }]}
-              accessibilityRole="button"
-            >
-              <Text style={[styles.filterText, { color: filter === item.key ? '#fff' : colors.text }]}>{item.label}</Text>
-            </TouchableOpacity>
+              minHeight={56}
+              rounded
+              style={styles.filter}
+            />
           ))}
         </ScrollView>
       </View>
@@ -145,18 +168,35 @@ export default function PreventiviScreen() {
           data={visible}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
-          ListEmptyComponent={<Text style={[styles.empty, { color: colors.textSecondary }]}>Nessun preventivo in questa sezione.</Text>}
+          contentContainerStyle={{ padding: space.s4, paddingBottom: space.s5 }}
+          ListEmptyComponent={
+            rows.length === 0 ? (
+              <EmptyState
+                text="Qui trovi i preventivi che mandi. Si preparano da un lavoro."
+                action={<SecondaryButton label="Vai ai lavori" icon="hammer-outline" onPress={() => navigation.navigate('Dashboard')} />}
+              />
+            ) : (
+              <EmptyState
+                text={`Nessun preventivo «${filterLabel}».`}
+                action={<View style={{ alignItems: 'center' }}><TertiaryButton label="Mostra tutti" onPress={() => setFilter('all')} /></View>}
+              />
+            )
+          }
         />
       )}
 
+      <BottomTabBar active="Preventivi" />
+
       <Modal visible={Boolean(viewing)} animationType="slide" onRequestClose={() => setViewing(null)}>
-        <View style={[styles.viewer, { backgroundColor: colors.background }]}>
+        <SafeAreaView style={[styles.viewer, { backgroundColor: colors.background }]}>
+          <View style={[styles.viewerHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+            <Text style={[cantiere.titleSm, { color: colors.text, flex: 1 }]} numberOfLines={1}>{viewing?.title}</Text>
+          </View>
           {viewing ? <WebView originWhitelist={['*']} source={{ html: viewing.html }} style={{ flex: 1 }} scalesPageToFit javaScriptEnabled={false} /> : null}
-          <TouchableOpacity style={[styles.close, { backgroundColor: colors.primary }]} onPress={() => setViewing(null)} accessibilityRole="button">
-            <Text style={styles.closeText}>Chiudi</Text>
-          </TouchableOpacity>
-        </View>
+          <View style={[styles.viewerFooter, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
+            <SecondaryButton label="Chiudi" icon="close-outline" onPress={() => setViewing(null)} />
+          </View>
+        </SafeAreaView>
       </Modal>
     </View>
   );
@@ -164,20 +204,15 @@ export default function PreventiviScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  // Filters unchanged in size: 56 high, 20 side padding, fully rounded.
   filters: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6, gap: 8 },
-  filter: { minHeight: 56, paddingHorizontal: 20, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
-  filterText: { fontSize: 18, fontWeight: '700' },
-  card: { minHeight: 72, borderWidth: 2, borderRadius: 16, padding: 16, marginBottom: 12, gap: 8 },
-  title: { fontSize: 21, fontWeight: '800' },
-  stage: { alignSelf: 'flex-start', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6 },
-  stageText: { fontSize: 17, fontWeight: '800' },
-  detail: { fontSize: 16 },
-  empty: { fontSize: 18, textAlign: 'center', marginTop: 32 },
-  viewer: { flex: 1, paddingTop: 54 },
-  close: { minHeight: 72, margin: 16, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  closeText: { color: '#fff', fontSize: 22, fontWeight: '800' },
-  waiting: { gap: 10, marginTop: 4 },
-  waitingText: { fontSize: 17, fontWeight: '700', color: '#92400e' },
-  callButton: { minHeight: 64, borderRadius: 16, backgroundColor: '#c2410c', alignItems: 'center', justifyContent: 'center' },
-  callButtonText: { color: '#fff', fontSize: 20, fontWeight: '800' },
+  filter: { paddingHorizontal: 20 },
+  card: { borderWidth: 1, borderRadius: radius.control, padding: space.s4, marginBottom: space.s3, gap: space.s3 },
+  cardMain: { gap: space.s2 },
+  viewer: { flex: 1 },
+  viewerHeader: { paddingHorizontal: space.s4, paddingVertical: space.s3, borderBottomWidth: 1 },
+  viewerFooter: { padding: space.s4, borderTopWidth: 1 },
+  waiting: { gap: 10 },
+  waitingRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  waitingText: { fontSize: 18, fontWeight: '700' },
 });

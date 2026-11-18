@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Linking } from 'react-native';
+import { View, Text, Pressable, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Linking } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { getWebApiBaseUrl } from '../lib/webApi';
+import { PrimaryButton, TertiaryButton, TextField, space, ufficio } from '../components/ui';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
@@ -74,50 +77,58 @@ export default function RegisterScreen() {
     }
   };
 
+  // The privacy notice lives on the Mastrovoce website (same address the app uses for its web API).
+  const privacyUrl = (() => {
+    try {
+      const base = getWebApiBaseUrl();
+      return base ? `${base}/privacy` : null;
+    } catch {
+      return null;
+    }
+  })();
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <TextInput style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} placeholder={t('auth.email')} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholderTextColor={colors.textTertiary} />
-        <TextInput style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} placeholder={t('auth.password')} value={password} onChangeText={setPassword} secureTextEntry placeholderTextColor={colors.textTertiary} />
-        <TextInput style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} placeholder={t('auth.confirmPassword')} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry placeholderTextColor={colors.textTertiary} />
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <TextField label={t('auth.email')} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoComplete="email" textContentType="emailAddress" placeholder="Es. mario.rossi@email.it" />
+        <TextField label={t('auth.password')} value={password} onChangeText={setPassword} secureTextEntry textContentType="newPassword" />
+        <TextField label={t('auth.confirmPassword')} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry textContentType="newPassword" />
 
-        {/* Punto 35: Show referral code if captured */}
-        {referralCode && (
-          <View style={{ backgroundColor: '#eff6ff', padding: 10, borderRadius: 8, marginBottom: 12 }}>
-            <Text style={{ fontSize: 13, color: '#1e40af' }}>🎁 Codice referral: {referralCode}</Text>
+        {/* Punto 35: referral code captured from the link */}
+        {referralCode ? (
+          <Text style={[ufficio.label, { color: colors.textSecondary, marginBottom: space.s3 }]}>Codice invito: {referralCode}</Text>
+        ) : null}
+
+        {/* Punto 27: GDPR consent, a real checkbox */}
+        <Pressable
+          onPress={() => setGdprConsent(!gdprConsent)}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: gdprConsent }}
+          style={styles.checkRow}
+        >
+          <View style={[styles.checkBox, { borderColor: gdprConsent ? colors.primary : colors.inputBorder, backgroundColor: gdprConsent ? colors.primary : colors.inputBg }]}>
+            {gdprConsent ? <Ionicons name="checkmark" size={20} color={colors.onPrimary} /> : null}
           </View>
+          <Text style={[ufficio.label, { flex: 1, color: colors.text, fontWeight: '400' }]}>
+            Accetto il trattamento dei dati personali (GDPR, Reg. UE 2016/679).
+          </Text>
+        </Pressable>
+        {privacyUrl ? (
+          <TertiaryButton label="Leggi l'informativa" icon="open-outline" accessibilityRole="link" onPress={() => Linking.openURL(privacyUrl)} style={{ alignSelf: 'flex-start', marginBottom: space.s3 }} />
+        ) : (
+          <Text style={[ufficio.label, { color: colors.textSecondary, fontWeight: '400', marginBottom: space.s3 }]}>L'informativa è sul sito Mastrovoce, nella pagina Privacy.</Text>
         )}
 
-        {/* Punto 27: GDPR Consent checkbox */}
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16 }}>
-          <TouchableOpacity onPress={() => setGdprConsent(!gdprConsent)} style={{ marginTop: 2 }}>
-            <Text style={{ fontSize: 20 }}>{gdprConsent ? '☑️' : '⬜'}</Text>
-          </TouchableOpacity>
-          <Text style={{ flex: 1, marginLeft: 8, fontSize: 13, color: colors.text }}>
-            Accetto il trattamento dei dati personali ai sensi del GDPR (Reg. UE 2016/679).
-            <Text style={{ color: '#c2410c' }} onPress={() => Linking.openURL('https://sites.google.com/view/privacypolicy-quoteapp/home-page')}>
-              {' '}Leggi l'informativa
-            </Text>
-          </Text>
-        </View>
-
-        <TouchableOpacity style={[styles.btnPrimary, { backgroundColor: colors.primary }, loading && styles.disabled]} onPress={handleRegister} disabled={loading}>
-          <Text style={styles.btnText}>{loading ? '...' : t('auth.register')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => (navigation as any).navigate('Login')}>
-          <Text style={[styles.link, { color: colors.primary }]}>{t('auth.login')}</Text>
-        </TouchableOpacity>
+        <PrimaryButton label={t('auth.register')} onPress={handleRegister} loading={loading} loadingLabel="Registro…" />
+        <TertiaryButton label="Hai già un account? Accedi" onPress={() => (navigation as any).navigate('Login')} style={{ alignSelf: 'center', marginTop: space.s3 }} />
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f1f5f9' },
-  scroll: { padding: 24, flexGrow: 1, justifyContent: 'center' },
-  input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 16, marginBottom: 16, fontSize: 16 },
-  btnPrimary: { backgroundColor: '#c2410c', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginBottom: 16 },
-  btnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  disabled: { opacity: 0.6 },
-  link: { color: '#c2410c', textAlign: 'center', fontSize: 14 },
+  container: { flex: 1 },
+  scroll: { padding: space.s5, flexGrow: 1, justifyContent: 'center' },
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: space.s3, minHeight: 56, marginBottom: space.s1 },
+  checkBox: { width: 28, height: 28, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
 });

@@ -98,6 +98,10 @@ export default function VoiceConfirmSheet({
   const [newJobTitle, setNewJobTitle] = useState<string | null>(null);
   const [creatingJob, setCreatingJob] = useState(false);
   const [choosingItem, setChoosingItem] = useState<string | null>(null);
+  /** Last line taken out with "Togli": it can be put back in the same place. */
+  const [removed, setRemoved] = useState<{ item: DraftItem; index: number } | null>(null);
+  /** "Annulla" with lines in the draft asks first, inside the sheet. */
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
 
   // Every new dictation starts from what the audio (or the open job) already says.
   useEffect(() => {
@@ -107,6 +111,8 @@ export default function VoiceConfirmSheet({
     setSearch('');
     setNewJobTitle(null);
     setChoosingItem(null);
+    setRemoved(null);
+    setConfirmingCancel(false);
     setStep(initialLavoroId ? 'conferma' : initialClienteId ? 'lavoro' : 'cliente');
   }, [visible, initialClienteId, initialLavoroId]);
 
@@ -183,7 +189,26 @@ export default function VoiceConfirmSheet({
     onChangeItems(items.map((item) => (item.key === key ? { ...item, priceText } : item)));
   };
 
-  const removeItem = (key: string) => onChangeItems(items.filter((item) => item.key !== key));
+  const removeItem = (key: string) => {
+    const index = items.findIndex((item) => item.key === key);
+    if (index < 0) return;
+    // Only the last one can be put back: taking out another line replaces it.
+    setRemoved({ item: items[index], index });
+    onChangeItems(items.filter((item) => item.key !== key));
+  };
+
+  const restoreItem = () => {
+    if (!removed) return;
+    const next = [...items];
+    next.splice(Math.min(removed.index, next.length), 0, removed.item);
+    onChangeItems(next);
+    setRemoved(null);
+  };
+
+  const requestCancel = () => {
+    if (items.length > 0) setConfirmingCancel(true);
+    else onCancel();
+  };
 
   const chooseMatch = (key: string, choice: number) => {
     onChangeItems(items.map((item) => (item.key === key ? { ...item, choice } : item)));
@@ -338,6 +363,14 @@ export default function VoiceConfirmSheet({
     </>
   );
 
+  const RESTORE_ROW = '__restore__' as const;
+  const withRestoreRow = (list: DraftItem[]): Array<DraftItem | typeof RESTORE_ROW> => {
+    if (!removed) return list;
+    const next: Array<DraftItem | typeof RESTORE_ROW> = [...list];
+    next.splice(Math.min(removed.index, next.length), 0, RESTORE_ROW);
+    return next;
+  };
+
   const renderConferma = () => (
     <>
       <View style={[styles.targetBox, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
@@ -359,10 +392,26 @@ export default function VoiceConfirmSheet({
       {transcript ? <Text style={[styles.transcript, muted]} numberOfLines={3}>"{transcript}"</Text> : null}
 
       <ScrollView style={styles.list}>
-        {items.length === 0 ? (
+        {items.length === 0 && !removed ? (
           <Text style={[styles.empty, muted]}>Nessuna voce da aggiungere</Text>
         ) : (
-          items.map((item) => {
+          withRestoreRow(items).map((item) => {
+            if (item === RESTORE_ROW) {
+              return (
+                <View key="restore" style={[styles.restoreRow, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]} accessibilityLiveRegion="polite">
+                  <Text style={[styles.restoreText, muted]} numberOfLines={2}>Voce tolta</Text>
+                  <TouchableOpacity
+                    style={styles.restoreButton}
+                    onPress={restoreItem}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Ripristina ${removed?.item.matches[removed.item.choice]?.description || removed?.item.spoken || 'la voce'}`}
+                  >
+                    <Ionicons name="arrow-undo-outline" size={22} color={colors.primaryStrong} />
+                    <Text style={[styles.restoreAction, { color: colors.primaryStrong }]}>Ripristina</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            }
             const match = item.matches[item.choice];
             const unit = item.unit || match?.unit || null;
             return (
@@ -456,7 +505,11 @@ export default function VoiceConfirmSheet({
 
       <TouchableOpacity
         style={[styles.bigButton, styles.confirm, { backgroundColor: colors.primary }, !canConfirm && styles.disabled]}
-        onPress={() => lavoro && canConfirm && onConfirm(lavoro)}
+        onPress={() => {
+          if (!lavoro || !canConfirm) return;
+          setRemoved(null);
+          onConfirm(lavoro);
+        }}
         disabled={!canConfirm}
       >
         {saving ? (
@@ -476,7 +529,7 @@ export default function VoiceConfirmSheet({
   );
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onCancel}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={() => (confirmingCancel ? setConfirmingCancel(false) : requestCancel())}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.overlay, { backgroundColor: colors.overlay }]}>
         <View style={[styles.sheet, { backgroundColor: colors.modalBg }]}>
           {itemBeingChosen
@@ -486,9 +539,37 @@ export default function VoiceConfirmSheet({
               : step === 'lavoro'
                 ? renderLavoro()
                 : renderConferma()}
-          <TouchableOpacity style={[styles.bigButton, styles.secondary, { borderColor: colors.border }]} onPress={onCancel} disabled={saving}>
-            <Text style={[styles.secondaryText, text]}>Annulla</Text>
-          </TouchableOpacity>
+          {confirmingCancel ? (
+            <View style={styles.cancelBox} accessibilityLiveRegion="polite">
+              <Text style={[styles.cancelQuestion, text]}>Butti via le voci dettate?</Text>
+              <View style={styles.cancelRow}>
+                <TouchableOpacity
+                  style={[styles.bigButton, styles.secondary, styles.flexButton, { borderColor: colors.text }]}
+                  onPress={() => setConfirmingCancel(false)}
+                  accessibilityRole="button"
+                >
+                  <Text style={[styles.secondaryText, text]}>No, torna</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.bigButton, styles.secondary, styles.flexButton, { borderColor: colors.dangerText }]}
+                  onPress={() => {
+                    setConfirmingCancel(false);
+                    onCancel();
+                  }}
+                  accessibilityRole="button"
+                >
+                  <View style={styles.iconRow}>
+                    <Ionicons name="trash-outline" size={22} color={colors.dangerText} />
+                    <Text style={[styles.secondaryText, { color: colors.dangerText }]}>Sì, butta via</Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity style={[styles.bigButton, styles.secondary, { borderColor: colors.border }]} onPress={requestCancel} disabled={saving}>
+              <Text style={[styles.secondaryText, text]}>Annulla</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -539,4 +620,12 @@ const styles = StyleSheet.create({
   qtyText: { flex: 1, textAlign: 'center', fontSize: 22, fontWeight: '800' },
   removeButton: { height: 64, minWidth: 80, borderRadius: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
   removeText: { fontSize: 18, fontWeight: '800' },
+  restoreRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 2, borderStyle: 'dashed', borderRadius: 16, paddingLeft: 14, paddingRight: 6, minHeight: 64, marginBottom: 10 },
+  restoreText: { flex: 1, fontSize: 18, fontWeight: '700' },
+  restoreButton: { minHeight: 56, minWidth: 48, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12 },
+  restoreAction: { fontSize: 18, fontWeight: '800', textDecorationLine: 'underline' },
+  cancelBox: { gap: 10 },
+  cancelQuestion: { fontSize: 20, fontWeight: '800', textAlign: 'center' },
+  cancelRow: { flexDirection: 'row', gap: 12 },
+  flexButton: { flex: 1 },
 });

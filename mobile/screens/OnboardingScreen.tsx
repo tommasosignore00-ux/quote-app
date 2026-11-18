@@ -1,80 +1,45 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated, TextInput } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { Alert } from 'react-native';
 import { useTheme } from '../lib/darkMode';
+import {
+  BrandMark,
+  PrimaryButton,
+  SecondaryButton,
+  TertiaryButton,
+  TextField,
+  cantiere,
+  formatMoney,
+  formatUnitPrice,
+  radius,
+  space,
+  ufficio,
+} from '../components/ui';
 
-const STEPS = [
-  { key: 'welcome', icon: '👋' },
-  { key: 'voice', icon: '🎤' },
-  { key: 'csv', icon: '📁' },
-  { key: 'listini', icon: '📋' },
-  { key: 'preventivo', icon: '📄' },
+const STEPS = ['company', 'voice', 'listino'] as const;
+
+/** Example price list rows (shown with the "Esempio" ribbon, never saved). */
+const SAMPLE_LIST = [
+  { description: 'Trave IPE 120 S275JR', price: 23.4, unit: 'm' },
+  { description: 'Lamiera striata 3 mm', price: 41.9, unit: 'm²' },
+  { description: 'Tubolare 40×40×3', price: 9.8, unit: 'm' },
+  { description: 'Piastra di base 200×200×10', price: 14.5, unit: 'pz' },
+  { description: 'Tassello chimico M12', price: 3.2, unit: 'pz' },
 ];
 
 export default function OnboardingScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation();
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
-  // Interactive state for demo steps
   const [companyName, setCompanyName] = useState('');
-  const [triedVoiceDemo, setTriedVoiceDemo] = useState(false);
-  const [triedCsvDemo, setTriedCsvDemo] = useState(false);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const progressAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-  }, []);
-
-  useEffect(() => {
-    Animated.timing(progressAnim, {
-      toValue: (step + 1) / STEPS.length,
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
-  }, [step]);
-
-  const content: Record<string, { title: string; desc: string; tips?: string[] }> = {
-    welcome: {
-      title: '🚀 Benvenuto in Mastrovoce!',
-      desc: 'Imposta il nome della tua azienda per iniziare. Potrai completare il profilo in seguito.',
-      tips: ['Ci vogliono meno di 2 minuti', 'Il resto lo completi dal Profilo'],
-    },
-    voice: {
-      title: t('onboarding.voice'),
-      desc: t('onboarding.voiceDesc'),
-      tips: [
-        'Prova: "Aggiungi tubo rame 22mm, 3 metri a 15 euro"',
-        'Prima di salvare controlli sempre le voci',
-        'Senza rete la registrazione resta salvata e parte appena torna la connessione',
-      ],
-    },
-    csv: {
-      title: 'Il tuo listino',
-      desc: 'Carica i tuoi prezzi una volta: PDF del grossista, Excel o file METEL. Quando detti una voce, il prezzo arriva dal tuo listino.',
-      tips: [
-        'Più comodo da caricare dal computer, nella sezione Listini',
-        'Trovi i materiali dettandoli a voce',
-      ],
-    },
-    listini: { title: t('onboarding.listini'), desc: t('onboarding.listiniDesc') },
-    preventivo: {
-      title: t('onboarding.preventivo'),
-      desc: t('onboarding.preventivoDesc'),
-      tips: [
-        'Controllo delle voci prima dell\'invio',
-        'Il preventivo esce con il tuo modello e il tuo nome',
-        'Il cliente lo accetta online dal link che riceve',
-      ],
-    },
-  };
-
-  const current = STEPS[step];
-  const info = content[current.key];
 
   const finishOnboarding = async () => {
     setLoading(true);
@@ -92,156 +57,124 @@ export default function OnboardingScreen() {
     }
   };
 
-  const renderInteractiveContent = () => {
-    switch (current.key) {
-      case 'welcome':
-        return (
-          <View style={styles.interactiveArea}>
-            <TextInput
-              style={styles.onboardingInput}
-              placeholder="Es: Idraulica Rossi S.r.l."
-              value={companyName}
-              onChangeText={setCompanyName}
-              placeholderTextColor="#64748b"
-            />
-            {companyName.trim().length > 0 && (
-              <Text style={styles.checkmark}>✅ Perfetto!</Text>
-            )}
-          </View>
-        );
-      case 'voice':
-        return (
-          <View style={styles.interactiveArea}>
-            <Animated.View style={{ transform: [{ scale: triedVoiceDemo ? 1 : pulseAnim }] }}>
-              <TouchableOpacity
-                style={[styles.demoBtn, triedVoiceDemo && styles.demoBtnDone]}
-                onPress={() => {
-                  setTriedVoiceDemo(true);
-                  Alert.alert(
-                    '🎤 Demo Comando Vocale',
-                    '"Aggiungi tubo rame 22mm, 3 metri a 15 euro al metro"\n\n→ Materiale: Tubo rame 22mm\n→ Quantità: 3 m\n→ Prezzo: €15.00/m\n→ Totale: €45.00\n\nLa vera registrazione vocale funzionerà dalla Dashboard!'
-                  );
-                }}
-              >
-                <Text style={styles.demoBtnIcon}>🎤</Text>
-                <Text style={styles.demoBtnText}>{triedVoiceDemo ? 'Provato! ✓' : 'Prova il demo'}</Text>
-              </TouchableOpacity>
-            </Animated.View>
-          </View>
-        );
-      case 'csv':
-        return (
-          <View style={styles.interactiveArea}>
-            <Animated.View style={{ transform: [{ scale: triedCsvDemo ? 1 : pulseAnim }] }}>
-              <TouchableOpacity
-                style={[styles.demoBtn, triedCsvDemo && styles.demoBtnDone]}
-                onPress={() => {
-                  setTriedCsvDemo(true);
-                  Alert.alert(
-                    'Esempio di listino',
-                    'Esempio file listino.csv:\n\n' +
-                    'TRC22;Tubo rame 22mm;12.50\n' +
-                    'RUB34;Rubinetto 3/4";28.90\n' +
-                    'FLX16;Flessibile 16mm;8.75\n\n' +
-                    '→ 3 articoli importati\n→ Pronti per la dettatura\n\nIl tuo listino vero lo carichi dalla sezione Listini.'
-                  );
-                }}
-              >
-                <Text style={styles.demoBtnIcon}>📊</Text>
-                <Text style={styles.demoBtnText}>{triedCsvDemo ? 'Visto ✓' : 'Guarda un esempio'}</Text>
-              </TouchableOpacity>
-            </Animated.View>
-          </View>
-        );
-      default:
-        return (
-          <View style={styles.illustration}>
-            <Text style={styles.illustrationIcon}>{current.icon}</Text>
-          </View>
-        );
-    }
-  };
+  const ribbon = (
+    <View style={[styles.ribbon, { backgroundColor: colors.primary }]}>
+      <Text style={[styles.ribbonText, { color: colors.onPrimary }]}>Esempio</Text>
+    </View>
+  );
+
+  const current = STEPS[step];
+  const titles = { company: 'La tua azienda', voice: 'Parli, e la voce va nel lavoro', listino: 'I prezzi sono i tuoi' };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.onboardingBg }]}>
-      {/* Progress bar */}
-      <View style={styles.progressBarContainer}>
-        <Animated.View style={[styles.progressBar, { width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+      <View style={styles.top}>
+        <TertiaryButton label="Salta" onPress={finishOnboarding} disabled={loading} accessibilityHint="Entra subito nell'app" />
       </View>
-      <Text style={[styles.progressText, { color: colors.textTertiary }]}>{step + 1} / {STEPS.length}</Text>
-
-      <View style={[styles.card, { backgroundColor: colors.onboardingCard }]}>
-        <View style={styles.steps}>
-          {STEPS.map((s, i) => (
-            <TouchableOpacity key={s.key} onPress={() => setStep(i)} style={[styles.step, i === step && styles.stepActive, i < step && styles.stepDone]}>
-              <Text style={styles.stepIcon}>{i < step ? '✓' : s.icon}</Text>
-            </TouchableOpacity>
+      <View style={styles.progressWrap}>
+        <Text style={[ufficio.label, { color: colors.textSecondary }]}>Passo {step + 1} di {STEPS.length}</Text>
+        <View style={styles.progress} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          {STEPS.map((key, i) => (
+            <View
+              key={key}
+              style={[styles.segment, { backgroundColor: i < step ? colors.text : i === step ? colors.primary : colors.border }]}
+            />
           ))}
         </View>
-        <Text style={[styles.title, { color: colors.onboardingText }]}>{info.title}</Text>
-        <Text style={[styles.desc, { color: colors.onboardingTextSecondary }]}>{info.desc}</Text>
-
-        {/* Tips */}
-        {info.tips && (
-          <View style={styles.tipsContainer}>
-            {info.tips.map((tip, i) => (
-              <Text key={i} style={[styles.tip, { color: colors.onboardingTextSecondary }]}>{tip}</Text>
-            ))}
-          </View>
-        )}
-
-        {/* Interactive content per step */}
-        {renderInteractiveContent()}
-
-        <View style={styles.buttons}>
-          {step > 0 && (
-            <TouchableOpacity style={styles.btnSecondary} onPress={() => setStep(step - 1)}>
-              <Text style={styles.btnSecondaryText}>← Indietro</Text>
-            </TouchableOpacity>
-          )}
-          {step < STEPS.length - 1 ? (
-            <TouchableOpacity style={styles.btnPrimary} onPress={() => setStep(step + 1)}>
-              <Text style={styles.btnText}>{t('onboarding.next')} →</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity style={[styles.btnPrimary, loading && styles.disabled]} onPress={finishOnboarding} disabled={loading}>
-              <Text style={styles.btnText}>{loading ? t('buttons.loading') : t('onboarding.start')}</Text>
-            </TouchableOpacity>
-          )}
-        </View>
       </View>
-    </View>
+
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <Text style={[ufficio.display, { color: colors.text, marginBottom: space.s4 }]} accessibilityRole="header">{titles[current]}</Text>
+
+        {current === 'company' ? (
+          <>
+            <TextField
+              label="Nome dell'azienda"
+              placeholder="Es. Carpenteria Rossi s.r.l."
+              value={companyName}
+              onChangeText={setCompanyName}
+              help="Il resto lo completi dal Profilo, quando vuoi."
+            />
+            <View style={{ alignItems: 'center', marginTop: space.s5 }}>
+              <BrandMark size={64} />
+            </View>
+          </>
+        ) : null}
+
+        {current === 'voice' ? (
+          <>
+            <Text style={[ufficio.body, styles.quote, { color: colors.text }]}>«Sei metri di trave IPE 120»</Text>
+            <View style={[styles.sample, { backgroundColor: colors.surface, borderColor: colors.border }]} accessibilityLabel="Esempio del foglio di conferma: Trave IPE 120 S275JR, 6 metri, 23,40 euro al metro">
+              {ribbon}
+              <Text style={[cantiere.meta, { color: colors.textSecondary }]}>Hai detto: «sei metri di trave IPE 120»</Text>
+              <View style={[styles.sampleRow, { borderColor: colors.border }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[cantiere.titleSm, { color: colors.text }]}>Trave IPE 120 S275JR</Text>
+                  <Text style={[cantiere.priceUnit, { color: colors.primaryStrong }]}>6 m × {formatUnitPrice(23.4, 'm')}</Text>
+                </View>
+                <Text style={[cantiere.price, { color: colors.text }]}>{formatMoney(140.4)}</Text>
+              </View>
+              <View style={[styles.sampleButton, { backgroundColor: colors.primary }]}>
+                <Ionicons name="checkmark" size={24} color={colors.onPrimary} />
+                <Text style={[cantiere.titleSm, { color: colors.onPrimary }]}>Aggiungi 1 voce</Text>
+              </View>
+            </View>
+            <Text style={[ufficio.body, { color: colors.text, marginTop: space.s4 }]}>
+              Tocca il microfono e di' cosa aggiungere. Prima di salvare controlli sempre le voci. Senza rete la registrazione resta salvata e parte da sola.
+            </Text>
+          </>
+        ) : null}
+
+        {current === 'listino' ? (
+          <>
+            <View style={[styles.sample, { backgroundColor: colors.surface, borderColor: colors.border, paddingHorizontal: 0, paddingVertical: 0 }]}>
+              {ribbon}
+              <View style={{ height: 32 }} />
+              {SAMPLE_LIST.map((row, i) => (
+                <View key={row.description} style={[styles.listRow, i > 0 && { borderTopWidth: 1, borderTopColor: colors.border }]}>
+                  <Text style={[ufficio.label, { color: colors.text, flex: 1 }]} numberOfLines={1}>{row.description}</Text>
+                  <Text style={[ufficio.label, { color: colors.text, fontVariant: ['tabular-nums'] }]}>{formatUnitPrice(row.price, row.unit)}</Text>
+                </View>
+              ))}
+            </View>
+            <Text style={[ufficio.body, { color: colors.text, marginTop: space.s4 }]}>
+              Carica una volta il listino del grossista: PDF, Excel o METEL. Dal computer è più comodo, nella sezione Listini.
+            </Text>
+          </>
+        ) : null}
+      </ScrollView>
+
+      <View style={[styles.actions, { paddingBottom: space.s4 + insets.bottom, borderTopColor: colors.border, backgroundColor: colors.surface }]}>
+        {step > 0 ? <SecondaryButton label="Indietro" icon="chevron-back" scale="ufficio" style={{ flex: 1 }} onPress={() => setStep(step - 1)} /> : null}
+        {step < STEPS.length - 1 ? (
+          <PrimaryButton
+            label={t('onboarding.next') || 'Avanti'}
+            scale="ufficio"
+            style={{ flex: 1 }}
+            disabled={current === 'company' && !companyName.trim()}
+            onPress={() => setStep(step + 1)}
+          />
+        ) : (
+          <PrimaryButton label={t('onboarding.start') || 'Inizia'} scale="ufficio" style={{ flex: 1 }} onPress={finishOnboarding} loading={loading} loadingLabel="Un attimo…" />
+        )}
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  progressBarContainer: { width: '100%', maxWidth: 400, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 2, marginBottom: 8 },
-  progressBar: { height: '100%', backgroundColor: '#c2410c', borderRadius: 2 },
-  progressText: { color: '#94a3b8', fontSize: 14, marginBottom: 16, alignSelf: 'center' },
-  card: { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20, padding: 24, width: '100%', maxWidth: 400 },
-  steps: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 24 },
-  step: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-  stepActive: { backgroundColor: '#c2410c' },
-  stepDone: { backgroundColor: '#059669' },
-  stepIcon: { fontSize: 20 },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#fff', marginBottom: 8 },
-  desc: { fontSize: 16, color: '#cbd5e1', marginBottom: 16 },
-  tipsContainer: { marginBottom: 16 },
-  tip: { fontSize: 16, color: '#cbd5e1', marginBottom: 8, lineHeight: 22 },
-  interactiveArea: { marginBottom: 24, alignItems: 'center' },
-  onboardingInput: { backgroundColor: 'rgba(255,255,255,0.15)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', borderRadius: 12, padding: 16, color: '#fff', fontSize: 16, width: '100%' },
-  checkmark: { marginTop: 8, fontSize: 16, color: '#4ade80' },
-  demoBtn: { backgroundColor: 'rgba(194,65,12,0.3)', borderWidth: 2, borderColor: '#c2410c', borderRadius: 16, paddingVertical: 16, paddingHorizontal: 32, alignItems: 'center' },
-  demoBtnDone: { backgroundColor: 'rgba(5,150,105,0.3)', borderColor: '#059669' },
-  demoBtnIcon: { fontSize: 32, marginBottom: 8 },
-  demoBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  illustration: { height: 120, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
-  illustrationIcon: { fontSize: 48 },
-  buttons: { flexDirection: 'row', gap: 12 },
-  btnPrimary: { flex: 1, backgroundColor: '#c2410c', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  btnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  btnSecondary: { flex: 1, backgroundColor: 'rgba(255,255,255,0.2)', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  btnSecondaryText: { color: '#fff', fontSize: 16 },
-  disabled: { opacity: 0.6 },
+  container: { flex: 1 },
+  top: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: space.s4 },
+  progressWrap: { paddingHorizontal: space.s4, gap: space.s2 },
+  progress: { flexDirection: 'row', gap: space.s2 },
+  segment: { flex: 1, height: 6, borderRadius: 3 },
+  scroll: { padding: space.s4, paddingTop: space.s5 },
+  quote: { fontStyle: 'italic', marginBottom: space.s3 },
+  sample: { borderWidth: 1, borderRadius: radius.control, padding: space.s4, gap: space.s3, overflow: 'hidden' },
+  sampleRow: { flexDirection: 'row', alignItems: 'center', gap: space.s3, borderTopWidth: 1, paddingTop: space.s3 },
+  sampleButton: { minHeight: 64, borderRadius: radius.control, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.s2 },
+  listRow: { flexDirection: 'row', alignItems: 'center', gap: space.s3, minHeight: 48, paddingHorizontal: space.s4 },
+  ribbon: { position: 'absolute', top: 0, right: 0, paddingVertical: 4, paddingHorizontal: 10, borderBottomLeftRadius: 6, zIndex: 1 },
+  ribbonText: { fontSize: 16, fontWeight: '700' },
+  actions: { flexDirection: 'row', gap: space.s3, paddingHorizontal: space.s4, paddingTop: space.s3, borderTopWidth: 1 },
 });

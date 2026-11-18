@@ -22,10 +22,8 @@ interface ThemeContextType {
  * Tutte le chiavi storiche restano, così il codice esistente continua a funzionare;
  * le chiavi nuove sono segnate con "nuovo".
  *
- * Nota: `headerBg`/`headerText` e `onboarding*` tengono per ora i valori scuri,
- * perché AuthScreen e OnboardingScreen hanno ancora testo bianco scritto a mano
- * (diventerebbe invisibile su carta). Le nuove `appHeaderBg`/`appHeaderText`
- * portano già i valori chiari della testata: App.tsx li userà nel suo lotto.
+ * Testata chiara su carta: `headerBg`/`headerText` e `appHeaderBg`/`appHeaderText`
+ * hanno gli stessi valori (App.tsx usa i secondi). Primo avvio e accesso sono su carta.
  */
 export const lightColors = {
   background: '#faf7f2',
@@ -66,15 +64,15 @@ export const lightColors = {
   navBg: '#ffffff',
   inputBg: '#ffffff',
   modalBg: '#ffffff',
-  headerBg: '#0f172a',
-  headerText: '#ffffff',
+  headerBg: '#faf7f2',
+  headerText: '#0f172a',
   appHeaderBg: '#faf7f2', // nuovo: testata chiara (spec 1.1)
   appHeaderText: '#0f172a', // nuovo
   // Onboarding
-  onboardingBg: '#0f172a',
-  onboardingCard: 'rgba(255,255,255,0.1)',
-  onboardingText: '#ffffff',
-  onboardingTextSecondary: '#cbd5e1',
+  onboardingBg: '#faf7f2',
+  onboardingCard: '#ffffff',
+  onboardingText: '#0f172a',
+  onboardingTextSecondary: '#57534e',
 };
 
 export const darkColors: typeof lightColors = {
@@ -116,15 +114,15 @@ export const darkColors: typeof lightColors = {
   navBg: '#1e293b',
   inputBg: '#273449',
   modalBg: '#1e293b',
-  headerBg: '#020617',
+  headerBg: '#0f172a',
   headerText: '#f1f5f9',
   appHeaderBg: '#0f172a',
   appHeaderText: '#f1f5f9',
   // Onboarding
-  onboardingBg: '#020617',
-  onboardingCard: 'rgba(255,255,255,0.05)',
+  onboardingBg: '#0f172a',
+  onboardingCard: '#1e293b',
   onboardingText: '#f1f5f9',
-  onboardingTextSecondary: '#94a3b8',
+  onboardingTextSecondary: '#cbd5e1',
 };
 
 export type ThemeColors = typeof lightColors;

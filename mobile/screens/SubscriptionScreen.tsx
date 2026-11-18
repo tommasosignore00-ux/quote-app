@@ -1,15 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { useTranslation } from 'react-i18next';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../lib/darkMode';
+import { StatusPill, cantiere, radius, space, ufficio, type PillKind } from '../components/ui';
+
+const formatDay = (value: string) => {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+};
 
 /**
  * Subscription status only. The app sells nothing and links to no payment page:
  * App Store and Play Store require their own in-app purchase for that.
+ * Only the date is shown, never "N days left".
  */
 export default function SubscriptionScreen() {
-  const { t } = useTranslation();
   const { colors } = useTheme();
   const [profile, setProfile] = useState<any>(null);
   const [quotesThisMonth, setQuotesThisMonth] = useState<number | null>(null);
@@ -42,97 +49,58 @@ export default function SubscriptionScreen() {
   const planName =
     profile?.subscription_plan === 'team' ? 'Team' : profile?.subscription_plan === 'yearly' ? 'Annuale' : 'Mensile';
 
+  const pill: { kind: PillKind; label: string } = isTrial
+    ? { kind: 'accepted', label: 'Prova gratuita attiva' }
+    : status === 'past_due'
+      ? { kind: 'waiting', label: 'Pagamento da aggiornare' }
+      : isSubscribed
+        ? { kind: 'accepted', label: 'Attivo' }
+        : { kind: 'toSend', label: 'Non attivo' };
+
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[styles.title, { color: colors.text }]}>{t('subscription.title') || 'Abbonamento'}</Text>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={styles.content}>
+      {profile ? (
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <StatusPill kind={pill.kind} label={pill.label} icon={pill.kind === 'toSend' ? 'information-circle-outline' : undefined} />
+          {isSubscribed ? (
+            <>
+              <Text style={[cantiere.titleSm, { color: colors.text }]}>Abbonamento {planName}</Text>
+              {billingDate ? (
+                <Text style={[ufficio.body, { color: colors.text }]}>
+                  {billingLabel} {formatDay(billingDate)}
+                </Text>
+              ) : null}
+            </>
+          ) : (
+            <Text style={[ufficio.body, { color: colors.text }]}>Il tuo account non ha un abbonamento attivo.</Text>
+          )}
+        </View>
+      ) : null}
 
       {profile?.is_founding_member && (
-        <View style={styles.foundingBadge}>
-          <Text style={styles.foundingBadgeTitle}>Cliente fondatore</Text>
-          <Text style={styles.foundingBadgeText}>
-            Il tuo prezzo resta bloccato finché l'abbonamento resta attivo senza interruzioni.
+        <View style={styles.row}>
+          <Ionicons name="ribbon-outline" size={24} color={colors.text} />
+          <Text style={[ufficio.body, { color: colors.text, flex: 1 }]}>
+            Cliente fondatore: il tuo prezzo resta bloccato finché l'abbonamento resta attivo senza interruzioni.
           </Text>
         </View>
       )}
 
-      {isSubscribed ? (
-        <View style={[styles.activeBox, { backgroundColor: colors.successBg, borderLeftColor: colors.success }]}>
-          <Text style={[styles.activeText, { color: colors.successText }]}>
-            {isTrial ? 'Prova gratuita attiva' : status === 'past_due' ? 'Pagamento da aggiornare' : `Abbonamento ${planName} attivo`}
-          </Text>
-          {billingDate ? (
-            <Text style={[styles.dateText, { color: colors.success }]}>
-              {billingLabel}: {new Date(billingDate).toLocaleDateString('it-IT')}
-            </Text>
-          ) : null}
-        </View>
-      ) : (
-        <View style={[styles.infoBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.infoText, { color: colors.text }]}>Il tuo account non ha un abbonamento attivo.</Text>
-        </View>
-      )}
-
+      {/* A plain sentence, no big number. */}
       {quotesThisMonth !== null && (
-        <View style={[styles.infoBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={{ fontWeight: '700', fontSize: 16, color: colors.text, marginBottom: 4 }}>Preventivi inviati questo mese</Text>
-          <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>{quotesThisMonth}</Text>
-        </View>
+        <Text style={[ufficio.body, styles.quotes, { color: colors.textSecondary }]}>
+          {quotesThisMonth === 1
+            ? 'Questo mese hai inviato 1 preventivo.'
+            : `Questo mese hai inviato ${quotesThisMonth} preventivi.`}
+        </Text>
       )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: '#f8fafc',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    color: '#1e293b',
-  },
-  activeBox: {
-    padding: 20,
-    borderRadius: 12,
-    marginBottom: 16,
-    borderLeftWidth: 4,
-  },
-  activeText: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 10,
-  },
-  dateText: {
-    fontSize: 16,
-  },
-  infoBox: {
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 16,
-  },
-  infoText: {
-    fontSize: 16,
-  },
-  foundingBadge: {
-    backgroundColor: '#fef3c7',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#f59e0b',
-  },
-  foundingBadgeTitle: {
-    fontWeight: '700',
-    fontSize: 18,
-    color: '#92400e',
-    marginBottom: 4,
-  },
-  foundingBadgeText: {
-    color: '#78350f',
-    fontSize: 16,
-  },
+  content: { padding: space.s4, gap: space.s5 },
+  card: { borderWidth: 1, borderRadius: radius.control, padding: space.s4, gap: space.s3 },
+  row: { flexDirection: 'row', alignItems: 'flex-start', gap: space.s3 },
+  quotes: {},
 });

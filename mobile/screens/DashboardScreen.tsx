@@ -4,7 +4,7 @@ import { firstTime } from '../lib/nudges';
 import { holdClientDecisions } from '../lib/notifications';
 import { loadEntitlement } from '../lib/entitlement';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, TouchableOpacity, FlatList, StyleSheet, Modal, TextInput, Alert, ScrollView, KeyboardAvoidingView, Platform, DeviceEventEmitter } from 'react-native';
+import { View, Text, Pressable, FlatList, StyleSheet, Modal, Alert, ScrollView, KeyboardAvoidingView, Platform, DeviceEventEmitter, BackHandler } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
@@ -25,17 +25,64 @@ import {
 } from '../lib/voiceDraft';
 import { buildListinoFilters, parseListinoQuery, rankListinoMatches } from '../lib/listinoSearch';
 import { useFocusEffect } from '@react-navigation/native';
-import { trackTimeSaving, getTimeSavingsStats } from '../lib/timeSavings';
+import { trackTimeSaving } from '../lib/timeSavings';
 import { startNetworkListener, stopNetworkListener } from '../lib/offline';
 import { useTheme } from '../lib/darkMode';
 import { triggerHaptic } from '../lib/haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  ActionSheet,
+  BottomActionBar,
+  BottomTabBar,
+  Chip,
+  EmptyState,
+  HeaderBack,
+  BrandMark,
+  ListGroup,
+  ListRow,
+  PrimaryButton,
+  SecondaryButton,
+  DangerButton,
+  SectionHeader,
+  TertiaryButton,
+  TextField,
+  cantiere,
+  formatMoney,
+  formatQtyTimesPrice,
+  moneyForScreenReader,
+  radius,
+  space,
+  useReduceMotion,
+  type SheetAction,
+  type SheetDestructive,
+} from '../components/ui';
 
 type Cliente = { id: string; name: string };
-type Lavoro = { id: string; title: string; cliente_id: string; status?: string | null; clienti?: any };
+type Lavoro = { id: string; title: string; cliente_id: string; status?: string | null; updated_at?: string | null; clienti?: any };
 /** Common Italian VAT rates for a single line. */
 const LINE_VAT_PRESETS = ['22', '10', '5', '4', '0'];
 
 type Costo = { id: string; description: string; quantity: number; unit_price: number; tax_rate: number; unit?: string | null; vat_percent?: number | null };
+
+/** Price the client sees for one unit: purchase price plus markup. */
+const clientUnitPrice = (line: { unit_price: number; tax_rate: number }) =>
+  Number(line.unit_price) * (1 + (Number(line.tax_rate) || 0) / 100);
+/** Same formula as before the redesign: quantity × unit_price × (1 + tax_rate/100). */
+const lineTotal = (line: { quantity: number; unit_price: number; tax_rate: number }) =>
+  Number(line.quantity) * clientUnitPrice(line);
+
+const relativeDay = (iso?: string | null) => {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const start = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((start(new Date()) - start(date)) / 86400000);
+  if (days <= 0) return 'oggi';
+  if (days === 1) return 'ieri';
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  return `${dd}/${mm}/${String(date.getFullYear()).slice(2)}`;
+};
 
 export default function DashboardScreen() {
   const { t, i18n } = useTranslation();
@@ -47,6 +94,15 @@ export default function DashboardScreen() {
   const [selectedClienteId, setSelectedClienteId] = useState<string | null>(null);
   const [selectedLavoro, setSelectedLavoro] = useState<Lavoro | null>(null);
   const [costi, setCosti] = useState<Costo[]>([]);
+  const [jobTotals, setJobTotals] = useState<Record<string, number>>({});
+  /** Inner level of this screen: home, all clients, or one client (a job opens on top of these). */
+  const [level, setLevel] = useState<'home' | 'clients'>('home');
+  /** Where "back" from a job goes. */
+  const jobOriginRef = useRef<'home' | 'client'>('home');
+  /** Lines just added by voice: tinted for a moment. */
+  const [recentIds, setRecentIds] = useState<string[]>([]);
+  const reduceMotion = useReduceMotion();
+  const insets = useSafeAreaInsets();
   const [profileId, setProfileId] = useState<string | null>(null);
   const [profileCountryCode, setProfileCountryCode] = useState<string | null>(null);
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
@@ -79,7 +135,6 @@ export default function DashboardScreen() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [showListinoSelector, setShowListinoSelector] = useState(false);
   const [clientSearch, setClientSearch] = useState('');
-  const [timeSaved, setTimeSaved] = useState<string>('');
 
   // Voice: draft waiting for confirmation, and the job dictations go to for a while.
   const [voiceDraft, setVoiceDraft] = useState<{
@@ -114,15 +169,6 @@ export default function DashboardScreen() {
       }
     });
     return () => stopNetworkListener();
-  }, []);
-
-  // Punto 44: Load time savings
-  useEffect(() => {
-    getTimeSavingsStats().then((stats) => {
-      if (stats.totalHoursSaved > 0) {
-        setTimeSaved(`${stats.totalActions} operazioni registrate`);
-      }
-    });
   }, []);
 
   useEffect(() => {
@@ -174,10 +220,28 @@ export default function DashboardScreen() {
     if (cErr) console.warn('clienti error', cErr);
     setClienti(c || []);
 
-    const { data: l, error: lErr } = await supabase.from('lavori').select('id, title, cliente_id, status, clienti(name)').eq('profile_id', pid).order('updated_at', { ascending: false });
+    const { data: l, error: lErr } = await supabase.from('lavori').select('id, title, cliente_id, status, updated_at, clienti(name)').eq('profile_id', pid).order('updated_at', { ascending: false });
     if (lErr) console.warn('lavori error', lErr);
     // Accepted quotes are final: they live only in the Preventivi section.
-    setLavori((l || []).filter((job: Lavoro) => job.status !== 'approved'));
+    const openJobs = (l || []).filter((job: Lavoro) => job.status !== 'approved');
+    setLavori(openJobs);
+
+    // Totals for the job rows (view only, same formula as the quote lines).
+    const totalIds = openJobs.slice(0, 50).map((job: Lavoro) => job.id);
+    if (totalIds.length > 0) {
+      const { data: lines, error: linesErr } = await supabase
+        .from('preventivi_dettaglio')
+        .select('lavoro_id, quantity, unit_price, tax_rate')
+        .in('lavoro_id', totalIds);
+      if (linesErr) console.warn('job totals error', linesErr);
+      const totals: Record<string, number> = {};
+      for (const line of (lines || []) as any[]) {
+        totals[line.lavoro_id] = (totals[line.lavoro_id] || 0) + lineTotal(line);
+      }
+      setJobTotals(totals);
+    } else {
+      setJobTotals({});
+    }
 
     if (selectedLavoro) {
       const { data: costiData, error: costiErr } = await supabase.from('preventivi_dettaglio').select('id, description, quantity, unit_price, tax_rate, unit, vat_percent').eq('lavoro_id', selectedLavoro.id);
@@ -344,11 +408,8 @@ export default function DashboardScreen() {
     })),
   };
 
-  const refreshTimeSaved = () => {
-    getTimeSavingsStats().then((stats) => {
-      if (stats.totalActions > 0) setTimeSaved(`${stats.totalActions} operazioni registrate`);
-    });
-  };
+  // The "N operazioni registrate" pill is gone (no counters); time savings are still tracked.
+  const refreshTimeSaved = () => {};
 
   // The session ends after a while without dictations, or when another job is opened.
   useEffect(() => {
@@ -621,6 +682,7 @@ export default function DashboardScreen() {
       // Jobs used last come first in the pop-up.
       supabase.from('lavori').update({ updated_at: new Date().toISOString() }).eq('id', lavoro.id).then(() => {});
       if (selectedLavoro?.id === lavoro.id && created) setCosti((prev) => [...created, ...prev]);
+      if (created) setRecentIds(created.map((row: any) => row.id));
 
       setVoiceSession({ clienteId: lavoro.cliente_id, lavoroId: lavoro.id, lastUsedAt: Date.now() });
       setLastVoiceAdd(rows.length === 1 ? `Aggiunta: ${rows[0].description}` : `Aggiunte ${rows.length} voci`);
@@ -699,8 +761,8 @@ export default function DashboardScreen() {
       const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).single();
       if (!profile) throw new Error('Profile not found');
 
-      const quantity = parseFloat(newCostoQty) || 1;
-      let unitPrice = parseFloat(newCostoPrice) || 0;
+      const quantity = parseFloat(newCostoQty.replace(',', '.')) || 1;
+      let unitPrice = parseFloat(newCostoPrice.replace(',', '.')) || 0;
       let description = newCostoDesc;
       // A typed price is already the final one: no markup on top.
       let taxRate = 0;
@@ -866,71 +928,203 @@ export default function DashboardScreen() {
     setSearchResults([]);
   };
 
-  const handleDeleteClient = async (clientId: string) => {
-    Alert.alert(
-      t('actions.deleteConfirm'),
-      '',
-      [
-        { text: t('buttons.cancel'), style: 'cancel' },
-        {
-          text: t('actions.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase.from('clienti').delete().eq('id', clientId);
-              if (error) throw error;
-              if (selectedClienteId === clientId) {
-                setSelectedClienteId(null);
-                setSelectedLavoro(null);
-              }
-              Alert.alert(t('messages.success'), t('actions.deleted'));
-              fetchData();
-            } catch (err) {
-              Alert.alert(t('messages.error'), (err as Error).message);
-            }
-          }
-        }
-      ]
-    );
-  };
+  /* Deleting: always from an action sheet with a confirmation step (no "Elimina" on rows). */
+  const [sheet, setSheet] = useState<{
+    title: string;
+    subtitle?: string;
+    actions: SheetAction[];
+    destructive: SheetDestructive | null;
+    startOnConfirm?: boolean;
+  } | null>(null);
 
-  const handleDeleteJob = async (jobId: string) => {
-    Alert.alert(
-      t('actions.deleteConfirm'),
-      '',
-      [
-        { text: t('buttons.cancel'), style: 'cancel' },
-        {
-          text: t('actions.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase.from('lavori').delete().eq('id', jobId);
-              if (error) throw error;
-              if (selectedLavoro?.id === jobId) setSelectedLavoro(null);
-              Alert.alert(t('messages.success'), t('actions.deleted'));
-              fetchData();
-            } catch (err) {
-              Alert.alert(t('messages.error'), (err as Error).message);
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  const handleSelectCliente = (clientId: string) => {
+  const deleteClient = async (clientId: string) => {
+    const { error } = await supabase.from('clienti').delete().eq('id', clientId);
+    if (error) {
+      Alert.alert(t('messages.error'), 'Cliente non eliminato. Controlla la connessione e riprova.');
+      return false;
+    }
     if (selectedClienteId === clientId) {
       setSelectedClienteId(null);
       setSelectedLavoro(null);
-      return;
     }
-
-    setSelectedClienteId(clientId);
-    if (selectedLavoro && selectedLavoro.cliente_id !== clientId) {
-      setSelectedLavoro(null);
-    }
+    fetchData();
+    return true;
   };
+
+  const deleteJob = async (jobId: string) => {
+    const { error } = await supabase.from('lavori').delete().eq('id', jobId);
+    if (error) {
+      Alert.alert(t('messages.error'), 'Lavoro non eliminato. Controlla la connessione e riprova.');
+      return false;
+    }
+    if (selectedLavoro?.id === jobId) setSelectedLavoro(null);
+    fetchData();
+    return true;
+  };
+
+  const deleteCosto = async (costoId: string) => {
+    const { error } = await supabase.from('preventivi_dettaglio').delete().eq('id', costoId);
+    if (error) {
+      Alert.alert(t('messages.error'), 'Voce non eliminata. Controlla la connessione e riprova.');
+      return false;
+    }
+    setCosti((prev) => prev.filter((c) => c.id !== costoId));
+    fetchData();
+    return true;
+  };
+
+  const jobsOf = (clientId: string) => lavori.filter((job) => job.cliente_id === clientId);
+
+  const openClientSheet = (cliente: Cliente) => {
+    const count = jobsOf(cliente.id).length;
+    setSheet({
+      title: cliente.name,
+      subtitle: `Cliente · ${count === 1 ? '1 lavoro' : `${count} lavori`}`,
+      actions: [
+        {
+          label: 'Nuovo lavoro per questo cliente',
+          icon: 'add-outline',
+          onPress: () => {
+            setJobClienteId(cliente.id);
+            setShowJobModal(true);
+          },
+        },
+      ],
+      destructive: {
+        label: 'Elimina il cliente',
+        confirmTitle: `Eliminare il cliente ${cliente.name}?`,
+        confirmMessage:
+          count > 0
+            ? `Si cancellano anche i suoi lavori (${count}) e tutte le voci. Non si può annullare.`
+            : 'Non si può annullare.',
+        onConfirm: () => deleteClient(cliente.id),
+      },
+    });
+  };
+
+  const openJobSheet = (job: Lavoro) => {
+    const clientName = clienti.find((c) => c.id === job.cliente_id)?.name || (job.clienti as { name?: string })?.name || '';
+    setSheet({
+      title: job.title,
+      subtitle: clientName ? `Lavoro di ${clientName}` : 'Lavoro',
+      actions: [],
+      destructive: {
+        label: 'Elimina il lavoro',
+        confirmTitle: `Eliminare il lavoro ${job.title}?`,
+        confirmMessage: 'Si cancellano anche tutte le sue voci. Non si può annullare.',
+        onConfirm: () => deleteJob(job.id),
+      },
+    });
+  };
+
+  const askDeleteCosto = (item: Costo) => {
+    setSheet({
+      title: item.description,
+      actions: [],
+      startOnConfirm: true,
+      destructive: {
+        label: 'Elimina la voce',
+        confirmTitle: 'Eliminare questa voce?',
+        confirmMessage: `«${item.description}» esce dal lavoro. Non si può annullare.`,
+        onConfirm: () => deleteCosto(item.id),
+      },
+    });
+  };
+
+  const openCostoSheet = (item: Costo) => {
+    setSheet({
+      title: item.description,
+      actions: [{ label: 'Modifica la voce', icon: 'create-outline', onPress: () => openEditCosto(item) }],
+      destructive: {
+        label: 'Elimina la voce',
+        confirmTitle: 'Eliminare questa voce?',
+        confirmMessage: `«${item.description}» esce dal lavoro. Non si può annullare.`,
+        onConfirm: () => deleteCosto(item.id),
+      },
+    });
+  };
+
+  /* Moving between the inner levels of this screen. */
+  const openJob = (job: Lavoro, origin: 'home' | 'client') => {
+    jobOriginRef.current = origin;
+    setSelectedClienteId(job.cliente_id);
+    setSelectedLavoro(job);
+  };
+
+  const openClient = (clientId: string) => {
+    setSelectedClienteId(clientId);
+    setSelectedLavoro(null);
+  };
+
+  const goBack = useCallback(() => {
+    if (selectedLavoro) {
+      setSelectedLavoro(null);
+      setCosti([]);
+      if (jobOriginRef.current === 'home') setSelectedClienteId(null);
+      return true;
+    }
+    if (selectedClienteId) {
+      setSelectedClienteId(null);
+      return true;
+    }
+    if (level === 'clients') {
+      setLevel('home');
+      return true;
+    }
+    return false;
+  }, [selectedLavoro, selectedClienteId, level]);
+
+  const goHome = () => {
+    setSelectedLavoro(null);
+    setSelectedClienteId(null);
+    setCosti([]);
+    setLevel('home');
+  };
+
+  // Android back button walks up the inner levels before leaving the screen.
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', goBack);
+      return () => sub.remove();
+    }, [goBack])
+  );
+
+  const backLabel = selectedLavoro
+    ? jobOriginRef.current === 'home'
+      ? 'Lavori'
+      : selectedCliente?.name || 'Cliente'
+    : selectedClienteId
+      ? 'Clienti'
+      : level === 'clients'
+        ? 'Lavori'
+        : null;
+  const headerTitle = selectedLavoro
+    ? selectedLavoro.title
+    : selectedClienteId
+      ? selectedCliente?.name || 'Cliente'
+      : level === 'clients'
+        ? 'Tutti i clienti'
+        : 'Lavori';
+
+  useEffect(() => {
+    (navigation as any).setOptions({
+      title: headerTitle,
+      headerLeft: backLabel
+        ? () => <HeaderBack label={backLabel} onPress={goBack} />
+        : () => (
+            <View style={{ marginRight: space.s2 }}>
+              <BrandMark size={28} />
+            </View>
+          ),
+    });
+  }, [navigation, headerTitle, backLabel, goBack]);
+
+  // A line added by voice stays tinted for a moment, then goes back to white.
+  useEffect(() => {
+    if (recentIds.length === 0) return;
+    const timer = setTimeout(() => setRecentIds([]), reduceMotion ? 4000 : 2600);
+    return () => clearTimeout(timer);
+  }, [recentIds, reduceMotion]);
 
   /* Editing a line: purchase price and markup stay private, the client sees the final price. */
   const [editCosto, setEditCosto] = useState<Costo | null>(null);
@@ -1011,282 +1205,484 @@ export default function DashboardScreen() {
     setEditCosto(null);
   };
 
-  const handleDeleteCosto = async (costoId: string) => {
-    Alert.alert(
-      t('actions.deleteConfirm'),
-      '',
-      [
-        { text: t('buttons.cancel'), style: 'cancel' },
-        {
-          text: t('actions.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase.from('preventivi_dettaglio').delete().eq('id', costoId);
-              if (error) throw error;
-              Alert.alert(t('messages.success'), t('actions.deleted'));
-              fetchData();
-            } catch (err) {
-              Alert.alert(t('messages.error'), (err as Error).message);
-            }
-          }
-        }
-      ]
+  const recentJobs = lavori.slice(0, 5);
+  const jobsTotal = costi.reduce((sum, item) => sum + lineTotal(item), 0);
+  const showFloatingMic = canUseVoice && Boolean(selectedClienteId);
+  // Mic above the fixed action bar (one 64pt button, or help line + button when empty).
+  const actionBarHeight = 88 + (selectedLavoro && costi.length === 0 ? 30 : 0) + insets.bottom;
+
+  const closeCostoModal = () => {
+    setShowCostoModal(false);
+    setShowListinoSelector(false);
+    setSearchResults([]);
+    setMatchedItem(null);
+  };
+
+  const jobRow = (item: Lavoro, index: number, origin: 'home' | 'client') => {
+    const clientName = (item.clienti as { name?: string })?.name || clienti.find((c) => c.id === item.cliente_id)?.name || '';
+    const day = relativeDay(item.updated_at);
+    const total = jobTotals[item.id] || 0;
+    const subtitle = origin === 'home' ? [clientName, day].filter(Boolean).join(' · ') : day;
+    return (
+      <ListRow
+        key={item.id}
+        first={index === 0}
+        title={item.title}
+        subtitle={subtitle}
+        value={formatMoney(total)}
+        onPress={() => openJob(item, origin)}
+        onLongPress={() => openJobSheet(item)}
+        accessibilityLabel={[clientName, item.title, moneyForScreenReader(total)].filter(Boolean).join(', ')}
+        accessibilityHint="Apre il lavoro"
+      />
     );
   };
 
-  return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: selectedClienteId ? 140 : 16 }} showsVerticalScrollIndicator={false} nestedScrollEnabled>
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>{t('main.jobs')}</Text>
-        {timeSaved ? <Text style={styles.timeSavedBadge}>{timeSaved}</Text> : null}
-      </View>
-
-      <View style={styles.grid}>
-        <View style={[styles.card, { backgroundColor: colors.card, shadowColor: colors.cardShadow }]}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>{t('sections.clients')}</Text>
-            <TouchableOpacity style={[styles.smallBtn, { backgroundColor: colors.surfaceSecondary }]} onPress={() => setShowClientModal(true)}>
-              <Text style={[styles.smallBtnText, { color: colors.primary }]}>+ {t('actions.add')}</Text>
-            </TouchableOpacity>
-          </View>
-          <TextInput
-            style={[styles.searchInput, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border, color: colors.text }]}
-            placeholder={t('dashboard.searchClient') || 'Cerca cliente...'}
-            value={clientSearch}
-            onChangeText={setClientSearch}
-            clearButtonMode="while-editing"
-            placeholderTextColor={colors.textTertiary}
-          />
-          <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-            {filteredClienti.map((item) => (
-              <View key={item.id} style={styles.listItemRow}>
-                <TouchableOpacity
-                  onPress={() => handleSelectCliente(item.id)}
-                  style={[styles.clienteSelectBtn, selectedClienteId === item.id && styles.clienteSelected]}
-                >
-                  <Text style={[styles.item, selectedClienteId === item.id && styles.clienteSelectedText]}>{item.name}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleDeleteClient(item.id)}>
-                  <Text style={styles.deleteBtn}>Elimina</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-        <View style={[styles.card, { backgroundColor: colors.card, shadowColor: colors.cardShadow }]}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>{t('sections.jobs')}</Text>
-            <TouchableOpacity style={[styles.smallBtn, { backgroundColor: colors.surfaceSecondary }]} onPress={() => { setJobClienteId(selectedClienteId ?? clienti[0]?.id ?? null); setShowJobModal(true); }}>
-              <Text style={[styles.smallBtnText, { color: colors.primary }]}>+ {t('actions.add')}</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-            {filteredLavori.length === 0 ? (
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{t('sections.selectClientToViewJobs') || 'Seleziona un cliente per vedere i lavori'}</Text>
-            ) : filteredLavori.map((item) => (
-              <View key={item.id} style={styles.lavoroItemContainer}>
-                <TouchableOpacity
-                  onPress={() => setSelectedLavoro(item)}
-                  style={[styles.lavoroItem, selectedLavoro?.id === item.id && styles.lavoroSelected]}
-                >
-                  <Text style={selectedLavoro?.id === item.id ? styles.lavoroSelectedText : undefined}>
-                    {(item.clienti as { name?: string })?.name} - {item.title}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleDeleteJob(item.id)} style={styles.deleteBtnContainer}>
-                  <Text style={styles.deleteBtn}>Elimina</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-      </View>
-
+  const renderHome = () => (
+    <>
       {canUseVoice && activeSession && sessionLavoro ? (
-        <View style={[styles.sessionBar, { backgroundColor: colors.card, borderColor: '#16a34a' }]}>
+        <View style={[styles.sessionBar, { backgroundColor: colors.surface, borderColor: colors.text }]}>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.sessionLabel, { color: colors.textSecondary }]}>Stai aggiungendo a</Text>
+            <Text style={[cantiere.meta, { color: colors.textSecondary }]}>Stai aggiungendo a</Text>
             <Text style={[styles.sessionTarget, { color: colors.text }]} numberOfLines={2}>
               {sessionCliente?.name || '—'} · {sessionLavoro.title}
             </Text>
             {lastVoiceAdd ? (
-              <Text style={styles.sessionLast} numberOfLines={1}>✓ {lastVoiceAdd}</Text>
+              <View style={styles.sessionLastRow}>
+                <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                <Text style={[cantiere.meta, { color: colors.text, flex: 1 }]} numberOfLines={1}>{lastVoiceAdd}</Text>
+              </View>
             ) : null}
           </View>
-          <TouchableOpacity style={styles.sessionClose} onPress={closeVoiceSession} accessibilityLabel="Chiudi: le prossime voci chiederanno cliente e lavoro">
-            <Text style={styles.sessionCloseText}>✕ Chiudi</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
-
-      {!selectedClienteId && (
-        <View style={styles.voiceCenterWrap}>
-          {canUseVoice && lavori.length === 0 && (
-            <Text style={{ color: colors.text, fontSize: 18, textAlign: 'center', marginBottom: 20, paddingHorizontal: 24 }}>
-              Premi il microfono e detta la prima voce, per esempio: «due metri di tubo multistrato».
-            </Text>
-          )}
-          {canUseVoice && (
-            <VoiceButton onResult={handleVoiceResult} context={voiceContext} size={220} onMicDenied={handleMicDenied} showLabel />
-          )}
-          {/* No price, link or purchase button here: the app sells nothing (store rules). */}
-          {profileId && !canUseVoice ? (
-            <View style={[styles.voiceOffBox, { backgroundColor: colors.card, borderColor: colors.border }]} accessibilityRole="text">
-              <Text style={[styles.voiceOffTitle, { color: colors.text }]}>Dettatura non attiva</Text>
-              <Text style={[styles.voiceOffText, { color: colors.textSecondary }]}>
-                La dettatura è attiva con l&apos;abbonamento o la prova gratuita. Lo stato del tuo account è nella pagina Abbonamento del Profilo.
-              </Text>
-            </View>
-          ) : null}
-        </View>
-      )}
-
-      {/* Punto 4: Carousel Fallback when mic is not available */}
-      {showFallbackCarousel && carouselItems.length > 0 && (
-        <View style={[styles.card, { backgroundColor: colors.card, shadowColor: colors.cardShadow }]}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>{t('dashboard.selectMaterial') || 'Seleziona materiale:'}</Text>
-            <TouchableOpacity onPress={() => setShowFallbackCarousel(false)}>
-              <Text style={{ fontSize: 18, color: '#64748b' }}>✕</Text>
-            </TouchableOpacity>
-          </View>
-          <FlatList
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            data={carouselItems}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.carouselCard}
-                onPress={() => handleAddCostoFromListino(item)}
-              >
-                <Text style={styles.carouselDesc} numberOfLines={2}>{item.description}</Text>
-                <Text style={styles.carouselPrice}>€{Number(item.unit_price).toFixed(2)}</Text>
-              </TouchableOpacity>
-            )}
+          <SecondaryButton
+            label="Chiudi"
+            icon="close-outline"
+            onPress={closeVoiceSession}
+            minHeight={64}
+            style={styles.sessionClose}
+            accessibilityLabel="Chiudi: le prossime voci chiederanno cliente e lavoro"
           />
         </View>
-      )}
+      ) : canUseVoice ? (
+        <Text style={[cantiere.meta, styles.sessionHint, { color: colors.textSecondary }]}>
+          Detta: ti chiedo dopo per quale cliente e lavoro.
+        </Text>
+      ) : null}
 
-      {selectedLavoro && (
-        <View style={[styles.card, { backgroundColor: colors.card, shadowColor: colors.cardShadow }]}>
-          <View style={styles.cardHeader}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>{t('sections.detailsLabel')} {selectedLavoro.title}</Text>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <TouchableOpacity style={styles.smallBtn} onPress={() => setShowCostoModal(true)}>
-                <Text style={styles.smallBtnText}>+ {t('actions.add')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.btnQuote} onPress={() => (navigation as any).navigate('Quote', { lavoro: selectedLavoro })}>
-                <Text style={styles.btnQuoteText}>{t('main.generateQuote')}</Text>
-              </TouchableOpacity>
-            </View>
+      <View style={styles.voiceCenterWrap}>
+        {canUseVoice ? (
+          <VoiceButton onResult={handleVoiceResult} context={voiceContext} size={220} onMicDenied={handleMicDenied} showLabel />
+        ) : null}
+        {/* No price, link or purchase button here: the app sells nothing (store rules). */}
+        {profileId && !canUseVoice ? (
+          <View style={[styles.voiceOffBox, { backgroundColor: colors.surface, borderColor: colors.border }]} accessibilityRole="text">
+            <Text style={[styles.voiceOffTitle, { color: colors.text }]}>Dettatura non attiva</Text>
+            <Text style={[styles.voiceOffText, { color: colors.textSecondary }]}>
+              La dettatura è attiva con l&apos;abbonamento o la prova gratuita. Lo stato del tuo account è nella pagina Abbonamento del Profilo.
+            </Text>
           </View>
-          {costi.map((item) => (
-            <View key={item.id} style={styles.costoRowContainer}>
-              <TouchableOpacity
-                onPress={() => openEditCosto(item)}
-                accessibilityRole="button"
-                accessibilityLabel={`Modifica ${item.description}`}
-                style={[styles.costoRow, { borderBottomColor: colors.border }]}
-              >
-                <Text style={[styles.costoDesc, { color: colors.text }]}>{item.description}</Text>
-                <Text style={[styles.costoPrice, { color: colors.primary }]}>€{(item.quantity * item.unit_price * (1 + (Number(item.tax_rate) || 0) / 100)).toFixed(2)}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleDeleteCosto(item.id)} style={styles.deleteBtnContainer}>
-                <Text style={styles.deleteBtn}>Elimina</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
+        ) : null}
+      </View>
+
+      {renderCarousel()}
+
+      <SectionHeader
+        title="Lavori recenti"
+        action={<TertiaryButton label="Tutti i clienti" onPress={() => setLevel('clients')} accessibilityHint="Apre l'elenco dei clienti con la ricerca" />}
+      />
+      {recentJobs.length === 0 ? (
+        <EmptyState
+          icon="mic-outline"
+          text={canUseVoice ? 'Tocca il microfono e detta la prima voce, per esempio: «sei metri di trave IPE 120».' : 'Ancora nessun lavoro. Crealo qui sotto.'}
+        />
+      ) : (
+        <ListGroup>{recentJobs.map((job, index) => jobRow(job, index, 'home'))}</ListGroup>
+      )}
+      <TertiaryButton
+        label="Nuovo lavoro"
+        icon="add-outline"
+        style={styles.afterGroup}
+        onPress={() => {
+          setJobClienteId(selectedClienteId ?? clienti[0]?.id ?? null);
+          setShowJobModal(true);
+        }}
+        accessibilityLabel="Nuovo lavoro, a mano"
+      />
+    </>
+  );
+
+  const renderClients = () => (
+    <>
+      <TextField
+        label="Cerca cliente"
+        icon="search-outline"
+        scale="cantiere"
+        value={clientSearch}
+        onChangeText={setClientSearch}
+        placeholder="Es. Rossi"
+        clearButtonMode="while-editing"
+        autoCorrect={false}
+      />
+      {filteredClienti.length === 0 ? (
+        <EmptyState
+          text={
+            clientSearch.trim()
+              ? `Nessun cliente con «${clientSearch.trim()}». Lo crei quando detti la prossima voce, oppure qui.`
+              : 'Ancora nessun cliente. Lo crei quando detti la prima voce, oppure qui.'
+          }
+        />
+      ) : (
+        <ListGroup>
+          {filteredClienti.map((item, index) => {
+            const count = jobsOf(item.id).length;
+            return (
+              <ListRow
+                key={item.id}
+                first={index === 0}
+                title={item.name}
+                subtitle={count === 1 ? '1 lavoro' : `${count} lavori`}
+                onPress={() => openClient(item.id)}
+                onLongPress={() => openClientSheet(item)}
+                accessibilityHint="Apre i lavori del cliente"
+              />
+            );
+          })}
+        </ListGroup>
+      )}
+    </>
+  );
+
+  const renderClient = () => {
+    const jobs = selectedClienteId ? jobsOf(selectedClienteId) : [];
+    return (
+      <>
+        <View style={styles.contextRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[cantiere.titleSm, { color: colors.text }]} numberOfLines={2}>{selectedCliente?.name}</Text>
+            <Text style={[cantiere.meta, { color: colors.textSecondary }]}>
+              {jobs.length === 1 ? '1 lavoro aperto' : `${jobs.length} lavori aperti`}
+            </Text>
+          </View>
+          {selectedCliente ? (
+            <SecondaryButton
+              label="Modifica"
+              icon="create-outline"
+              minHeight={48}
+              onPress={() => openClientSheet(selectedCliente)}
+              accessibilityLabel={`Modifica il cliente ${selectedCliente.name}`}
+            />
+          ) : null}
         </View>
+        {jobs.length === 0 ? (
+          <EmptyState text="Nessun lavoro aperto per questo cliente. Detta una voce col microfono, oppure creane uno qui sotto." />
+        ) : (
+          <ListGroup>{jobs.map((job, index) => jobRow(job, index, 'client'))}</ListGroup>
+        )}
+      </>
+    );
+  };
+
+  const renderJob = () => {
+    if (!selectedLavoro) return null;
+    const anyVat = costi.some((item) => item.vat_percent !== null && item.vat_percent !== undefined);
+    return (
+      <>
+        <View style={styles.contextRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[cantiere.titleSm, { color: colors.text }]} numberOfLines={2}>{selectedCliente?.name}</Text>
+            <Text style={[cantiere.meta, { color: colors.textSecondary }]}>Le voci dettate qui vanno in questo lavoro</Text>
+          </View>
+          <SecondaryButton
+            label="Modifica"
+            icon="create-outline"
+            minHeight={48}
+            onPress={() => openJobSheet(selectedLavoro)}
+            accessibilityLabel={`Modifica il lavoro ${selectedLavoro.title}`}
+          />
+        </View>
+
+        {costi.length === 0 ? (
+          <EmptyState text="Ancora nessuna voce. Detta col microfono qui sotto." />
+        ) : (
+          <View style={[styles.sheetGroup, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            {costi.map((item, index) => {
+              const fresh = recentIds.includes(item.id);
+              const total = lineTotal(item);
+              return (
+                <Pressable
+                  key={item.id}
+                  onPress={() => openEditCosto(item)}
+                  onLongPress={() => openCostoSheet(item)}
+                  delayLongPress={400}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${item.description}, ${formatQtyTimesPrice(Number(item.quantity), item.unit, clientUnitPrice(item))}, ${moneyForScreenReader(total)}`}
+                  accessibilityHint="Apre la modifica della voce"
+                  accessibilityActions={[{ name: 'longpress', label: 'Modifica o elimina' }]}
+                  onAccessibilityAction={(event) => {
+                    if (event.nativeEvent.actionName === 'longpress') openCostoSheet(item);
+                  }}
+                  style={({ pressed }) => [
+                    styles.lineRow,
+                    { backgroundColor: pressed ? colors.surfaceSecondary : fresh ? colors.mark : colors.surface },
+                    index > 0 && { borderTopWidth: 1, borderTopColor: colors.border },
+                  ]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.lineDesc, { color: colors.text }]} numberOfLines={2}>{item.description}</Text>
+                    <Text style={[cantiere.priceUnit, { color: colors.textSecondary }]}>
+                      {formatQtyTimesPrice(Number(item.quantity), item.unit, clientUnitPrice(item))}
+                    </Text>
+                  </View>
+                  {fresh ? <Ionicons name="checkmark-circle" size={20} color={colors.success} /> : null}
+                  <Text style={[cantiere.price, { color: colors.text }]}>{formatMoney(total)}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
+        <View style={[styles.totalRule, { backgroundColor: colors.text }]} />
+        <View style={styles.totalRow}>
+          <Text style={[cantiere.title, { color: colors.text }]}>Totale</Text>
+          <Text style={[cantiere.display, { color: colors.text }]} accessibilityLabel={`Totale ${moneyForScreenReader(jobsTotal)}`}>
+            {formatMoney(jobsTotal)}
+          </Text>
+        </View>
+        <Text style={[cantiere.meta, { color: colors.textSecondary }]}>
+          {anyVat ? 'IVA esclusa: si aggiunge nel preventivo, voce per voce' : 'IVA esclusa: si aggiunge nel preventivo'}
+        </Text>
+
+        <SecondaryButton
+          label="Aggiungi una voce a mano"
+          icon="add-outline"
+          minHeight={56}
+          style={{ marginTop: space.s4 }}
+          onPress={() => setShowCostoModal(true)}
+        />
+      </>
+    );
+  };
+
+  const renderCarousel = () =>
+    showFallbackCarousel && carouselItems.length > 0 ? (
+      <View style={[styles.carouselBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={styles.carouselHead}>
+          <Text style={[cantiere.titleSm, { color: colors.text, flex: 1 }]}>{t('dashboard.selectMaterial') || 'Seleziona materiale:'}</Text>
+          <Pressable
+            onPress={() => setShowFallbackCarousel(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Chiudi l'elenco dei materiali"
+            style={styles.iconBtn}
+          >
+            <Ionicons name="close-outline" size={28} color={colors.text} />
+          </Pressable>
+        </View>
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          data={carouselItems}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <Pressable
+              style={({ pressed }) => [styles.carouselCard, { borderColor: colors.border, backgroundColor: pressed ? colors.surfaceSecondary : colors.surface }]}
+              onPress={() => handleAddCostoFromListino(item)}
+              accessibilityRole="button"
+              accessibilityLabel={`Aggiungi ${item.description}`}
+            >
+              <Text style={[styles.carouselDesc, { color: colors.text }]} numberOfLines={2}>{item.description}</Text>
+              <Text style={[cantiere.priceUnit, { color: colors.textSecondary }]}>{formatMoney(Number(item.unit_price))}</Text>
+            </Pressable>
+          )}
+        />
+      </View>
+    ) : null;
+
+  const vatOptions: [string, string][] = [['', 'Del preventivo'], ...LINE_VAT_PRESETS.map((rate) => [rate, `${rate}%`] as [string, string]), ['custom', 'Altra']];
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[styles.scroll, { paddingBottom: showFloatingMic ? 140 : space.s5 }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {selectedLavoro ? renderJob() : selectedClienteId ? (
+          <>
+            {renderCarousel()}
+            {renderClient()}
+          </>
+        ) : level === 'clients' ? renderClients() : renderHome()}
+      </ScrollView>
+
+      {/* Fixed action at the bottom of the inner levels. */}
+      {selectedLavoro ? (
+        <BottomActionBar>
+          {costi.length === 0 ? (
+            <Text style={[cantiere.meta, { color: colors.textSecondary, textAlign: 'center' }]}>Aggiungi almeno una voce</Text>
+          ) : null}
+          <PrimaryButton
+            label="Prepara il preventivo"
+            icon="document-text-outline"
+            disabled={costi.length === 0}
+            onPress={() => (navigation as any).navigate('Quote', { lavoro: selectedLavoro })}
+          />
+        </BottomActionBar>
+      ) : selectedClienteId ? (
+        <BottomActionBar>
+          <PrimaryButton
+            label="Nuovo lavoro"
+            icon="add-outline"
+            onPress={() => {
+              setJobClienteId(selectedClienteId);
+              setShowJobModal(true);
+            }}
+            accessibilityLabel={`Nuovo lavoro per ${selectedCliente?.name || 'il cliente'}`}
+          />
+        </BottomActionBar>
+      ) : level === 'clients' ? (
+        <BottomActionBar>
+          <PrimaryButton label="Nuovo cliente" icon="add-outline" onPress={() => setShowClientModal(true)} />
+        </BottomActionBar>
+      ) : (
+        <BottomTabBar active="Dashboard" onReselect={goHome} />
       )}
 
-      <Modal visible={showClientModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
+      {/* Inside a customer or job the microphone stays reachable, bottom right, above the bar. */}
+      {showFloatingMic ? (
+        <VoiceButton
+          onResult={handleVoiceResult}
+          context={voiceContext}
+          size={84}
+          floating
+          floatingBottom={actionBarHeight + space.s4}
+          onMicDenied={handleMicDenied}
+        />
+      ) : null}
+
+      <Modal visible={showClientModal} transparent animationType="fade" onRequestClose={() => setShowClientModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
           <View style={[styles.modal, { backgroundColor: colors.modalBg }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>{t('actions.addClient') || 'Aggiungi cliente'}</Text>
-            <TextInput style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} placeholder={t('profile.company') || 'Nome cliente'} value={newClientName} onChangeText={setNewClientName} placeholderTextColor={colors.textTertiary} />
+            <Text style={[cantiere.title, styles.modalTitle, { color: colors.text }]}>Nuovo cliente</Text>
+            <TextField
+              label="Nome del cliente"
+              scale="cantiere"
+              placeholder="Es. Mario Rossi"
+              value={newClientName}
+              onChangeText={setNewClientName}
+              autoFocus
+            />
             {/* Paese e lingua cliente fissi: app disponibile solo in Italia */}
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <TouchableOpacity style={styles.btn} onPress={() => setShowClientModal(false)}>
-                <Text style={styles.btnText}>{t('buttons.cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.btn} onPress={handleCreateClient} disabled={creatingClient}>
-                <Text style={styles.btnText}>{creatingClient ? t('buttons.loading') : t('buttons.save')}</Text>
-              </TouchableOpacity>
+            <View style={styles.modalButtons}>
+              <SecondaryButton label={t('buttons.cancel')} onPress={() => setShowClientModal(false)} style={{ flex: 1 }} />
+              <PrimaryButton label={t('buttons.save')} onPress={handleCreateClient} loading={creatingClient} loadingLabel="Salvo…" style={{ flex: 1 }} />
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
-      <Modal visible={showJobModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modal, { backgroundColor: colors.modalBg }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>{t('actions.addJob') || 'Aggiungi lavoro'}</Text>
-            <TextInput style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} placeholder={t('sections.jobs') || 'Titolo lavoro'} value={newJobTitle} onChangeText={setNewJobTitle} placeholderTextColor={colors.textTertiary} />
-            <Text style={{ marginBottom: 8, color: colors.text }}>{t('sections.clients') || 'Cliente'}</Text>
-            <FlatList data={clienti} keyExtractor={(i) => i.id} style={{ maxHeight: 120 }} renderItem={({ item }) => (
-              <TouchableOpacity onPress={() => setJobClienteId(item.id)} style={[styles.listinoItem, jobClienteId === item.id && styles.listinoSelected]}>
-                <Text style={jobClienteId === item.id ? styles.listinoSelectedText : undefined}>{item.name}</Text>
-              </TouchableOpacity>
-            )} />
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <TouchableOpacity style={styles.btn} onPress={() => setShowJobModal(false)}>
-                <Text style={styles.btnText}>{t('buttons.cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.btn} onPress={handleCreateJob} disabled={creatingJob}>
-                <Text style={styles.btnText}>{creatingJob ? t('buttons.loading') : t('buttons.save')}</Text>
-              </TouchableOpacity>
+      <Modal visible={showJobModal} transparent animationType="fade" onRequestClose={() => setShowJobModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
+          <View style={[styles.modal, { backgroundColor: colors.modalBg, maxHeight: '85%' }]}>
+            <Text style={[cantiere.title, styles.modalTitle, { color: colors.text }]}>Nuovo lavoro</Text>
+            <TextField
+              label="Nome del lavoro"
+              scale="cantiere"
+              placeholder="Es. Pensilina ingresso"
+              value={newJobTitle}
+              onChangeText={setNewJobTitle}
+            />
+            <Text style={[cantiere.meta, { color: colors.text, marginBottom: 6 }]}>Cliente</Text>
+            {clienti.length === 0 ? (
+              <Text style={[cantiere.meta, { color: colors.textSecondary, marginBottom: space.s4 }]}>
+                Prima crea un cliente da «Tutti i clienti», oppure detta una voce.
+              </Text>
+            ) : (
+              <ScrollView style={[styles.pickList, { borderColor: colors.border }]} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                {clienti.map((item, index) => (
+                  <ListRow
+                    key={item.id}
+                    first={index === 0}
+                    title={item.name}
+                    scale="ufficio"
+                    selected={jobClienteId === item.id}
+                    hideChevron
+                    onPress={() => setJobClienteId(item.id)}
+                    style={{ minHeight: 56 }}
+                  />
+                ))}
+              </ScrollView>
+            )}
+            <View style={styles.modalButtons}>
+              <SecondaryButton label={t('buttons.cancel')} onPress={() => setShowJobModal(false)} style={{ flex: 1 }} />
+              <PrimaryButton label={t('buttons.save')} onPress={handleCreateJob} loading={creatingJob} loadingLabel="Salvo…" style={{ flex: 1 }} />
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
-      <Modal visible={showCostoModal} transparent animationType="fade">
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
-          <View style={[styles.modal, { maxHeight: '85%', backgroundColor: colors.modalBg }]}>
+      <Modal visible={showCostoModal} transparent animationType="fade" onRequestClose={closeCostoModal}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
+          <View style={[styles.modal, { maxHeight: '88%', backgroundColor: colors.modalBg }]}>
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              <Text style={[styles.modalTitle, { color: colors.text }]}>{t('actions.addCost') || 'Aggiungi voce'}</Text>
-              <TextInput style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} placeholder={t('sections.description') || 'Descrizione'} value={newCostoDesc} onChangeText={setNewCostoDesc} placeholderTextColor={colors.textTertiary} />
+              <Text style={[cantiere.title, styles.modalTitle, { color: colors.text }]}>Aggiungi una voce</Text>
+              <TextField
+                label="Descrizione"
+                placeholder="Es. Trave IPE 120"
+                value={newCostoDesc}
+                onChangeText={setNewCostoDesc}
+                help="Se è nel tuo listino, il prezzo arriva da solo."
+              />
 
               {/* Inline search results (replaces separate modal to avoid iOS modal-on-modal crash) */}
               {showListinoSelector && searchResults.length > 0 && (
-                <View style={{ marginBottom: 12 }}>
-                  <Text style={{ marginBottom: 8, color: '#64748b', fontSize: 14 }}>
+                <View style={{ marginBottom: space.s4 }}>
+                  <Text style={[cantiere.meta, { color: colors.textSecondary, marginBottom: space.s2 }]}>
                     {t('dashboard.selectMaterial')} ({searchResults.length} {t('dashboard.resultsFound', { count: searchResults.length })})
                   </Text>
-                  {searchResults.map((item, idx) => (
-                    <TouchableOpacity
-                      key={`${item.id}-${idx}`}
-                      style={styles.listinoSelectorItem}
-                      onPress={() => selectListinoItem(item)}
-                    >
-                      <Text style={styles.listinoSelectorDesc}>{item.description}</Text>
-                      <Text style={styles.listinoSelectorListino}>📋 {item.listino_name || t('dashboard.unknownListino')}</Text>
-                      <Text style={styles.listinoSelectorPrice}>€{(Number(item.unit_price) * (1 + (Number(item.markup_percent) || 0) / 100)).toFixed(2)} {item.markup_percent ? `(base €${Number(item.unit_price).toFixed(2)} +${item.markup_percent}%)` : ''}</Text>
-                    </TouchableOpacity>
-                  ))}
+                  <ListGroup>
+                    {searchResults.map((item, idx) => {
+                      const markup = Number(item.markup_percent) || 0;
+                      return (
+                        <ListRow
+                          key={`${item.id}-${idx}`}
+                          first={idx === 0}
+                          scale="ufficio"
+                          title={item.description}
+                          subtitle={`${item.listino_name || t('dashboard.unknownListino')} · ${formatMoney(Number(item.unit_price) * (1 + markup / 100))}${markup ? ` (ricarico ${markup}%)` : ''}`}
+                          onPress={() => selectListinoItem(item)}
+                          hideChevron
+                        />
+                      );
+                    })}
+                  </ListGroup>
                 </View>
               )}
 
               {/* Matched item indicator */}
               {matchedItem && (
-                <View style={{ backgroundColor: '#f0fdf4', padding: 10, borderRadius: 10, marginBottom: 12, borderWidth: 1, borderColor: '#86efac' }}>
-                  <Text style={{ fontSize: 14, color: '#166534', fontWeight: '600' }}>✓ {matchedItem.description} — €{(Number(matchedItem.unit_price) * (1 + (Number(matchedItem.markup_percent) || 0) / 100)).toFixed(2)}</Text>
+                <View style={[styles.matched, { backgroundColor: colors.successBg }]}>
+                  <Ionicons name="checkmark-circle" size={20} color={colors.successText} />
+                  <Text style={[cantiere.meta, { color: colors.successText, flex: 1 }]}>
+                    Dal listino: {matchedItem.description} · {formatMoney(Number(matchedItem.unit_price) * (1 + (Number(matchedItem.markup_percent) || 0) / 100))}
+                  </Text>
                 </View>
               )}
 
-              <TextInput style={styles.input} placeholder={t('dashboard.quantity')} value={newCostoQty} onChangeText={setNewCostoQty} keyboardType="decimal-pad" />
-              <TextInput style={styles.input} placeholder="Unità di misura (pz, m, kg, h...)" value={newCostoUnit} onChangeText={setNewCostoUnit} maxLength={20} autoCapitalize="none" />
-              <TextInput style={styles.input} placeholder="Prezzo al cliente (se non è a listino)" value={newCostoPrice} onChangeText={setNewCostoPrice} keyboardType="decimal-pad" />
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                <TouchableOpacity style={styles.btn} onPress={() => { setShowCostoModal(false); setShowListinoSelector(false); setSearchResults([]); setMatchedItem(null); }}>
-                  <Text style={styles.btnText}>{t('buttons.cancel')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.btn} onPress={handleCreateCosto} disabled={creatingCosto}>
-                  <Text style={styles.btnText}>{creatingCosto ? t('buttons.loading') : t('buttons.save')}</Text>
-                </TouchableOpacity>
+              <View style={styles.pairRow}>
+                <TextField label={t('dashboard.quantity') || 'Quantità'} value={newCostoQty} onChangeText={setNewCostoQty} keyboardType="decimal-pad" containerStyle={{ flex: 1 }} />
+                <TextField label="Unità" placeholder="pz, m, kg, h…" value={newCostoUnit} onChangeText={setNewCostoUnit} maxLength={20} autoCapitalize="none" containerStyle={{ flex: 1 }} />
+              </View>
+              <TextField
+                label="Prezzo al cliente (€)"
+                help="Solo se la voce non è nel listino: è il prezzo finale, senza ricarico."
+                value={newCostoPrice}
+                onChangeText={setNewCostoPrice}
+                keyboardType="decimal-pad"
+              />
+              <View style={styles.modalButtons}>
+                <SecondaryButton label={t('buttons.cancel')} onPress={closeCostoModal} style={{ flex: 1 }} />
+                <PrimaryButton label={t('buttons.save')} onPress={handleCreateCosto} loading={creatingCosto} loadingLabel="Salvo…" style={{ flex: 1 }} />
               </View>
             </ScrollView>
           </View>
@@ -1294,73 +1690,75 @@ export default function DashboardScreen() {
       </Modal>
 
       <Modal visible={Boolean(editCosto)} transparent animationType="fade" onRequestClose={() => setEditCosto(null)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
           <View style={[styles.modal, { maxHeight: '90%', backgroundColor: colors.modalBg }]}>
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Modifica voce</Text>
-              <Text style={[styles.editLabel, { color: colors.text }]}>Descrizione</Text>
-              <TextInput style={[styles.editInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} value={editDesc} onChangeText={setEditDesc} multiline accessibilityLabel="Descrizione" />
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.editLabel, { color: colors.text }]}>Quantità</Text>
-                  <TextInput style={[styles.editInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} value={editQty} onChangeText={setEditQty} keyboardType="decimal-pad" accessibilityLabel="Quantità" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.editLabel, { color: colors.text }]}>Unità</Text>
-                  <TextInput style={[styles.editInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} value={editUnit} onChangeText={setEditUnit} placeholder="pz, m, h…" placeholderTextColor={colors.textTertiary} autoCapitalize="none" maxLength={20} accessibilityLabel="Unità di misura" />
-                </View>
+              <Text style={[cantiere.title, styles.modalTitle, { color: colors.text }]}>Modifica voce</Text>
+              <TextField label="Descrizione" value={editDesc} onChangeText={setEditDesc} multiline />
+              <View style={styles.pairRow}>
+                <TextField label="Quantità" value={editQty} onChangeText={setEditQty} keyboardType="decimal-pad" containerStyle={{ flex: 1 }} />
+                <TextField label="Unità" value={editUnit} onChangeText={setEditUnit} placeholder="pz, m, h…" autoCapitalize="none" maxLength={20} accessibilityLabel="Unità di misura" containerStyle={{ flex: 1 }} />
               </View>
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.editLabel, { color: colors.text }]}>Lo paghi (€)</Text>
-                  <TextInput style={[styles.editInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} value={editCost} onChangeText={changeEditCost} keyboardType="decimal-pad" accessibilityLabel="Prezzo d'acquisto" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.editLabel, { color: colors.text }]}>Ricarico (%)</Text>
-                  <TextInput style={[styles.editInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} value={editMarkup} onChangeText={changeEditMarkup} keyboardType="decimal-pad" accessibilityLabel="Ricarico percentuale" />
-                </View>
+              <View style={styles.pairRow}>
+                <TextField label="Lo paghi (€)" value={editCost} onChangeText={changeEditCost} keyboardType="decimal-pad" accessibilityLabel="Prezzo d'acquisto" containerStyle={{ flex: 1 }} />
+                <TextField label="Ricarico (%)" value={editMarkup} onChangeText={changeEditMarkup} keyboardType="decimal-pad" accessibilityLabel="Ricarico percentuale" containerStyle={{ flex: 1 }} />
               </View>
-              <Text style={[styles.editLabel, { color: colors.text }]}>Prezzo al cliente (€)</Text>
-              <TextInput style={[styles.editInput, styles.editFinal, { backgroundColor: colors.inputBg, borderColor: colors.primary, color: colors.text }]} value={editFinal} onChangeText={changeEditFinal} keyboardType="decimal-pad" accessibilityLabel="Prezzo al cliente" />
-              <Text style={[styles.editLabel, { color: colors.text }]}>IVA di questa voce</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
-                {[['', 'Del preventivo'], ...LINE_VAT_PRESETS.map((rate) => [rate, `${rate}%`]), ['custom', 'Altra']].map(([value, label]) => (
-                  <TouchableOpacity
+              <TextField
+                label="Prezzo al cliente (€)"
+                value={editFinal}
+                onChangeText={changeEditFinal}
+                keyboardType="decimal-pad"
+                accessibilityLabel="Prezzo al cliente"
+                style={styles.editFinal}
+              />
+              <Text style={[cantiere.meta, { color: colors.text, marginBottom: 6 }]}>IVA di questa voce</Text>
+              <View style={styles.vatRow}>
+                {vatOptions.map(([value, label]) => (
+                  <Chip
                     key={value || 'quote'}
+                    label={label}
+                    selected={editVat === value}
                     onPress={() => setEditVat(value)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: editVat === value }}
-                    style={[styles.vatChip, { borderColor: editVat === value ? colors.primary : colors.border, backgroundColor: editVat === value ? colors.primary : colors.inputBg }]}
-                  >
-                    <Text style={[styles.vatChipText, { color: editVat === value ? '#fff' : colors.text }]}>{label}</Text>
-                  </TouchableOpacity>
+                    accessibilityLabel={value === '' ? 'IVA del preventivo' : value === 'custom' ? 'Altra aliquota IVA' : `IVA ${label}`}
+                  />
                 ))}
               </View>
               {editVat === 'custom' ? (
-                <TextInput style={[styles.editInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]} value={editVatCustom} onChangeText={setEditVatCustom} keyboardType="decimal-pad" placeholder="Aliquota in %" placeholderTextColor={colors.textTertiary} accessibilityLabel="Aliquota IVA della voce" />
+                <TextField label="Aliquota IVA della voce (%)" value={editVatCustom} onChangeText={setEditVatCustom} keyboardType="decimal-pad" placeholder="Es. 8" />
               ) : null}
-              <Text style={[styles.editHint, { color: colors.textSecondary }]}>
-                Il cliente vede solo il prezzo al cliente. Totale riga: € {(num(editQty) * num(editFinal)).toFixed(2).replace('.', ',')}
+              <Text style={[cantiere.meta, { color: colors.textSecondary, fontWeight: '400', marginBottom: space.s3 }]}>
+                Il cliente vede solo il prezzo al cliente. Totale riga: {formatMoney(num(editQty) * num(editFinal))}
               </Text>
-              <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
-                <TouchableOpacity style={[styles.editButton, { borderColor: colors.border }]} onPress={() => setEditCosto(null)} accessibilityRole="button">
-                  <Text style={[styles.editButtonText, { color: colors.text }]}>{t('buttons.cancel')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.editButton, styles.editButtonPrimary]} onPress={saveEditCosto} disabled={savingEdit} accessibilityRole="button">
-                  <Text style={[styles.editButtonText, { color: '#fff' }]}>{savingEdit ? t('buttons.loading') : t('buttons.save')}</Text>
-                </TouchableOpacity>
+              <View style={styles.modalButtons}>
+                <SecondaryButton label={t('buttons.cancel')} onPress={() => setEditCosto(null)} style={{ flex: 1 }} />
+                <PrimaryButton label={t('buttons.save')} onPress={saveEditCosto} loading={savingEdit} loadingLabel="Salvo…" style={{ flex: 1 }} />
               </View>
+              {editCosto ? (
+                <DangerButton
+                  label="Elimina la voce"
+                  style={{ marginTop: space.s5 }}
+                  onPress={() => {
+                    const item = editCosto;
+                    setEditCosto(null);
+                    // After the edit window has closed: two modals cannot animate together.
+                    setTimeout(() => askDeleteCosto(item), 350);
+                  }}
+                />
+              ) : null}
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
 
-      </ScrollView>
-
-      {/* Inside a customer or job the big microphone stays reachable, bottom right. */}
-      {canUseVoice && selectedClienteId ? (
-        <VoiceButton onResult={handleVoiceResult} context={voiceContext} size={84} floating onMicDenied={handleMicDenied} />
-      ) : null}
+      <ActionSheet
+        visible={Boolean(sheet)}
+        title={sheet?.title || ''}
+        subtitle={sheet?.subtitle}
+        actions={sheet?.actions}
+        destructive={sheet?.destructive}
+        startOnConfirm={sheet?.startOnConfirm}
+        onClose={() => setSheet(null)}
+      />
 
       <QuoteAcceptedPopup />
 
@@ -1381,98 +1779,41 @@ export default function DashboardScreen() {
         onConfirm={handleConfirmVoiceDraft}
         onCancel={closeVoiceDraft}
       />
-
-      {/* Only what a tradesman uses daily: invoices and integrations stay reachable from the website. */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.navScroll, { borderTopColor: colors.border, backgroundColor: colors.navBg }]} contentContainerStyle={styles.navContent}>
-        <TouchableOpacity style={styles.navBtn} onPress={() => (navigation as any).navigate('Dashboard')}>
-          <Ionicons name="home-outline" size={22} color={colors.textSecondary} />
-          <Text style={[styles.navText, { color: colors.textSecondary }]}>{t('main.jobs')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navBtn} onPress={() => (navigation as any).navigate('Preventivi')}>
-          <Ionicons name="document-text-outline" size={22} color={colors.textSecondary} />
-          <Text style={[styles.navText, { color: colors.textSecondary }]}>Preventivi</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navBtn} onPress={() => (navigation as any).navigate('Listini')}>
-          <Ionicons name="list-outline" size={22} color={colors.textSecondary} />
-          <Text style={[styles.navText, { color: colors.textSecondary }]}>{t('main.listini')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navBtn} onPress={() => (navigation as any).navigate('Profile')}>
-          <Ionicons name="person-outline" size={22} color={colors.textSecondary} />
-          <Text style={[styles.navText, { color: colors.textSecondary }]}>{t('main.profile')}</Text>
-        </TouchableOpacity>
-      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f1f5f9', padding: 16 },
-  header: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 18 },
-  title: { fontSize: 28, fontWeight: 'bold' },
-  grid: { flexDirection: 'column', gap: 16, marginBottom: 16 },
-  card: { backgroundColor: '#fff', borderRadius: 18, padding: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-  cardTitle: { fontWeight: '700', fontSize: 19, marginBottom: 14 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  item: { fontSize: 17, marginBottom: 4, flex: 1 },
-  listItemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  deleteBtn: { fontSize: 14, fontWeight: '600', color: '#b91c1c', paddingHorizontal: 12, paddingVertical: 22 },
-  deleteBtnContainer: { paddingHorizontal: 8 },
-  lavoroItemContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  lavoroItem: { padding: 12, borderRadius: 10, flex: 1, backgroundColor: '#f8fafc' },
-  lavoroSelected: { backgroundColor: '#c2410c' },
-  lavoroSelectedText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  costoRowContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  costoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#e2e8f0', flex: 1 },
-  costoDesc: { fontSize: 16, flex: 1 },
-  costoPrice: { fontSize: 16, fontWeight: '700' },
-  btnQuote: { backgroundColor: '#c2410c', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
-  btnQuoteText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  smallBtn: { backgroundColor: '#f1f5f9', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
-  smallBtnText: { color: '#c2410c', fontWeight: '700', fontSize: 15 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 },
-  modal: { backgroundColor: '#fff', borderRadius: 16, padding: 24 },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
-  editLabel: { fontSize: 16, fontWeight: '600', marginBottom: 6 },
-  editInput: { borderWidth: 2, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, minHeight: 56, fontSize: 18, marginBottom: 14 },
-  editFinal: { fontSize: 22, fontWeight: '700' },
-  editHint: { fontSize: 16, marginBottom: 8 },
-  vatChip: { minHeight: 52, minWidth: 64, paddingHorizontal: 14, borderRadius: 12, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  vatChipText: { fontSize: 17, fontWeight: '700' },
-  editButton: { flex: 1, minHeight: 64, borderRadius: 14, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  editButtonPrimary: { backgroundColor: '#c2410c', borderColor: '#c2410c' },
-  editButtonText: { fontSize: 18, fontWeight: '700' },
-  input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 12, marginBottom: 12 },
-  btn: { backgroundColor: '#c2410c', paddingVertical: 12, borderRadius: 12, alignItems: 'center', flex: 1 },
-  btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  listinoItem: { padding: 10, borderRadius: 10, marginBottom: 6 },
-  listinoSelected: { backgroundColor: '#c2410c' },
-  listinoSelectedText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  nav: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 18, borderTopWidth: 1, borderTopColor: '#e2e8f0', marginTop: 'auto' },
-  navScroll: { flexGrow: 0, borderTopWidth: 1, marginTop: 'auto' },
-  navContent: { paddingVertical: 18, gap: 4 },
-  voiceOffBox: { marginHorizontal: 24, padding: 20, borderRadius: 16, borderWidth: 2, gap: 8 },
+  container: { flex: 1 },
+  scroll: { paddingHorizontal: space.s4, paddingTop: space.s4 },
+  sessionBar: { flexDirection: 'row', alignItems: 'center', gap: space.s3, borderWidth: 2, borderRadius: radius.control, padding: space.s4, marginBottom: space.s5 },
+  sessionTarget: { ...cantiere.title },
+  sessionLastRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  sessionClose: { minWidth: 100, paddingHorizontal: space.s3 },
+  sessionHint: { textAlign: 'center', marginBottom: space.s5 },
+  voiceCenterWrap: { alignItems: 'center', justifyContent: 'center', marginBottom: space.s2 },
+  voiceOffBox: { padding: 20, borderRadius: radius.control, borderWidth: 1, gap: 8, alignSelf: 'stretch' },
   voiceOffTitle: { fontSize: 20, fontWeight: '800' },
   voiceOffText: { fontSize: 17, lineHeight: 24 },
-  navBtn: { minHeight: 64, minWidth: 72, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
-  navText: { fontSize: 14, color: '#64748b', fontWeight: '600' },
-  voiceCenterWrap: { alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  sessionBar: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 3, borderRadius: 18, padding: 14, marginBottom: 16 },
-  sessionLabel: { fontSize: 16, fontWeight: '600' },
-  sessionTarget: { fontSize: 22, fontWeight: '800' },
-  sessionLast: { fontSize: 16, fontWeight: '700', color: '#16a34a', marginTop: 2 },
-  sessionClose: { minHeight: 64, minWidth: 110, borderRadius: 16, backgroundColor: '#fee2e2', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
-  sessionCloseText: { fontSize: 19, fontWeight: '800', color: '#b91c1c' },
-  clienteSelectBtn: { flex: 1, padding: 10, borderRadius: 10, backgroundColor: '#f8fafc' },
-  clienteSelected: { backgroundColor: '#c2410c' },
-  clienteSelectedText: { color: '#fff', fontWeight: '700' },
-  emptyText: { fontSize: 15, color: '#64748b', paddingVertical: 12 },
-  searchInput: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, padding: 8, marginBottom: 8, fontSize: 14 },
-  listinoSelectorItem: { backgroundColor: '#f8fafc', padding: 14, borderRadius: 10, marginBottom: 10, borderWidth: 1, borderColor: '#e2e8f0' },
-  listinoSelectorDesc: { fontSize: 16, fontWeight: '600', marginBottom: 4 },
-  listinoSelectorListino: { fontSize: 14, color: '#64748b', marginBottom: 2 },
-  listinoSelectorPrice: { fontSize: 15, fontWeight: '700', color: '#c2410c' },
-  timeSavedBadge: { fontSize: 13, color: '#10b981', fontWeight: '600', backgroundColor: '#d1fae5', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  carouselCard: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginRight: 8, minWidth: 120, borderWidth: 1, borderColor: '#e2e8f0' },
-  carouselDesc: { fontWeight: '600', fontSize: 14, marginBottom: 4 },
-  carouselPrice: { color: '#64748b', fontSize: 14 },
+  afterGroup: { marginTop: space.s2, alignSelf: 'flex-start' },
+  contextRow: { flexDirection: 'row', alignItems: 'center', gap: space.s3, marginBottom: space.s4 },
+  sheetGroup: { borderRadius: radius.control, borderWidth: 1, overflow: 'hidden' },
+  lineRow: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: space.s3, paddingHorizontal: space.s4, paddingVertical: space.s3 },
+  lineDesc: { fontSize: 18, lineHeight: 24, fontWeight: '600' },
+  totalRule: { height: 2, marginTop: space.s3 },
+  totalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: space.s3, gap: space.s3 },
+  carouselBox: { borderRadius: radius.control, borderWidth: 1, padding: space.s4, marginBottom: space.s4 },
+  carouselHead: { flexDirection: 'row', alignItems: 'center', marginBottom: space.s2 },
+  carouselCard: { borderRadius: radius.control, padding: space.s3, marginRight: space.s2, minWidth: 140, minHeight: 72, borderWidth: 1 },
+  carouselDesc: { fontWeight: '600', fontSize: 16, marginBottom: 4 },
+  iconBtn: { minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
+  modalOverlay: { flex: 1, justifyContent: 'center', padding: space.s4 },
+  modal: { borderRadius: radius.sheet, padding: space.s5 },
+  modalTitle: { marginBottom: space.s4 },
+  modalButtons: { flexDirection: 'row', gap: space.s3, marginTop: space.s2 },
+  pairRow: { flexDirection: 'row', gap: space.s3 },
+  pickList: { maxHeight: 200, borderWidth: 1, borderRadius: radius.control, marginBottom: space.s4 },
+  matched: { flexDirection: 'row', alignItems: 'center', gap: space.s2, padding: space.s3, borderRadius: radius.control, marginBottom: space.s4 },
+  editFinal: { fontSize: 22, fontWeight: '700' },
+  vatRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.s2, marginBottom: space.s4 },
 });

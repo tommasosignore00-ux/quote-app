@@ -1,5 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Linking, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Linking, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import PrimaryButton from './ui/PrimaryButton';
+import SecondaryButton from './ui/SecondaryButton';
+import TextField from './ui/TextField';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../lib/darkMode';
 
@@ -53,34 +57,31 @@ export default function TwoFactorSettings() {
     await supabase.auth.refreshSession();
   };
 
-  const button = { minHeight: 64, justifyContent: 'center' as const, alignItems: 'center' as const, borderRadius: 12, backgroundColor: colors.primary, marginTop: 10 };
-
   return (
-    <View style={{ marginBottom: 16 }}>
-      <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>Verifica in due passaggi</Text>
-      <Text style={{ color: colors.textSecondary, fontSize: 14, marginTop: 4 }}>Facoltativa: all'accesso ti chiederemo anche un codice dell'app di autenticazione.</Text>
+    <View style={{ marginBottom: 16, gap: 10 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Ionicons name="shield-checkmark-outline" size={24} color={colors.text} />
+        <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700', flex: 1 }}>Accesso in due passaggi</Text>
+      </View>
+      <Text style={{ color: colors.textSecondary, fontSize: 16, lineHeight: 22 }}>Facoltativo: all'accesso ti chiederemo anche un codice dell'app di autenticazione.</Text>
       {enrollment ? (
-        <View>
-          <TouchableOpacity style={button} onPress={() => Linking.openURL(enrollment.uri).catch(() => {})} accessibilityRole="button">
-            <Text style={{ color: '#fff', fontWeight: '700' }}>Apri l'app di autenticazione</Text>
-          </TouchableOpacity>
-          <Text selectable style={{ color: colors.text, marginTop: 10 }}>Oppure inserisci: {enrollment.secret}</Text>
-          <TextInput
+        <View style={{ gap: 10 }}>
+          <SecondaryButton label="Apri l'app di autenticazione" icon="open-outline" scale="ufficio" onPress={() => Linking.openURL(enrollment.uri).catch(() => {})} />
+          <Text selectable style={{ color: colors.text, fontSize: 16 }}>Oppure inserisci: {enrollment.secret}</Text>
+          <TextField
+            label="Codice a 6 cifre"
             value={code}
             onChangeText={(value) => setCode(value.replace(/\D/g, ''))}
             keyboardType="number-pad"
             maxLength={6}
-            accessibilityLabel="Codice a 6 cifre"
-            style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 14, marginTop: 10, color: colors.text, fontSize: 20, textAlign: 'center' }}
+            style={{ textAlign: 'center', fontSize: 22 }}
           />
-          <TouchableOpacity style={[button, code.length !== 6 && { opacity: 0.5 }]} onPress={confirm} disabled={code.length !== 6} accessibilityRole="button">
-            <Text style={{ color: '#fff', fontWeight: '700' }}>Conferma</Text>
-          </TouchableOpacity>
+          <PrimaryButton label="Conferma" scale="ufficio" onPress={confirm} disabled={code.length !== 6} />
         </View>
+      ) : factorId ? (
+        <SecondaryButton label="Disattiva" scale="ufficio" onPress={remove} accessibilityLabel="Disattiva l'accesso in due passaggi" />
       ) : (
-        <TouchableOpacity style={factorId ? [button, { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border }] : button} onPress={factorId ? remove : start} accessibilityRole="button">
-          <Text style={{ color: factorId ? colors.text : '#fff', fontWeight: '700' }}>{factorId ? 'Disattiva' : 'Attiva'}</Text>
-        </TouchableOpacity>
+        <SecondaryButton label="Attiva" scale="ufficio" onPress={start} accessibilityLabel="Attiva l'accesso in due passaggi" />
       )}
     </View>
   );

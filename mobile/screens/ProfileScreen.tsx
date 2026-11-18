@@ -1,6 +1,20 @@
 import { buildWebApiUrl, getWebApiAuthHeaders, isWebApiConfigured } from '../lib/webApi';
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Switch, StyleSheet, ScrollView, FlatList, Modal } from 'react-native';
+import { View, Text, Pressable, Switch, StyleSheet, ScrollView, FlatList, Image, KeyboardAvoidingView, Platform } from 'react-native';
+import { triggerHaptic } from '../lib/haptics';
+import {
+  ActionSheet,
+  BottomActionBar,
+  BottomTabBar,
+  Chip,
+  DangerButton,
+  ListGroup,
+  ListRow,
+  PrimaryButton,
+  SecondaryButton,
+  SectionHeader,
+  TextField,
+} from '../components/ui';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import { DEFAULT_COUNTRY_CODE, DEFAULT_LANGUAGE } from '../lib/market';
@@ -28,6 +42,8 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [ibanError, setIbanError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [timeSavedStats, setTimeSavedStats] = useState<string>('');
   const [fiscalConfig, setFiscalConfig] = useState(getFiscalConfig('IT'));
 
@@ -117,14 +133,15 @@ export default function ProfileScreen() {
     if (profile.iban) {
       const ibanResult = validateIBAN(profile.iban);
       if (!ibanResult.valid) {
-        setIbanError(ibanResult.error || 'IBAN non valido');
-        Alert.alert('⚠️ IBAN non valido', ibanResult.error || 'Controlla il formato IBAN');
+        setIbanError(ibanResult.error || 'IBAN non valido: controlla le cifre');
+        setSaveError('IBAN non valido: controlla le cifre nel campo IBAN.');
         return;
       }
       setIbanError(null);
     }
 
     setSaving(true);
+    setSaveError(null);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error(t('messages.notAuthenticated'));
@@ -135,9 +152,9 @@ export default function ProfileScreen() {
           headers: await getWebApiAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ template: profile.custom_template_html ?? null }),
         });
-        if (!templateRes.ok) throw new Error('Salvataggio del template non riuscito');
+        if (!templateRes.ok) throw new Error('Salvataggio del modello non riuscito');
       }
-      await supabase.from('profiles').update({
+      const { error: updateError } = await supabase.from('profiles').update({
         company_name: profile.company_name,
         vat_number: profile.vat_number,
         vat_percent: profile.vat_percent ?? 22,
@@ -157,9 +174,13 @@ export default function ProfileScreen() {
         us_state: usState || null,
         updated_at: new Date().toISOString(),
       }).eq('id', user.id);
-      Alert.alert(t('messages.success'), t('messages.saved'));
+      if (updateError) throw new Error('Modifiche non salvate. Controlla la connessione e riprova.');
+      // The button itself says "Salvato" for 2 seconds: no alert to close.
+      setSaved(true);
+      triggerHaptic('aiSuccess');
+      setTimeout(() => setSaved(false), 2000);
     } catch (err: unknown) {
-      Alert.alert(t('messages.error'), (err as Error).message);
+      setSaveError((err as Error).message);
     } finally {
       setSaving(false);
     }
@@ -209,7 +230,7 @@ export default function ProfileScreen() {
             ready = payload.template;
           }
           setProfile({ ...profile, custom_template_html: ready });
-          Alert.alert(t('messages.success'), 'Template caricato. Ricorda di salvare le modifiche.');
+          Alert.alert(t('messages.success'), 'Modello caricato. Ricorda di salvare le modifiche.');
           return;
         }
       }
@@ -248,7 +269,7 @@ export default function ProfileScreen() {
         ? `\n\nAttenzione, non ho trovato dove mettere: ${payload.missing.join(', ')}.`
         : '';
       Alert.alert(
-        'Template pronto',
+        'Modello pronto',
         `${payload.notes || 'Ho preparato il modello dal tuo preventivo.'}${missing}${warnings}\n\nRicorda di salvare le modifiche. Puoi vedere l'anteprima e correggerla dal sito, nella pagina Profilo.`
       );
     } catch (err) {
@@ -260,8 +281,8 @@ export default function ProfileScreen() {
 
   const handleRemoveTemplate = () => {
     Alert.alert(
-      'Rimuovi Template',
-      'Vuoi rimuovere il template personalizzato?',
+      'Rimuovere il modello?',
+      'Il preventivo torna al modello standard quando salvi le modifiche.',
       [
         { text: 'Annulla', style: 'cancel' },
         { text: 'Rimuovi', style: 'destructive', onPress: () => setProfile({ ...profile, custom_template_html: null }) }
@@ -286,37 +307,37 @@ export default function ProfileScreen() {
     }
   };
 
-  // Punto 27: GDPR Delete account
-  const handleDeleteAccount = () => {
-    Alert.alert(
-      '⚠️ Elimina Account',
-      'Tutti i tuoi dati verranno cancellati permanentemente. Questa azione è irreversibile.',
-      [
-        { text: 'Annulla', style: 'cancel' },
-        {
-          text: 'Elimina',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const response = await fetch(buildWebApiUrl('/api/account/delete'), {
-                method: 'POST',
-                headers: await getWebApiAuthHeaders(),
-              });
-              if (!response.ok) {
-                const body = await response.json().catch(() => ({}));
-                throw new Error(body.error || 'Non è stato possibile eliminare l\'account.');
-              }
-              await clearOfflineRecordings();
-              await supabase.auth.signOut();
-              (navigation as any).reset({ index: 0, routes: [{ name: 'Auth' }] });
-            } catch (err) {
-              Alert.alert('Errore', (err as Error).message);
-            }
-          },
-        },
-      ]
-    );
+  // Punto 27: GDPR Delete account (confirmed in the action sheet).
+  const handleDeleteAccount = async () => {
+    try {
+      const response = await fetch(buildWebApiUrl('/api/account/delete'), {
+        method: 'POST',
+        headers: await getWebApiAuthHeaders(),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'Non è stato possibile eliminare l\'account.');
+      }
+      await clearOfflineRecordings();
+      await supabase.auth.signOut();
+      (navigation as any).reset({ index: 0, routes: [{ name: 'Auth' }] });
+      return true;
+    } catch (err) {
+      Alert.alert('Errore', (err as Error).message);
+      return false;
+    }
   };
+
+  /** One sheet for every deletion on this screen. */
+  const [pendingDelete, setPendingDelete] = useState<{
+    title: string;
+    label: string;
+    confirmTitle: string;
+    confirmMessage: string;
+    confirmLabel?: string;
+    onConfirm: () => Promise<boolean | void>;
+  } | null>(null);
+  const askDelete = (value: NonNullable<typeof pendingDelete>) => setPendingDelete(value);
 
   // Punto 14: Delete a command mapping
   const handleDeleteMapping = async (id: string) => {
@@ -431,7 +452,7 @@ export default function ProfileScreen() {
     setWebhooks(prev => prev.filter(w => w.id !== id));
   };
 
-  if (loading) return <View style={[styles.container, { backgroundColor: colors.background }]}><Text style={{ color: colors.text, fontSize: 18 }}>{t('messages.loading')}</Text></View>;
+  if (loading) return <View style={[styles.container, { backgroundColor: colors.background }]}><Text style={{ color: colors.text, fontSize: 18, padding: 16 }}>{t('messages.loading')}</Text></View>;
 
   const themeOptions = [
     { key: 'system' as const, label: 'Automatico', icon: 'contrast-outline' as const },
@@ -439,79 +460,127 @@ export default function ProfileScreen() {
     { key: 'dark' as const, label: 'Scuro', icon: 'moon-outline' as const },
   ];
 
+  const field = (key: string, label: string, extra?: Record<string, any>) => (
+    <TextField label={label} value={profile[key] ?? ''} onChangeText={(v) => setProfile({ ...profile, [key]: v })} {...extra} />
+  );
+  const currentColor = String(profile.brand_color || '').toLowerCase();
+  const customColor = currentColor && !BRAND_SWATCHES.some((sw) => sw.value === currentColor);
+
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.content}>
-      <Text style={styles.title} accessibilityRole="header">{t('main.profile')}</Text>
-
-      {/* Punto 7: Aspetto (tema) */}
-      <Text style={styles.label}>Aspetto</Text>
-      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 24 }} accessibilityRole="radiogroup">
-        {themeOptions.map((opt) => {
-          const active = mode === opt.key;
-          return (
-            <TouchableOpacity
-              key={opt.key}
-              onPress={() => setMode(opt.key)}
-              style={[styles.segment, active ? styles.segmentActive : null]}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: active, checked: active }}
-              accessibilityLabel={`Aspetto: ${opt.label}`}
-            >
-              <Ionicons name={opt.icon} size={20} color={active ? colors.surface : colors.text} />
-              <Text style={[styles.segmentText, active ? { color: colors.surface, fontWeight: '700' } : null]} maxFontSizeMultiplier={1.3}>{opt.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      <Text style={styles.label}>{t('profile.company')}</Text>
-      <TextInput style={styles.input} accessibilityLabel={t('profile.company')} placeholder={t('profile.company')} value={profile.company_name || ''} onChangeText={(v) => setProfile({ ...profile, company_name: v })} placeholderTextColor={colors.textTertiary} />
-      <Text style={styles.label}>{t('profile.vatNumber')}</Text>
-      <TextInput style={styles.input} accessibilityLabel={t('profile.vatNumber')} placeholder={t('profile.vatNumber')} value={profile.vat_number || ''} onChangeText={(v) => setProfile({ ...profile, vat_number: v })} placeholderTextColor={colors.textTertiary} />
-      <Text style={styles.label}>{t('profile.fiscalCode')}</Text>
-      <TextInput style={styles.input} accessibilityLabel={t('profile.fiscalCode')} placeholder={t('profile.fiscalCode')} value={profile.fiscal_code || ''} onChangeText={(v) => setProfile({ ...profile, fiscal_code: v })} placeholderTextColor={colors.textTertiary} />
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }} keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}>
+    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <SectionHeader title="La tua azienda" first />
+      {field('company_name', t('profile.company'), { placeholder: 'Es. Carpenteria Rossi s.r.l.' })}
+      {field('vat_number', t('profile.vatNumber'), { autoCapitalize: 'characters' })}
+      {field('fiscal_code', t('profile.fiscalCode'), { autoCapitalize: 'characters' })}
       <Text style={styles.label}>{t('profile.country')}</Text>
-      <View style={[styles.input, styles.inputReadonly]}>
+      <View style={[styles.input, styles.inputReadonly]} accessibilityLabel={`${t('profile.country')}: Italia`}>
         <Text style={styles.inputText}>Italia</Text>
       </View>
       <Text style={styles.help}>Per ora il servizio è solo in Italia.</Text>
-      <Text style={styles.label}>{t('profile.iban')}</Text>
-      <TextInput style={[styles.input, ibanError ? styles.inputError : null]} accessibilityLabel={t('profile.iban')} accessibilityHint={ibanError || undefined} placeholder={t('profile.iban')} value={profile.iban || ''} onChangeText={(v) => { setProfile({ ...profile, iban: v.toUpperCase().replace(/\s/g, '') }); setIbanError(null); }} onBlur={() => { if (profile.iban) { const r = validateIBAN(profile.iban); if (!r.valid) setIbanError(r.error || 'IBAN non valido'); else { setIbanError(null); setProfile({ ...profile, iban: formatIBAN(profile.iban) }); } } }} autoCapitalize="characters" placeholderTextColor={colors.textTertiary} />
-      {ibanError && (
-        <View style={styles.errorRow}>
-          <Ionicons name="alert-circle-outline" size={20} color={colors.dangerText} />
-          <Text style={styles.errorText}>{ibanError}</Text>
+      {field('address', t('messages.address'))}
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        <View style={{ flex: 2 }}>{field('city', t('messages.city'))}</View>
+        <View style={{ flex: 1 }}>{field('postal_code', t('messages.postalCode'), { keyboardType: 'number-pad' })}</View>
+      </View>
+
+      <SectionHeader title="Sul preventivo" />
+      <Text style={styles.label}>Logo</Text>
+      <View style={styles.logoRow}>
+        <View style={[styles.logoThumb, { borderColor: colors.border, backgroundColor: colors.surfaceSecondary }]}>
+          {profile.logo_url ? (
+            <Image source={{ uri: profile.logo_url }} style={styles.logoImage} resizeMode="contain" accessibilityLabel="Il tuo logo" />
+          ) : (
+            <Ionicons name="image-outline" size={28} color={colors.textSecondary} />
+          )}
         </View>
-      )}
-      <Text style={styles.label}>{t('profile.swiftBic')}</Text>
-      <TextInput style={styles.input} accessibilityLabel={t('profile.swiftBic')} placeholder={t('profile.swiftBic')} value={profile.swift_bic || ''} onChangeText={(v) => setProfile({ ...profile, swift_bic: v })} placeholderTextColor={colors.textTertiary} />
-      <Text style={styles.label}>Logo aziendale</Text>
-      <TouchableOpacity style={[styles.btnSecondaryOutline, { marginBottom: 16 }]} onPress={handleLogoUpload} accessibilityRole="button">
-        <Ionicons name="image-outline" size={24} color={colors.text} />
-        <Text style={styles.btnSecondaryOutlineText}>{profile.logo_url ? 'Sostituisci il logo' : 'Carica il logo'}</Text>
-      </TouchableOpacity>
-      <Text style={styles.label}>Colore sui preventivi (es. #1f2937)</Text>
-      <TextInput style={styles.input} accessibilityLabel="Colore sui preventivi" placeholder="#1f2937" autoCapitalize="none" value={profile.brand_color || ''} onChangeText={(v) => setProfile({ ...profile, brand_color: v })} placeholderTextColor={colors.textTertiary} />
-      <Text style={styles.label}>{t('messages.address')}</Text>
-      <TextInput style={styles.input} accessibilityLabel={t('messages.address')} placeholder={t('messages.address')} value={profile.address || ''} onChangeText={(v) => setProfile({ ...profile, address: v })} placeholderTextColor={colors.textTertiary} />
-      <Text style={styles.label}>{t('messages.city')}</Text>
-      <TextInput style={styles.input} accessibilityLabel={t('messages.city')} placeholder={t('messages.city')} value={profile.city || ''} onChangeText={(v) => setProfile({ ...profile, city: v })} placeholderTextColor={colors.textTertiary} />
-      <Text style={styles.label}>{t('messages.postalCode')}</Text>
-      <TextInput style={styles.input} accessibilityLabel={t('messages.postalCode')} placeholder={t('messages.postalCode')} value={profile.postal_code || ''} onChangeText={(v) => setProfile({ ...profile, postal_code: v })} placeholderTextColor={colors.textTertiary} />
-      <Text style={styles.label}>{t('profile.vatPercent')}</Text>
-      <TextInput keyboardType="numeric" style={styles.input} accessibilityLabel={t('profile.vatPercent')} placeholder={t('profile.vatPercent')} value={String(profile.vat_percent ?? 22)} onChangeText={(v) => setProfile({ ...profile, vat_percent: parseFloat(v || '22') })} placeholderTextColor={colors.textTertiary} />
-      <Text style={styles.label}>{t('profile.materialMarkupVAT')}</Text>
-      <TextInput keyboardType="numeric" style={styles.input} accessibilityLabel={t('profile.materialMarkupVAT')} placeholder={t('profile.materialMarkupVAT')} value={String(profile.material_markup_vat_percent || 0)} onChangeText={(v) => setProfile({ ...profile, material_markup_vat_percent: parseFloat(v || '0') })} placeholderTextColor={colors.textTertiary} />
-      
+        <SecondaryButton
+          label={profile.logo_url ? 'Sostituisci il logo' : 'Carica il logo'}
+          icon="image-outline"
+          scale="ufficio"
+          onPress={handleLogoUpload}
+          style={{ flex: 1 }}
+        />
+      </View>
+
+      <Text style={[styles.label, { marginTop: 16 }]}>Colore sui preventivi</Text>
+      <View style={styles.swatches} accessibilityRole="radiogroup">
+        {BRAND_SWATCHES.map((sw) => {
+          const selected = currentColor === sw.value;
+          return (
+            <Pressable
+              key={sw.value}
+              onPress={() => setProfile({ ...profile, brand_color: sw.value })}
+              accessibilityRole="radio"
+              accessibilityState={{ selected, checked: selected }}
+              accessibilityLabel={`Colore ${sw.name}`}
+              style={styles.swatchItem}
+            >
+              <View style={[styles.swatchRing, { borderColor: selected ? colors.text : 'transparent' }]}>
+                <View style={[styles.swatch, { backgroundColor: sw.value }]}>
+                  {selected ? <Ionicons name="checkmark" size={24} color={colors.onPrimary} /> : null}
+                </View>
+              </View>
+              <Text style={styles.swatchName} numberOfLines={1}>{sw.name}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {customColor ? <Text style={styles.help}>Oggi usi un colore tuo: resta finché non ne scegli uno qui.</Text> : null}
+
+      <Text style={[styles.label, { marginTop: 8 }]}>Il tuo modello di preventivo</Text>
+      <View style={styles.sectionBox}>
+        {profile.custom_template_html ? (
+          <View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+              <Text style={styles.templateInfo}>Modello caricato ({(profile.custom_template_html.length / 1024).toFixed(1).replace('.', ',')} KB)</Text>
+            </View>
+            <View style={styles.templateButtons}>
+              <SecondaryButton label="Sostituisci" scale="ufficio" onPress={handleUploadTemplate} loading={convertingTemplate} loadingLabel="Leggo…" style={{ flex: 1 }} />
+              <DangerButton label="Rimuovi" onPress={handleRemoveTemplate} style={{ flex: 1 }} accessibilityLabel="Rimuovi il modello di preventivo" />
+            </View>
+          </View>
+        ) : (
+          <SecondaryButton
+            label={convertingTemplate ? 'Leggo il preventivo…' : 'Carica il tuo preventivo (Word o HTML)'}
+            icon="document-text-outline"
+            scale="ufficio"
+            onPress={handleUploadTemplate}
+            loading={convertingTemplate}
+          />
+        )}
+        <Text style={[styles.help, { marginTop: 8, marginBottom: 0 }]}>Carica il preventivo che usi già, anche uno vecchio compilato: l'app lo trasforma nel tuo modello, con cliente, voci e totali al posto giusto.</Text>
+      </View>
+
+      <SectionHeader title="Pagamenti" />
+      <TextField
+        label={t('profile.iban')}
+        value={profile.iban || ''}
+        error={ibanError}
+        autoCapitalize="characters"
+        onChangeText={(v) => { setProfile({ ...profile, iban: v.toUpperCase().replace(/\s/g, '') }); setIbanError(null); }}
+        onBlur={() => { if (profile.iban) { const r = validateIBAN(profile.iban); if (!r.valid) setIbanError(r.error || 'IBAN non valido: controlla le cifre'); else { setIbanError(null); setProfile({ ...profile, iban: formatIBAN(profile.iban) }); } } }}
+      />
+      {field('swift_bic', t('profile.swiftBic'), { autoCapitalize: 'characters' })}
+
+      <SectionHeader title="Prezzi" />
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        <View style={{ flex: 1 }}>
+          <TextField keyboardType="numeric" label={t('profile.vatPercent')} value={String(profile.vat_percent ?? 22)} onChangeText={(v) => setProfile({ ...profile, vat_percent: parseFloat(v.replace(',', '.') || '22') })} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <TextField keyboardType="numeric" label={t('profile.materialMarkupVAT')} value={String(profile.material_markup_vat_percent || 0)} onChangeText={(v) => setProfile({ ...profile, material_markup_vat_percent: parseFloat(v.replace(',', '.') || '0') })} />
+        </View>
+      </View>
+
       {/* Punto 21: Dynamic Fiscal Fields */}
       {fiscalConfig.fields.length > 0 && (
         <View style={styles.sectionBox}>
-          <Text style={styles.sectionTitle}>Campi fiscali ({fiscalConfig.countryCode})</Text>
-          {fiscalConfig.fields.map((field: FiscalField) => (
-            <View key={field.key}>
-              <Text style={styles.label}>{field.label}{field.required ? ' *' : ''}</Text>
-              <TextInput style={styles.input} accessibilityLabel={field.label} placeholder={field.placeholder || field.label} value={profile[field.key] || ''} onChangeText={(v) => setProfile({ ...profile, [field.key]: v })} placeholderTextColor={colors.textTertiary} />
-            </View>
+          <Text style={styles.sectionTitle}>Campi fiscali</Text>
+          {fiscalConfig.fields.map((f: FiscalField) => (
+            <TextField key={f.key} label={`${f.label}${f.required ? ' (obbligatorio)' : ''}`} placeholder={f.placeholder} value={profile[f.key] || ''} onChangeText={(v) => setProfile({ ...profile, [f.key]: v })} />
           ))}
           {fiscalConfig.reverseChargeApplicable && (
             <Text style={styles.help}>Reverse charge disponibile per operazioni intra-UE</Text>
@@ -522,68 +591,22 @@ export default function ProfileScreen() {
         </View>
       )}
 
-      <TwoFactorSettings />
-
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 64, marginBottom: 12 }}>
-        <Text style={{ color: colors.text, fontSize: 18, flex: 1, paddingRight: 12 }}>Condividi statistiche anonime di utilizzo</Text>
-        <Switch
-          value={analyticsConsent}
-          onValueChange={(value) => { setAnalyticsConsentState(value); setAnalyticsConsent(value); }}
-          accessibilityLabel="Condividi statistiche anonime di utilizzo"
-        />
-      </View>
-
-      {/* Punto 44: Time Savings Widget */}
-      {timeSavedStats ? (
-        <View style={styles.sectionBox}>
-          <Text style={styles.sectionTitle}>La tua attività</Text>
-          <Text style={styles.bodyText}>{timeSavedStats}</Text>
-        </View>
-      ) : null}
-
-      <Text style={styles.label}>Il tuo modello di preventivo</Text>
-      <View style={styles.sectionBox}>
-        {profile.custom_template_html ? (
-          <View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <Ionicons name="checkmark-circle" size={20} color={colors.success} />
-              <Text style={styles.templateInfo}>Modello caricato ({(profile.custom_template_html.length / 1024).toFixed(1)} KB)</Text>
-            </View>
-            <View style={styles.templateButtons}>
-              <TouchableOpacity style={[styles.btnSecondaryOutline, { flex: 1 }]} onPress={handleUploadTemplate} disabled={convertingTemplate} accessibilityRole="button">
-                <Text style={styles.btnSecondaryOutlineText}>{convertingTemplate ? 'Leggo il preventivo...' : 'Sostituisci'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.btnDangerOutline, { flex: 1 }]} onPress={handleRemoveTemplate} accessibilityRole="button" accessibilityLabel="Rimuovi il modello di preventivo">
-                <Ionicons name="trash-outline" size={24} color={colors.dangerText} />
-                <Text style={styles.btnDangerOutlineText}>Rimuovi</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : (
-          <TouchableOpacity style={styles.btnSecondaryOutline} onPress={handleUploadTemplate} disabled={convertingTemplate} accessibilityRole="button">
-            <Ionicons name="document-text-outline" size={24} color={colors.text} />
-            <Text style={styles.btnSecondaryOutlineText}>{convertingTemplate ? 'Leggo il preventivo...' : 'Carica il tuo preventivo (Word o HTML)'}</Text>
-          </TouchableOpacity>
-        )}
-        <Text style={styles.help}>Carica il preventivo che usi già, anche uno vecchio compilato: l'app lo trasforma nel tuo modello, con cliente, voci e totali al posto giusto.</Text>
-      </View>
-
       {/* Punto 25: US State Picker (only shown for US country) */}
       {DEFAULT_COUNTRY_CODE !== 'IT' && (profile.country_code || '').toUpperCase() === 'US' && (
         <View style={styles.sectionBox}>
           <Text style={styles.sectionTitle}>US Sales Tax State</Text>
-          <TouchableOpacity style={styles.input} onPress={() => setShowUsStatePicker(!showUsStatePicker)} accessibilityRole="button">
+          <Pressable style={styles.input} onPress={() => setShowUsStatePicker(!showUsStatePicker)} accessibilityRole="button">
             <Text style={styles.inputText}>{usState ? `${usState} (${US_STATE_TAX_RATES[usState] || 0}%)` : 'Seleziona stato'}</Text>
-          </TouchableOpacity>
+          </Pressable>
           {showUsStatePicker && (
             <View style={{ maxHeight: 200 }}>
               <FlatList
                 data={Object.entries(US_STATE_TAX_RATES).map(([code, rate]) => ({ code, rate }))}
                 keyExtractor={item => item.code}
                 renderItem={({ item }) => (
-                  <TouchableOpacity onPress={() => { setUsState(item.code); setShowUsStatePicker(false); }} style={[styles.langItem, usState === item.code && styles.langItemSelected]} accessibilityState={{ selected: usState === item.code }}>
+                  <Pressable onPress={() => { setUsState(item.code); setShowUsStatePicker(false); }} style={[styles.langItem, usState === item.code && styles.langItemSelected]} accessibilityState={{ selected: usState === item.code }}>
                     <Text style={[styles.bodyText, usState === item.code ? styles.langItemSelectedText : undefined]}>{item.code} — {item.rate}%</Text>
-                  </TouchableOpacity>
+                  </Pressable>
                 )}
               />
             </View>
@@ -591,50 +614,42 @@ export default function ProfileScreen() {
         </View>
       )}
 
-      {/* Punto 35: Referral Program */}
-      {profile.referral_code && (
-        <View style={styles.sectionBox}>
-          <Text style={styles.sectionTitle}>Programma Referral</Text>
-          <Text style={styles.bodyText}>Il tuo codice: <Text style={{ fontWeight: '700' }}>{profile.referral_code}</Text></Text>
-          <TouchableOpacity style={styles.linkBtn} accessibilityRole="button" onPress={() => {
-            const link = `https://quoteapp.it/register?ref=${profile.referral_code}`;
-            Alert.alert('Link Referral', link);
-          }}>
-            <Ionicons name="link-outline" size={20} color={colors.primaryText} />
-            <Text style={styles.linkText}>Mostra link invito</Text>
-          </TouchableOpacity>
-          <Text style={styles.help}>
-            Guadagna il 20% su ogni abbonamento tramite il tuo link.
+      <SectionHeader title="Dettatura" />
+      <ListGroup>
+        <ListRow
+          first
+          scale="ufficio"
+          icon="chatbubble-ellipses-outline"
+          title="Scorciatoie a voce"
+          subtitle={commandMappings.length === 1 ? '1 scorciatoia' : `${commandMappings.length} scorciatoie`}
+          onPress={() => setShowMappingsSection(!showMappingsSection)}
+          hideChevron
+          value={<Ionicons name={showMappingsSection ? 'chevron-up' : 'chevron-down'} size={24} color={colors.textSecondary} />}
+          accessibilityHint={showMappingsSection ? 'Chiude l\'elenco' : 'Apre l\'elenco'}
+        />
+        {showMappingsSection ? (
+          <Text style={[styles.bodyText, { paddingHorizontal: 16, paddingVertical: 12 }]}>
+            Una scorciatoia collega una frase tua a un articolo preciso: quando detti esattamente quella frase, l’articolo viene aggiunto subito, senza scegliere. Le scorciatoie si creano dal sito, nella pagina Profilo.
           </Text>
-          {referralStats.total > 0 && (
-            <Text style={styles.help}>
-              {referralStats.total} invitati · {referralStats.converted} convertiti
-            </Text>
-          )}
-        </View>
-      )}
-
-      {/* Punto 14: Command Mappings Review */}
-      <TouchableOpacity onPress={() => setShowMappingsSection(!showMappingsSection)} style={styles.sectionHeader} accessibilityRole="button" accessibilityState={{ expanded: showMappingsSection }}>
-        <Ionicons name="chatbubble-ellipses-outline" size={24} color={colors.text} />
-        <Text style={styles.sectionHeaderText}>Parole che ho imparato ({commandMappings.length})</Text>
-        <Ionicons name={showMappingsSection ? 'chevron-up' : 'chevron-down'} size={24} color={colors.textSecondary} />
-      </TouchableOpacity>
-      {showMappingsSection && commandMappings.length > 0 && (
-        <View style={[styles.sectionBox, { marginTop: 0, borderTopLeftRadius: 0, borderTopRightRadius: 0 }]}>
-          {commandMappings.map(m => (
-            <View key={m.id} style={styles.listRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.bodyText}>"{m.raw_text}" → {m.mapped_description}</Text>
-                <Text style={styles.help}>Usato {m.usage_count} volte</Text>
-              </View>
-              <TouchableOpacity onPress={() => handleDeleteMapping(m.id)} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel={`Elimina la parola «${m.raw_text}»`}>
-                <Ionicons name="trash-outline" size={24} color={colors.dangerText} />
-              </TouchableOpacity>
-            </View>
-          ))}
-        </View>
-      )}
+        ) : null}
+        {showMappingsSection && commandMappings.map(m => (
+          <ListRow
+            key={m.id}
+            scale="ufficio"
+            title={`«${m.input_text}» → ${m.mapped_text}`}
+            subtitle={Number(m.usage_count) === 1 ? 'Usata 1 volta' : `Usata ${Number(m.usage_count) || 0} volte`}
+            onPress={() => askDelete({
+              title: `«${m.input_text}»`,
+              label: 'Elimina questa scorciatoia',
+              confirmTitle: `Eliminare «${m.input_text}»?`,
+              confirmMessage: 'Quando detterai questa frase, l\'articolo verrà cercato nel listino come le altre voci.',
+              confirmLabel: 'Sì, elimina',
+              onConfirm: async () => { await handleDeleteMapping(m.id); },
+            })}
+            accessibilityHint="Apre le azioni della scorciatoia"
+          />
+        ))}
+      </ListGroup>
 
       {/* Punto 41: Team Management - solo per abbonamento team */}
       {teamInvitations.map(invitation => (
@@ -643,178 +658,184 @@ export default function ProfileScreen() {
             {invitation.owner?.company_name || 'Un titolare'} ti ha invitato nel team
           </Text>
           <View style={{ flexDirection: 'row', gap: 12 }}>
-            <TouchableOpacity style={[styles.btnSecondaryOutline, { flex: 1, minHeight: 64 }]} onPress={() => handleRespondInvitation(invitation.id, false)} accessibilityRole="button">
-              <Text style={styles.btnSecondaryOutlineText}>Rifiuta</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.btn, { flex: 1, minHeight: 64 }]} onPress={() => handleRespondInvitation(invitation.id, true)} accessibilityRole="button">
-              <Text style={styles.btnText}>Accetta</Text>
-            </TouchableOpacity>
+            <SecondaryButton label="Rifiuta" onPress={() => handleRespondInvitation(invitation.id, false)} style={{ flex: 1 }} />
+            <PrimaryButton label="Accetta" onPress={() => handleRespondInvitation(invitation.id, true)} style={{ flex: 1 }} />
           </View>
         </View>
       ))}
 
       {profile.team_plan === true && <>
-      <TouchableOpacity onPress={() => setShowTeamSection(!showTeamSection)} style={styles.sectionHeader} accessibilityRole="button" accessibilityState={{ expanded: showTeamSection }}>
-        <Ionicons name="people-outline" size={24} color={colors.text} />
-        <Text style={styles.sectionHeaderText}>Squadra ({teamMembers.length}/{TEAM_MEMBERS_INCLUDED} inclusi oltre a te{teamMembers.length > TEAM_MEMBERS_INCLUDED ? ` + ${teamMembers.length - TEAM_MEMBERS_INCLUDED} extra` : ''})</Text>
-        <Ionicons name={showTeamSection ? 'chevron-up' : 'chevron-down'} size={24} color={colors.textSecondary} />
-      </TouchableOpacity>
-      {showTeamSection && (
-        <View style={[styles.sectionBox, { marginTop: 0, borderTopLeftRadius: 0, borderTopRightRadius: 0 }]}>
-          {teamMembers.map(m => (
-            <View key={m.id} style={styles.listRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.bodyText}>{m.member?.email || 'N/A'}</Text>
-                <Text style={styles.help}>{m.role}{!m.accepted_at ? ' · in attesa di accettazione' : ''}</Text>
-              </View>
-              <TouchableOpacity onPress={() => handleRemoveTeamMember(m.id)} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel={`Togli ${m.member?.email || 'il membro'} dalla squadra`}>
-                <Ionicons name="close-outline" size={28} color={colors.dangerText} />
-              </TouchableOpacity>
-            </View>
+        <SectionHeader title="Squadra" />
+        <ListGroup>
+          <ListRow
+            first
+            scale="ufficio"
+            icon="people-outline"
+            title={`${teamMembers.length} su ${TEAM_MEMBERS_INCLUDED} inclusi oltre a te`}
+            subtitle={teamMembers.length > TEAM_MEMBERS_INCLUDED ? `${teamMembers.length - TEAM_MEMBERS_INCLUDED} in più` : null}
+            onPress={() => setShowTeamSection(!showTeamSection)}
+            hideChevron
+            value={<Ionicons name={showTeamSection ? 'chevron-up' : 'chevron-down'} size={24} color={colors.textSecondary} />}
+          />
+          {showTeamSection && teamMembers.map(m => (
+            <ListRow
+              key={m.id}
+              scale="ufficio"
+              title={m.member?.email || 'N/A'}
+              subtitle={`${m.role}${!m.accepted_at ? ' · in attesa di accettazione' : ''}`}
+              onPress={() => askDelete({
+                title: m.member?.email || 'Membro',
+                label: 'Togli dalla squadra',
+                confirmTitle: `Togliere ${m.member?.email || 'il membro'} dalla squadra?`,
+                confirmMessage: 'Non vedrà più i tuoi lavori e listini. Puoi invitarlo di nuovo quando vuoi.',
+                confirmLabel: 'Sì, togli',
+                onConfirm: async () => { await handleRemoveTeamMember(m.id); },
+              })}
+            />
           ))}
-          <Text style={[styles.label, { marginTop: 12 }]}>Invita membro</Text>
-          <TextInput style={styles.input} accessibilityLabel="Email del membro da invitare" placeholder="email@example.com" value={inviteEmail} onChangeText={setInviteEmail} keyboardType="email-address" autoCapitalize="none" placeholderTextColor={colors.textTertiary} />
-          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
-            {['admin', 'technician', 'readonly'].map(role => (
-              <TouchableOpacity key={role} onPress={() => setInviteRole(role)} style={[styles.chip, inviteRole === role ? styles.chipActive : null]} accessibilityRole="radio" accessibilityState={{ selected: inviteRole === role, checked: inviteRole === role }}>
-                <Text style={[styles.chipText, inviteRole === role ? { color: colors.surface } : null]}>{role}</Text>
-              </TouchableOpacity>
-            ))}
+        </ListGroup>
+        {showTeamSection && (
+          <View style={[styles.sectionBox, { marginTop: 12 }]}>
+            <TextField label="Invita un membro (email)" placeholder="Es. marco@email.it" value={inviteEmail} onChangeText={setInviteEmail} keyboardType="email-address" autoCapitalize="none" />
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+              {['admin', 'technician', 'readonly'].map(role => (
+                <Chip key={role} label={role} selected={inviteRole === role} onPress={() => setInviteRole(role)} minHeight={48} style={{ flex: 1 }} />
+              ))}
+            </View>
+            <SecondaryButton label="Invita" icon="person-add-outline" scale="ufficio" onPress={handleInviteMember} />
           </View>
-          <TouchableOpacity style={[styles.btn, { marginBottom: 0 }]} onPress={handleInviteMember} accessibilityRole="button">
-            <Text style={styles.btnText}>Invita</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+        )}
       </>}
 
-      {/* Punto 43: Webhooks - solo per abbonamento pro/team */}
-      {(profile.subscription_status === 'active' || profile.subscription_status === 'team') && <View style={[styles.sectionBox, { marginTop: 16 }]}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Integrazioni</Text>
-          <TouchableOpacity onPress={() => setShowWebhookModal(true)} style={styles.linkBtn} accessibilityRole="button" accessibilityLabel="Aggiungi un'integrazione">
-            <Ionicons name="add-outline" size={24} color={colors.primaryText} />
-            <Text style={styles.linkText}>Aggiungi</Text>
-          </TouchableOpacity>
-        </View>
-        {webhooks.map(w => (
-          <View key={w.id} style={styles.listRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.bodyText} numberOfLines={1}>{w.url}</Text>
-              <Text style={styles.help}>{(w.events || []).join(', ')}</Text>
-            </View>
-            <TouchableOpacity onPress={() => handleDeleteWebhook(w.id)} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Elimina l'integrazione">
-              <Ionicons name="trash-outline" size={24} color={colors.dangerText} />
-            </TouchableOpacity>
-          </View>
-        ))}
-        {webhooks.length === 0 && <Text style={styles.help}>Nessuna integrazione configurata</Text>}
-      </View>}
-
-      {/* Punto 43: Add Webhook Modal */}
-      <Modal visible={showWebhookModal} transparent animationType="fade" onRequestClose={() => setShowWebhookModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Nuova integrazione</Text>
-            <Text style={styles.label}>Indirizzo</Text>
-            <TextInput style={styles.input} accessibilityLabel="Indirizzo dell'integrazione" placeholder="https://hooks.zapier.com/..." value={newWebhookUrl} onChangeText={setNewWebhookUrl} autoCapitalize="none" keyboardType="url" placeholderTextColor={colors.textTertiary} />
-            <Text style={styles.label}>Eventi</Text>
-            {['quote_approved', 'quote_sent', 'client_created'].map(evt => {
-              const checked = newWebhookEvents.includes(evt);
-              return (
-                <TouchableOpacity key={evt} onPress={() => {
-                  setNewWebhookEvents(prev => prev.includes(evt) ? prev.filter(e => e !== evt) : [...prev, evt]);
-                }} style={styles.checkRow} accessibilityRole="checkbox" accessibilityState={{ checked }}>
-                  <View style={[styles.checkBox, checked ? styles.checkBoxOn : null]}>
-                    {checked ? <Ionicons name="checkmark" size={20} color={colors.onPrimary} /> : null}
-                  </View>
-                  <Text style={styles.bodyText}>{evt}</Text>
-                </TouchableOpacity>
-              );
-            })}
-            <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
-              <TouchableOpacity style={[styles.btnSecondaryOutline, { flex: 1 }]} onPress={() => setShowWebhookModal(false)} accessibilityRole="button">
-                <Text style={styles.btnSecondaryOutlineText}>Annulla</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.btn, { flex: 1 }]} onPress={handleAddWebhook} accessibilityRole="button">
-                <Text style={styles.btnText}>Salva</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Punto 27: GDPR Data Export & Delete */}
-      <View style={[styles.sectionBox, { marginTop: 16 }]}>
-        <Text style={styles.sectionTitle}>Privacy e dati personali</Text>
-        <TouchableOpacity style={[styles.btnSecondaryOutline, { marginBottom: 24 }]} onPress={handleExportMyData} accessibilityRole="button">
-          <Ionicons name="download-outline" size={24} color={colors.text} />
-          <Text style={styles.btnSecondaryOutlineText}>Esporta i miei dati</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.btnDangerOutline} onPress={handleDeleteAccount} accessibilityRole="button">
-          <Ionicons name="trash-outline" size={24} color={colors.dangerText} />
-          <Text style={styles.btnDangerOutlineText}>Elimina l'account</Text>
-        </TouchableOpacity>
+      <SectionHeader title="Aspetto" />
+      <View style={{ flexDirection: 'row', gap: 8 }} accessibilityRole="radiogroup">
+        {themeOptions.map((opt) => {
+          const active = mode === opt.key;
+          return (
+            <Pressable
+              key={opt.key}
+              onPress={() => setMode(opt.key)}
+              style={[styles.segment, active ? styles.segmentActive : null]}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: active, checked: active }}
+              accessibilityLabel={`Aspetto: ${opt.label}`}
+            >
+              <Ionicons name={opt.icon} size={20} color={active ? colors.surface : colors.text} />
+              <Text style={[styles.segmentText, active ? { color: colors.surface, fontWeight: '700' } : null]} maxFontSizeMultiplier={1.3}>{opt.label}</Text>
+            </Pressable>
+          );
+        })}
       </View>
 
-      <TouchableOpacity style={[styles.btnSecondaryOutline, { marginBottom: 12 }]} onPress={() => (navigation as any).navigate('Subscription')} accessibilityRole="button">
-        <Ionicons name="id-card-outline" size={24} color={colors.text} />
-        <Text style={styles.btnSecondaryOutlineText}>{t('navigation.subscription') || 'Abbonamento'}</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={[styles.btn, { minHeight: 64 }, saving && styles.disabled]} onPress={handleSave} disabled={saving} accessibilityRole="button" accessibilityState={{ disabled: saving, busy: saving }}>
-        <Text style={styles.btnText}>{saving ? t('buttons.loading') : t('buttons.save')}</Text>
-      </TouchableOpacity>
+      <SectionHeader title="Account" />
+      <ListGroup>
+        <ListRow first scale="ufficio" icon="id-card-outline" title={t('navigation.subscription') || 'Abbonamento'} onPress={() => (navigation as any).navigate('Subscription')} />
+        <ListRow scale="ufficio" icon="download-outline" title="Esporta i miei dati" onPress={handleExportMyData} hideChevron />
+      </ListGroup>
+      <View style={{ marginTop: 12 }}>
+        <TwoFactorSettings />
+      </View>
+      <View style={styles.switchRow}>
+        <Text style={{ color: colors.text, fontSize: 18, flex: 1, paddingRight: 12 }}>Condividi statistiche anonime di utilizzo</Text>
+        <Switch
+          value={analyticsConsent}
+          onValueChange={(value) => { setAnalyticsConsentState(value); setAnalyticsConsent(value); }}
+          accessibilityLabel="Condividi statistiche anonime di utilizzo"
+        />
+      </View>
+
+      {/* Punto 27: GDPR delete, last and apart. */}
+      <View style={[styles.dangerZone, { borderTopColor: colors.border }]}>
+        <SectionHeader title="Eliminare l'account" first />
+        <Text style={[styles.bodyText, { color: colors.textSecondary, marginBottom: 16 }]}>
+          Cancella azienda, clienti, lavori e preventivi. Non si può annullare.
+        </Text>
+        <DangerButton
+          label="Elimina l'account"
+          onPress={() => askDelete({
+            title: "Eliminare l'account?",
+            label: "Elimina l'account",
+            confirmTitle: "Eliminare l'account?",
+            confirmMessage: 'Tutti i tuoi dati verranno cancellati per sempre: azienda, clienti, lavori e preventivi. Non si può annullare.',
+            confirmLabel: 'Sì, elimina l\'account',
+            onConfirm: handleDeleteAccount,
+          })}
+        />
+      </View>
     </ScrollView>
+
+    <BottomActionBar>
+      {saveError ? (
+        <View style={styles.errorRow} accessibilityLiveRegion="polite">
+          <Ionicons name="alert-circle-outline" size={20} color={colors.dangerText} />
+          <Text style={styles.errorText}>{saveError}</Text>
+        </View>
+      ) : null}
+      <PrimaryButton
+        label={saved ? 'Salvato' : 'Salva le modifiche'}
+        icon={saved ? 'checkmark-circle' : undefined}
+        onPress={handleSave}
+        loading={saving}
+        loadingLabel="Salvo…"
+      />
+    </BottomActionBar>
+    </KeyboardAvoidingView>
+    <BottomTabBar active="Profile" />
+
+    <ActionSheet
+      visible={Boolean(pendingDelete)}
+      title={pendingDelete?.title || ''}
+      destructive={pendingDelete ? { label: pendingDelete.label, confirmTitle: pendingDelete.confirmTitle, confirmMessage: pendingDelete.confirmMessage, confirmLabel: pendingDelete.confirmLabel, onConfirm: pendingDelete.onConfirm } : null}
+      startOnConfirm
+      onClose={() => setPendingDelete(null)}
+    />
+    </View>
   );
 }
 
+/** The six colours a quote header can have (stored on the profile as brand_color). */
+const BRAND_SWATCHES = [
+  { name: 'Inchiostro', value: '#0f172a' },
+  { name: 'Grafite', value: '#374151' },
+  { name: 'Arancio', value: '#c2410c' },
+  { name: 'Mattone', value: '#9a3412' },
+  { name: 'Verde bosco', value: '#166534' },
+  { name: 'Blu notte', value: '#1e3a8a' },
+];
+
 /**
- * Stili dal tema (lotto 2): niente colori scritti a mano, così etichette e campi
+ * Stili dal tema: niente colori scritti a mano, così etichette e campi
  * restano leggibili anche al buio. Testo mai sotto 16pt, campi alti almeno 56.
  */
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.background },
-  content: { padding: 16, paddingBottom: 48 },
-  title: { fontSize: 24, fontWeight: '800', marginBottom: 24, color: c.text },
+  content: { padding: 16, paddingBottom: 32 },
   label: { fontSize: 16, fontWeight: '600', marginBottom: 6, color: c.text },
   help: { fontSize: 16, color: c.textSecondary, marginTop: -8, marginBottom: 16, lineHeight: 22 },
   bodyText: { fontSize: 18, color: c.text, lineHeight: 24 },
   input: { backgroundColor: c.inputBg, borderWidth: 2, borderColor: c.inputBorder, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, minHeight: 56, marginBottom: 16, fontSize: 18, color: c.text, justifyContent: 'center' },
   inputReadonly: { backgroundColor: c.surfaceSecondary, borderColor: c.border },
   inputText: { fontSize: 18, color: c.text },
-  inputError: { borderColor: c.dangerText, borderWidth: 3 },
-  errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: -8, marginBottom: 16 },
+  errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   errorText: { color: c.dangerText, fontSize: 16, flex: 1 },
   segment: { flex: 1, minHeight: 56, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6, borderWidth: 2, borderColor: c.inputBorder, backgroundColor: c.surface, paddingHorizontal: 4 },
   segmentActive: { backgroundColor: c.text, borderColor: c.text },
   segmentText: { color: c.text, fontWeight: '600', fontSize: 16 },
-  modalOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'flex-end' },
-  modal: { backgroundColor: c.modalBg, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, paddingBottom: 32, maxHeight: '80%' },
-  modalTitle: { fontSize: 22, fontWeight: '700', marginBottom: 16, color: c.text },
   langItem: { padding: 12, minHeight: 48, justifyContent: 'center', borderRadius: 8, marginBottom: 8, borderBottomWidth: 1, borderBottomColor: c.border },
   langItemSelected: { backgroundColor: c.mark },
   langItemSelectedText: { color: c.primaryStrong, fontWeight: '700' },
   templateInfo: { fontSize: 16, color: c.text, fontWeight: '600', flex: 1 },
-  templateButtons: { flexDirection: 'row', gap: 16, marginBottom: 16 },
-  btn: { backgroundColor: c.primary, minHeight: 56, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  btnText: { color: c.onPrimary, fontWeight: '700', fontSize: 18 },
-  btnSecondaryOutline: { minHeight: 56, borderRadius: 12, borderWidth: 2, borderColor: c.text, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 12 },
-  btnSecondaryOutlineText: { color: c.text, fontWeight: '700', fontSize: 18, flexShrink: 1, textAlign: 'center' },
-  btnDangerOutline: { minHeight: 56, borderRadius: 12, borderWidth: 2, borderColor: c.dangerText, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 12 },
-  btnDangerOutlineText: { color: c.dangerText, fontWeight: '700', fontSize: 18 },
-  linkBtn: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start' },
-  linkText: { color: c.primaryText, fontWeight: '700', fontSize: 18, textDecorationLine: 'underline' },
-  iconBtn: { minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
-  listRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, gap: 8, borderBottomWidth: 1, borderBottomColor: c.border },
-  chip: { flex: 1, minHeight: 48, paddingHorizontal: 4, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: c.inputBorder, backgroundColor: c.surface },
-  chipActive: { backgroundColor: c.text, borderColor: c.text },
-  chipText: { color: c.text, fontSize: 16, fontWeight: '600' },
-  checkRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56 },
-  checkBox: { width: 28, height: 28, borderRadius: 6, borderWidth: 2, borderColor: c.inputBorder, alignItems: 'center', justifyContent: 'center' },
-  checkBoxOn: { backgroundColor: c.primary, borderColor: c.primary },
-  disabled: { opacity: 0.45 },
+  templateButtons: { flexDirection: 'row', gap: 16 },
+  logoRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  logoThumb: { width: 56, height: 56, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  logoImage: { width: 52, height: 52 },
+  swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  swatchItem: { width: '31%', alignItems: 'center', minHeight: 88, justifyContent: 'center' },
+  swatchRing: { borderWidth: 3, borderRadius: 30, padding: 3 },
+  swatch: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  swatchName: { fontSize: 16, color: c.text, marginTop: 4 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 64, marginTop: 12 },
+  dangerZone: { marginTop: 48, paddingTop: 8, borderTopWidth: 1 },
   sectionTitle: { fontSize: 20, fontWeight: '700', marginBottom: 12, color: c.text },
   sectionBox: { backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: 12, padding: 16, marginBottom: 16 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, marginTop: 16, marginBottom: 0 },
-  sectionHeaderText: { flex: 1, fontWeight: '600', fontSize: 18, color: c.text },
 });

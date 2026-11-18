@@ -8,11 +8,34 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
+  BackHandler,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import {
+  ActionSheet,
+  BottomActionBar,
+  BottomTabBar,
+  DangerButton,
+  EmptyState,
+  HeaderBack,
+  ListGroup,
+  ListRow,
+  PrimaryButton,
+  SecondaryButton,
+  StatusPill,
+  TertiaryButton,
+  TextField,
+  formatMoney,
+  radius,
+  space,
+  ufficio,
+  type SheetAction,
+  type SheetDestructive,
+} from '../components/ui';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '../lib/supabase';
@@ -300,10 +323,8 @@ export default function ListiniScreen() {
 
 
   const showWebApiConfigAlert = (featureLabel: string) => {
-    Alert.alert(
-      'Configura URL web',
-      `${featureLabel} sul mobile usa gli stessi endpoint del web. Imposta EXPO_PUBLIC_WEB_URL con l'URL del sito pubblicato.`
-    );
+    // Shown to the user: no developer settings, just where to do it.
+    Alert.alert('Dal sito', `${featureLabel} si fa dal sito, dal computer.`);
   };
 
   const fetchListini = useCallback(async () => {
@@ -612,8 +633,8 @@ export default function ListiniScreen() {
       listino_id: selectedListino.id,
       profile_id: selectedListino.profile_id,
       description: newDescription.trim(),
-      unit_price: parseFloat(newUnitPrice) || 0,
-      markup_percent: parseFloat(newMarkupPercent) || 0,
+      unit_price: parseFloat(newUnitPrice.replace(',', '.')) || 0,
+      markup_percent: parseFloat(newMarkupPercent.replace(',', '.')) || 0,
     };
 
     setSavingItem(true);
@@ -683,7 +704,7 @@ export default function ListiniScreen() {
   ) => {
     if (!profileId) return null;
     if (!isWebApiConfigured()) {
-      throw new Error("Manca EXPO_PUBLIC_WEB_URL per usare l'organizzazione AI sul mobile.");
+      throw new Error('Il riordino delle voci si fa dal sito, dal computer.');
     }
 
     setOrganizingAi(true);
@@ -696,7 +717,7 @@ export default function ListiniScreen() {
 
       const payload = await res.json();
       if (!res.ok) {
-        throw new Error(payload?.error || 'Organizzazione AI non riuscita');
+        throw new Error(payload?.error || 'Riordino delle voci non riuscito');
       }
 
       await fetchItems(listinoId);
@@ -708,9 +729,9 @@ export default function ListiniScreen() {
           const summary = importedCount
             ? `${importedCount} voci importate dalla sorgente PDF`
             : (payload?.aiFeedback || 'Sorgente PDF analizzata');
-          Alert.alert('AI completata', summary);
+          Alert.alert('Voci riordinate', summary);
         } else {
-          Alert.alert('AI completata', `${payload.updatedCount || 0} voci aggiornate`);
+          Alert.alert('Voci riordinate', `${payload.updatedCount || 0} voci aggiornate`);
         }
       }
 
@@ -728,7 +749,7 @@ export default function ListiniScreen() {
   const handleOrganizeWithAi = async () => {
     if (!selectedListino) return;
     if (!isWebApiConfigured()) {
-      showWebApiConfigAlert("L'organizzazione AI");
+      showWebApiConfigAlert('Il riordino delle voci');
       return;
     }
     await runAiOrganize(selectedListino.id);
@@ -883,15 +904,15 @@ export default function ListiniScreen() {
         return;
       }
 
-      let aiLine = 'Organizzazione AI avviata automaticamente.';
+      let aiLine = 'Voci riordinate in automatico.';
       try {
         const aiPayload = await runAiOrganize(selectedListino.id, {
           silentSuccess: true,
           suppressErrorAlert: true,
         });
-        aiLine = `AI completata: ${aiPayload?.updatedCount || 0} voci aggiornate.`;
+        aiLine = `Voci riordinate: ${aiPayload?.updatedCount || 0} aggiornate.`;
       } catch (err) {
-        aiLine = `Import completato, ma AI non riuscita: ${(err as Error).message}`;
+        aiLine = `Listino caricato, ma il riordino non è riuscito: ${(err as Error).message}`;
       }
 
       await fetchItems(selectedListino.id);
@@ -903,475 +924,427 @@ export default function ListiniScreen() {
     }
   };
 
+  /* Two levels: the list of price lists, then one open price list (and its settings views). */
+  const [panel, setPanel] = useState<null | 'pricing' | 'groups' | 'history'>(null);
+  const [itemSearch, setItemSearch] = useState('');
+  const [sheet, setSheet] = useState<{
+    title: string;
+    subtitle?: string;
+    actions: SheetAction[];
+    destructive: SheetDestructive | null;
+    startOnConfirm?: boolean;
+  } | null>(null);
+  const navigation = useNavigation<any>();
+
+  const openListino = (item: Listino) => {
+    setShowPricingSettings(false);
+    setShowPriceHistory(false);
+    setPanel(null);
+    setItemSearch('');
+    setSelectedListino(item);
+  };
+
+  const goBack = useCallback(() => {
+    if (panel) {
+      setPanel(null);
+      setShowPricingSettings(false);
+      setShowPriceHistory(false);
+      return true;
+    }
+    if (selectedListino) {
+      setSelectedListino(null);
+      return true;
+    }
+    return false;
+  }, [panel, selectedListino]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', goBack);
+      return () => sub.remove();
+    }, [goBack])
+  );
+
+  const panelTitle = panel === 'pricing' ? 'Sconto e ricarichi' : panel === 'groups' ? 'Prezzi per forma' : panel === 'history' ? 'Variazioni di prezzo' : null;
+  useEffect(() => {
+    navigation.setOptions({
+      title: panelTitle || selectedListino?.name || t('main.listini'),
+      headerLeft: selectedListino
+        ? () => <HeaderBack label={panel ? selectedListino.name : t('main.listini') || 'Listini'} onPress={goBack} />
+        : undefined,
+    });
+  }, [navigation, panel, panelTitle, selectedListino, goBack, t]);
+
+  const deleteListino = async (listinoId: string) => {
+    const { error } = await supabase.from('listini').delete().eq('id', listinoId);
+    if (error) {
+      Alert.alert(t('messages.error'), 'Listino non eliminato. Controlla la connessione e riprova.');
+      return false;
+    }
+    if (selectedListino?.id === listinoId) {
+      setSelectedListino(null);
+      setItems([]);
+    }
+    await fetchListini();
+    return true;
+  };
+
+  const deleteItem = async (itemId: string) => {
+    const { error } = await supabase.from('listini_vettoriali').delete().eq('id', itemId);
+    if (error) {
+      Alert.alert(t('messages.error'), 'Voce non eliminata. Controlla la connessione e riprova.');
+      return false;
+    }
+    if (selectedListino) await fetchItems(selectedListino.id);
+    return true;
+  };
+
+  const renameListino = (item: Listino) => {
+    setEditingListino(item);
+    setNewListinoName(item.name);
+    setShowListinoModal(true);
+  };
+
+  const listinoDestructive = (item: Listino): SheetDestructive => ({
+    label: 'Elimina il listino',
+    confirmTitle: `Eliminare il listino ${item.name}?`,
+    confirmMessage: 'Si cancellano anche tutte le sue voci. I lavori già fatti restano. Non si può annullare.',
+    onConfirm: () => deleteListino(item.id),
+  });
+
+  const openListinoSheet = (item: Listino) => {
+    setSheet({
+      title: item.name,
+      subtitle: item.ownershipLabel || null || undefined,
+      actions: [{ label: 'Rinomina il listino', icon: 'text-outline', onPress: () => renameListino(item) }],
+      destructive: listinoDestructive(item),
+    });
+  };
+
+  const openMoreActions = () => {
+    if (!selectedListino) return;
+    const actions: SheetAction[] = [
+      { label: 'Aggiungi una voce a mano', icon: 'add-outline', onPress: () => { resetItemForm(); setShowItemModal(true); } },
+      { label: 'Riordina le voci', icon: 'swap-vertical-outline', onPress: handleOrganizeWithAi },
+      { label: 'Sconto fornitore e ricarichi', icon: 'pricetag-outline', onPress: async () => { setPanel('pricing'); setShowPricingSettings(true); await loadPricingSettings(); } },
+    ];
+    if (pricingGroups.length > 0) actions.push({ label: 'Prezzi per forma', icon: 'scale-outline', onPress: () => setPanel('groups') });
+    actions.push({ label: 'Ultime variazioni di prezzo', icon: 'time-outline', onPress: openHistory });
+    actions.push({ label: 'Rinomina il listino', icon: 'text-outline', onPress: () => renameListino(selectedListino) });
+    setSheet({ title: selectedListino.name, actions, destructive: listinoDestructive(selectedListino) });
+  };
+
+  const openHistory = async () => {
+    setPanel('history');
+    if (!showPriceHistory) await togglePriceHistory();
+  };
+
+  const openItem = (item: ListinoItem) => {
+    if (!selectedListino?.canEdit) return;
+    setEditingItem(item);
+    setNewDescription(item.description);
+    setNewUnitPrice(String(item.unit_price).replace('.', ','));
+    setNewMarkupPercent(String(item.markup_percent || 0).replace('.', ','));
+    setShowItemModal(true);
+  };
+
+  const shownItems = itemSearch.trim()
+    ? items.filter((item) => item.description.toLowerCase().includes(itemSearch.trim().toLowerCase()))
+    : items;
+  const busy = uploading || organizingAi;
+  const canUpload = isWebApiConfigured();
+  const fmtDate = (value: string) => {
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? '' : `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+  };
+
+  const percentRow = (label: string, value: string, onChange: (v: string) => void, unit: string, a11y: string, key?: string) => (
+    <View key={key} style={styles.groupRow}>
+      <Text style={[ufficio.row, { color: colors.text, flex: 1 }]} numberOfLines={2}>{label}</Text>
+      <TextInput
+        value={value}
+        onChangeText={onChange}
+        keyboardType="decimal-pad"
+        placeholder="—"
+        placeholderTextColor={colors.textTertiary}
+        accessibilityLabel={a11y}
+        style={[styles.groupInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
+      />
+      <Text style={[ufficio.label, { color: colors.textSecondary, minWidth: 40 }]}>{unit}</Text>
+    </View>
+  );
+
+  const renderPanel = () => {
+    if (panel === 'pricing') {
+      return (
+        <>
+          {percentRow('Sconto fornitore sul listino', discountDraft, setDiscountDraft, '%', 'Sconto fornitore in percentuale')}
+          {categoryMarkupRows.map((row) =>
+            percentRow(
+              `Ricarico ${row.category} (${row.itemCount} voci)`,
+              categoryMarkupDrafts[row.category] ?? '',
+              (value) => setCategoryMarkupDrafts((drafts) => ({ ...drafts, [row.category]: value })),
+              '%',
+              `Ricarico ${row.category} in percentuale`,
+              row.category
+            )
+          )}
+          <PrimaryButton label="Salva e ricalcola" scale="ufficio" onPress={handleSavePricingSettings} loading={savingPricingSettings} loadingLabel="Salvo…" style={{ marginTop: space.s5 }} />
+        </>
+      );
+    }
+    if (panel === 'groups') {
+      return (
+        <>
+          <Text style={[ufficio.body, { color: colors.textSecondary, marginBottom: space.s3 }]}>
+            Il PDF non contiene prezzi. Indica il prezzo di ogni forma: le voci si calcolano come peso × prezzo. Le forme senza prezzo non entrano nel listino.
+          </Text>
+          {pricingGroups.map((group) =>
+            percentRow(
+              `${group.name} (${group.item_count})`,
+              groupPriceDrafts[group.name] ?? '',
+              (value) => setGroupPriceDrafts((drafts) => ({ ...drafts, [group.name]: value })),
+              `€/${group.reference_unit}`,
+              `Prezzo ${group.name} in euro per ${group.reference_unit}`,
+              group.name
+            )
+          )}
+          <PrimaryButton label="Applica prezzi" scale="ufficio" onPress={handleSaveGroupPrices} loading={savingGroupPrices} loadingLabel="Applico…" style={{ marginTop: space.s5 }} />
+        </>
+      );
+    }
+    // history
+    return priceHistory.length ? (
+      <ListGroup>
+        {priceHistory.map((change, index) => {
+          const delta = change.old_price ? Math.round(((change.new_price - change.old_price) / change.old_price) * 100) : 0;
+          return (
+            <ListRow
+              key={change.id}
+              first={index === 0}
+              scale="ufficio"
+              title={change.description}
+              subtitle={`${formatMoney(change.old_price)} → ${formatMoney(change.new_price)} (${delta > 0 ? '+' : ''}${delta}%) · ${fmtDate(change.changed_at)}`}
+            />
+          );
+        })}
+      </ListGroup>
+    ) : (
+      <EmptyState text="Nessuna variazione ancora: compariranno quando ricarichi il listino aggiornato del fornitore." />
+    );
+  };
+
+  const renderList = () => (
+    <FlatList
+      data={listini}
+      keyExtractor={(item) => item.id}
+      contentContainerStyle={styles.scroll}
+      ListHeaderComponent={
+        <>
+          {!canUpload ? (
+            <Text style={[ufficio.label, { color: colors.textSecondary, fontWeight: '400', marginBottom: space.s4 }]}>
+              Il caricamento del listino si fa dal sito, dal computer.
+            </Text>
+          ) : null}
+          {listLoading && listini.length === 0 ? <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: space.s5 }} /> : null}
+        </>
+      }
+      ListEmptyComponent={
+        listLoading ? null : (
+          <EmptyState text="Carica il listino del tuo grossista: quando detti, il prezzo arriva da solo." icon="pricetags-outline" />
+        )
+      }
+      renderItem={({ item, index }) => (
+        <ListRow
+          first={index === 0}
+          scale="ufficio"
+          title={item.name}
+          subtitle={item.canEdit ? `Tuo${item.ownershipLabel ? ` · ${item.ownershipLabel}` : ''}` : `${item.ownershipLabel || 'Condiviso'} · sola lettura`}
+          onPress={() => openListino(item)}
+          onLongPress={item.canEdit ? () => openListinoSheet(item) : undefined}
+          accessibilityHint="Apre il listino"
+          style={[
+            { borderColor: colors.border, borderLeftWidth: 1, borderRightWidth: 1 },
+            index === 0 && { borderTopWidth: 1, borderTopLeftRadius: 12, borderTopRightRadius: 12 },
+            index === listini.length - 1 && { borderBottomWidth: 1, borderBottomLeftRadius: 12, borderBottomRightRadius: 12 },
+          ]}
+        />
+      )}
+    />
+  );
+
+  const renderDetail = () => {
+    if (!selectedListino) return null;
+    if (panel) {
+      return <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">{renderPanel()}</ScrollView>;
+    }
+    return (
+      <FlatList
+        data={shownItems}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={
+          <>
+            {!selectedListino.canEdit ? (
+              <View style={{ marginBottom: space.s3 }}>
+                <StatusPill kind="locked" label="Sola lettura" />
+              </View>
+            ) : null}
+            <TextField label="Cerca nel listino" icon="search-outline" value={itemSearch} onChangeText={setItemSearch} placeholder="Es. IPE 120" clearButtonMode="while-editing" autoCorrect={false} />
+            {selectedSourceInfo ? (
+              <Text style={[ufficio.label, { color: colors.textSecondary, marginBottom: space.s3 }]}>
+                File caricato: {selectedSourceInfo.fileName} · {fmtDate(selectedSourceInfo.uploadedAt)}
+              </Text>
+            ) : null}
+            {selectedSourceInfo?.aiFeedback ? (
+              <Text style={[ufficio.label, { color: colors.textSecondary, fontWeight: '400', marginBottom: space.s3 }]}>{selectedSourceInfo.aiFeedback}</Text>
+            ) : null}
+            {busy || itemsLoading ? (
+              <View style={styles.busyRow}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={[ufficio.label, { color: colors.textSecondary }]}>
+                  {uploading ? 'Carico il listino…' : organizingAi ? 'Riordino in corso…' : 'Carico le voci…'}
+                </Text>
+              </View>
+            ) : null}
+            {!selectedListino.canEdit ? (
+              <TertiaryButton label="Ultime variazioni di prezzo" icon="time-outline" onPress={openHistory} style={{ marginBottom: space.s2 }} />
+            ) : null}
+          </>
+        }
+        ListEmptyComponent={
+          itemsLoading ? null : (
+            <EmptyState text={itemSearch.trim() ? `Nessuna voce con «${itemSearch.trim()}».` : 'Nessuna voce in questo listino.'} />
+          )
+        }
+        renderItem={({ item, index }) => {
+          const markup = Number(item.markup_percent || 0);
+          return (
+            <ListRow
+              first={index === 0}
+              scale="ufficio"
+              title={item.description}
+              subtitle={`${formatMoney(Number(item.unit_price))} · ricarico ${String(Math.round(markup * 10) / 10).replace('.', ',')}%${item.category ? ` · ${item.category}` : ''}`}
+              onPress={selectedListino.canEdit ? () => openItem(item) : undefined}
+              hideChevron={!selectedListino.canEdit}
+              accessibilityHint={selectedListino.canEdit ? 'Apre la modifica della voce' : undefined}
+              style={[
+                { borderColor: colors.border, borderLeftWidth: 1, borderRightWidth: 1 },
+                index === 0 && { borderTopWidth: 1, borderTopLeftRadius: 12, borderTopRightRadius: 12 },
+                index === shownItems.length - 1 && { borderBottomWidth: 1, borderBottomLeftRadius: 12, borderBottomRightRadius: 12 },
+              ]}
+            />
+          );
+        }}
+      />
+    );
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[styles.title, { color: colors.text }]}>{t('main.listini')}</Text>
+      <View style={{ flex: 1 }}>{selectedListino ? renderDetail() : renderList()}</View>
 
-      <View style={styles.topActions}>
-        <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: colors.primary }]}
-          onPress={() => {
-            resetListinoForm();
-            setShowListinoModal(true);
-          }}
-        >
-          <Text style={styles.actionBtnText}>{t('listini.newListino') || 'Nuovo listino'}</Text>
-        </TouchableOpacity>
-
-        {selectedListino?.canEdit && (
-          <>
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: colors.primary, opacity: uploading ? 0.8 : 1 }]}
-              onPress={handleImportFile}
-              disabled={uploading || organizingAi}
-            >
-              <Text style={styles.actionBtnText}>{uploading ? 'Import in corso...' : 'Carica Excel/CSV/METEL/PDF'}</Text>
-            </TouchableOpacity>
-
-
-            <TouchableOpacity
-              style={[styles.actionBtnSecondary, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              onPress={handleOrganizeWithAi}
-              disabled={uploading || organizingAi}
-            >
-              <Text style={[styles.actionBtnSecondaryText, { color: colors.text }]}>
-                {organizingAi ? 'AI in corso...' : 'Riorganizza con AI'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionBtnSecondary, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              onPress={() => {
-                resetItemForm();
-                setShowItemModal(true);
-              }}
-              disabled={uploading || organizingAi}
-            >
-              <Text style={[styles.actionBtnSecondaryText, { color: colors.text }]}>
-                {t('listini.addManual') || 'Aggiungi manualmente'}
-              </Text>
-            </TouchableOpacity>
-          </>
-        )}
-      </View>
-
-      {!isWebApiConfigured() && (
-        <View style={[styles.noticeCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.noticeTitle, { color: colors.text }]}>Parità web/mobile</Text>
-          <Text style={[styles.noticeText, { color: colors.textSecondary }]}>
-            Per usare import avanzato, PDF e organizzazione AI anche sul mobile, imposta `EXPO_PUBLIC_WEB_URL`
-            con l'URL del sito web.
-          </Text>
-        </View>
-      )}
-
-      <View style={styles.content}>
-        <View style={[styles.card, { backgroundColor: colors.card, shadowColor: colors.cardShadow }]}>
-          <View style={styles.cardHeader}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>{t('main.listini')}</Text>
-            {listLoading ? <ActivityIndicator size="small" color={colors.primary} /> : null}
-          </View>
-
-          <FlatList
-            data={listini}
-            keyExtractor={(item) => item.id}
-            ListEmptyComponent={
-              <Text style={[styles.placeholder, { color: colors.textTertiary }]}>
-                Nessun listino disponibile.
-              </Text>
-            }
-            renderItem={({ item }) => {
-              const selected = selectedListino?.id === item.id;
-              return (
-                <View
-                  style={[
-                    styles.listinoItemRow,
-                    { backgroundColor: selected ? colors.primary : 'transparent' },
-                  ]}
-                >
-                  <TouchableOpacity
-                    style={styles.listinoNameWrap}
-                    onPress={() => {
-                      setShowPricingSettings(false);
-                      setShowPriceHistory(false);
-                      setSelectedListino(item);
-                    }}
-                  >
-                    <Text style={selected ? styles.listinoSelectedText : [styles.listinoText, { color: colors.text }]}>
-                      {item.name}
-                    </Text>
-                    {item.ownershipLabel ? (
-                      <Text style={{ fontSize: 12, color: selected ? '#fff' : colors.textTertiary }}>
-                        {item.ownershipLabel}
-                      </Text>
-                    ) : null}
-                  </TouchableOpacity>
-
-                  {item.canEdit ? (
-                    <View style={styles.rowActions}>
-                      <TouchableOpacity
-                        onPress={() => {
-                          setEditingListino(item);
-                          setNewListinoName(item.name);
-                          setShowListinoModal(true);
-                        }}
-                      >
-                        <Text style={selected ? styles.listinoSelectedText : styles.rowActionText}>✏️</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => handleDeleteListino(item.id)}>
-                        <Text style={selected ? styles.listinoSelectedText : styles.rowActionText}>🗑️</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : null}
-                </View>
-              );
-            }}
-          />
-        </View>
-
-        <View style={[styles.card, styles.itemsCard, { backgroundColor: colors.card, shadowColor: colors.cardShadow }]}>
-          {selectedListino ? (
+      {!selectedListino ? (
+        <>
+          <BottomActionBar aboveTabBar>
+            <PrimaryButton label={t('listini.newListino') || 'Nuovo listino'} icon="add-outline" scale="ufficio" onPress={() => { resetListinoForm(); setShowListinoModal(true); }} />
+          </BottomActionBar>
+          <BottomTabBar active="Listini" />
+        </>
+      ) : selectedListino.canEdit && !panel ? (
+        <BottomActionBar>
+          <SecondaryButton label="Altre azioni" icon="ellipsis-horizontal" scale="ufficio" onPress={openMoreActions} disabled={busy} />
+          {canUpload ? (
             <>
-              <View style={styles.cardHeader}>
-                <Text style={[styles.cardTitle, { color: colors.text }]}>
-                  {selectedListino.name}
-                  {!selectedListino.canEdit ? <Text style={{ fontSize: 12, color: colors.textTertiary }}>  Sola lettura</Text> : null}
-                </Text>
-                {(itemsLoading || uploading || organizingAi) ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : null}
-              </View>
-
-              {selectedSourceInfo ? (
-                <View style={[styles.noticeCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 12 }]}>
-                  <Text style={[styles.noticeTitle, { color: colors.text }]}>
-                    Sorgente caricata: {selectedSourceInfo.fileName}
-                  </Text>
-                  <Text style={[styles.noticeText, { color: colors.textSecondary }]}>
-                    {new Date(selectedSourceInfo.uploadedAt).toLocaleString('it-IT')}
-                  </Text>
-                  {selectedSourceInfo.aiFeedback ? (
-                    <Text style={[styles.noticeText, { color: colors.textSecondary, marginTop: 8 }]}>
-                      {selectedSourceInfo.aiFeedback}
-                    </Text>
-                  ) : null}
-                </View>
-              ) : null}
-
-              {selectedListino.canEdit ? (
-              <View style={[styles.noticeCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 12 }]}>
-                <TouchableOpacity onPress={togglePricingSettings} accessibilityRole="button" accessibilityState={{ expanded: showPricingSettings }}>
-                  <Text style={[styles.noticeTitle, { color: colors.text }]}>
-                    Sconto fornitore e ricarichi {showPricingSettings ? '▲' : '▼'}
-                  </Text>
-                </TouchableOpacity>
-                {showPricingSettings ? (
-                  <>
-                    <View style={styles.groupRow}>
-                      <Text style={[styles.groupName, { color: colors.text }]}>Sconto fornitore sul listino</Text>
-                      <TextInput
-                        value={discountDraft}
-                        onChangeText={setDiscountDraft}
-                        keyboardType="decimal-pad"
-                        placeholder="0"
-                        placeholderTextColor={colors.textTertiary}
-                        accessibilityLabel="Sconto fornitore in percentuale"
-                        style={[styles.groupInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
-                      />
-                      <Text style={[styles.noticeText, { color: colors.textSecondary }]}>%</Text>
-                    </View>
-                    {categoryMarkupRows.map((row) => (
-                      <View key={row.category} style={styles.groupRow}>
-                        <Text style={[styles.groupName, { color: colors.text }]} numberOfLines={2}>
-                          Ricarico {row.category} <Text style={{ color: colors.textTertiary }}>({row.itemCount})</Text>
-                        </Text>
-                        <TextInput
-                          value={categoryMarkupDrafts[row.category] ?? ''}
-                          onChangeText={(value) => setCategoryMarkupDrafts((drafts) => ({ ...drafts, [row.category]: value }))}
-                          keyboardType="decimal-pad"
-                          placeholder="—"
-                          placeholderTextColor={colors.textTertiary}
-                          accessibilityLabel={`Ricarico ${row.category} in percentuale`}
-                          style={[styles.groupInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
-                        />
-                        <Text style={[styles.noticeText, { color: colors.textSecondary }]}>%</Text>
-                      </View>
-                    ))}
-                    <TouchableOpacity
-                      style={[styles.actionBtn, { backgroundColor: colors.primary, marginTop: 10, opacity: savingPricingSettings ? 0.7 : 1 }]}
-                      onPress={handleSavePricingSettings}
-                      disabled={savingPricingSettings}
-                    >
-                      <Text style={styles.actionBtnText}>{savingPricingSettings ? 'Salvo...' : 'Salva e ricalcola'}</Text>
-                    </TouchableOpacity>
-                  </>
-                ) : null}
-              </View>
-              ) : null}
-
-              <View style={[styles.noticeCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 12 }]}>
-                <TouchableOpacity onPress={togglePriceHistory} accessibilityRole="button" accessibilityState={{ expanded: showPriceHistory }}>
-                  <Text style={[styles.noticeTitle, { color: colors.text }]}>
-                    Ultime variazioni di prezzo {showPriceHistory ? '▲' : '▼'}
-                  </Text>
-                </TouchableOpacity>
-                {showPriceHistory ? (
-                  priceHistory.length ? (
-                    priceHistory.map((change) => {
-                      const delta = change.old_price ? Math.round(((change.new_price - change.old_price) / change.old_price) * 100) : 0;
-                      return (
-                        <View key={change.id} style={{ marginTop: 8 }}>
-                          <Text style={[styles.noticeText, { color: colors.text }]} numberOfLines={2}>{change.description}</Text>
-                          <Text style={[styles.noticeText, { color: colors.textSecondary }]}>
-                            € {change.old_price.toFixed(2).replace('.', ',')} → € {change.new_price.toFixed(2).replace('.', ',')} ({delta > 0 ? '+' : ''}{delta}%) · {new Date(change.changed_at).toLocaleDateString('it-IT')}
-                          </Text>
-                        </View>
-                      );
-                    })
-                  ) : (
-                    <Text style={[styles.noticeText, { color: colors.textSecondary, marginTop: 8 }]}>
-                      Nessuna variazione ancora: compariranno quando ricarichi il listino aggiornato del fornitore.
-                    </Text>
-                  )
-                ) : null}
-              </View>
-
-              {selectedListino.canEdit && pricingGroups.length > 0 ? (
-                <View style={[styles.noticeCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 12 }]}>
-                  <Text style={[styles.noticeTitle, { color: colors.text }]}>Prezzi per forma</Text>
-                  <Text style={[styles.noticeText, { color: colors.textSecondary }]}>
-                    Il PDF non contiene prezzi. Indica il prezzo di ogni forma: le voci si calcolano come peso × prezzo.
-                    Le forme senza prezzo non entrano nel listino.
-                  </Text>
-                  {pricingGroups.map((group) => (
-                    <View key={group.name} style={styles.groupRow}>
-                      <Text style={[styles.groupName, { color: colors.text }]} numberOfLines={2}>
-                        {group.name} <Text style={{ color: colors.textTertiary }}>({group.item_count})</Text>
-                      </Text>
-                      <TextInput
-                        value={groupPriceDrafts[group.name] ?? ''}
-                        onChangeText={(value) => setGroupPriceDrafts((drafts) => ({ ...drafts, [group.name]: value }))}
-                        keyboardType="decimal-pad"
-                        placeholder="—"
-                        placeholderTextColor={colors.textTertiary}
-                        accessibilityLabel={`Prezzo ${group.name} in euro per ${group.reference_unit}`}
-                        style={[styles.groupInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
-                      />
-                      <Text style={[styles.noticeText, { color: colors.textSecondary }]}>€/{group.reference_unit}</Text>
-                    </View>
-                  ))}
-                  <TouchableOpacity
-                    style={[styles.actionBtn, { backgroundColor: colors.primary, marginTop: 10, opacity: savingGroupPrices ? 0.7 : 1 }]}
-                    onPress={handleSaveGroupPrices}
-                    disabled={savingGroupPrices}
-                  >
-                    <Text style={styles.actionBtnText}>{savingGroupPrices ? 'Applico...' : 'Applica prezzi'}</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : null}
-
-              <FlatList
-                data={items}
-                keyExtractor={(item) => item.id}
-                ListEmptyComponent={
-                  <Text style={[styles.placeholder, { color: colors.textTertiary }]}>
-                    Nessuna voce presente nel listino selezionato.
-                  </Text>
-                }
-                renderItem={({ item }) => (
-                  <View style={[styles.itemRow, { borderBottomColor: colors.borderLight }]}>
-                    <View style={styles.itemInfo}>
-                      <Text style={[styles.itemDesc, { color: colors.text }]}>{item.description}</Text>
-                      <Text style={[styles.itemMeta, { color: colors.textSecondary }]}>
-                        €{Number(item.unit_price).toFixed(2)} · {Number(item.markup_percent || 0).toFixed(0)}%
-                      </Text>
-                      {item.category ? (
-                        <Text style={[styles.itemCategory, { color: colors.textSecondary }]}>
-                          {item.category}
-                        </Text>
-                      ) : null}
-                    </View>
-
-                    {selectedListino.canEdit ? <View style={styles.rowActions}>
-                      <TouchableOpacity
-                        onPress={() => {
-                          setEditingItem(item);
-                          setNewDescription(item.description);
-                          setNewUnitPrice(String(item.unit_price));
-                          setNewMarkupPercent(String(item.markup_percent || 0));
-                          setShowItemModal(true);
-                        }}
-                      >
-                        <Text style={styles.rowActionText}>✏️</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => handleDeleteItem(item.id)}>
-                        <Text style={styles.rowActionText}>🗑️</Text>
-                      </TouchableOpacity>
-                    </View> : null}
-                  </View>
-                )}
-              />
+              <Text style={[ufficio.label, { color: colors.textSecondary, fontWeight: '400', textAlign: 'center' }]}>PDF del grossista, Excel, CSV o METEL</Text>
+              <PrimaryButton label="Carica il file del listino" icon="cloud-upload-outline" onPress={handleImportFile} loading={uploading} loadingLabel="Carico…" disabled={busy} />
             </>
           ) : (
-            <Text style={[styles.placeholder, { color: colors.textTertiary }]}>
-              {t('sections.selectListino') || 'Seleziona un listino'}
-            </Text>
+            <Text style={[ufficio.label, { color: colors.textSecondary, fontWeight: '400', textAlign: 'center' }]}>Il caricamento del listino si fa dal sito, dal computer.</Text>
           )}
-        </View>
-      </View>
+        </BottomActionBar>
+      ) : null}
 
       <Modal visible={showListinoModal} transparent animationType="fade" onRequestClose={() => setShowListinoModal(false)}>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
           <View style={[styles.modal, { backgroundColor: colors.modalBg }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
-              {editingListino ? (t('actions.edit') || 'Modifica') : (t('listini.newListino') || 'Nuovo listino')}
+            <Text style={[ufficio.display, styles.modalTitle, { color: colors.text }]}>
+              {editingListino ? 'Rinomina il listino' : (t('listini.newListino') || 'Nuovo listino')}
             </Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
-              value={newListinoName}
-              onChangeText={setNewListinoName}
-              placeholder={t('listini.promptNewListino') || 'Nome listino'}
-              placeholderTextColor={colors.textTertiary}
-            />
+            <TextField label="Nome del listino" value={newListinoName} onChangeText={setNewListinoName} placeholder="Es. Grossista Rossi 2026" autoFocus />
             <View style={styles.modalBtns}>
-              <TouchableOpacity
-                style={styles.modalBtnSecondary}
-                onPress={() => {
-                  setShowListinoModal(false);
-                  resetListinoForm();
-                }}
-              >
-                <Text style={styles.modalBtnSecondaryText}>{t('buttons.cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalBtnPrimary} onPress={handleCreateOrUpdateListino}>
-                <Text style={styles.modalBtnPrimaryText}>{t('buttons.save')}</Text>
-              </TouchableOpacity>
+              <SecondaryButton label={t('buttons.cancel')} scale="ufficio" style={{ flex: 1 }} onPress={() => { setShowListinoModal(false); resetListinoForm(); }} />
+              <PrimaryButton label={t('buttons.save')} scale="ufficio" style={{ flex: 1 }} onPress={handleCreateOrUpdateListino} />
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={showItemModal} transparent animationType="fade" onRequestClose={() => setShowItemModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modal, { backgroundColor: colors.modalBg }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
-              {editingItem ? (t('actions.edit') || 'Modifica voce') : (t('listini.newItem') || 'Nuova voce')}
-            </Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
-              value={newDescription}
-              onChangeText={setNewDescription}
-              placeholder={t('listini.description') || 'Descrizione'}
-              placeholderTextColor={colors.textTertiary}
-            />
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
-              value={newUnitPrice}
-              onChangeText={setNewUnitPrice}
-              keyboardType="decimal-pad"
-              placeholder={t('listini.price') || 'Prezzo'}
-              placeholderTextColor={colors.textTertiary}
-            />
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
-              value={newMarkupPercent}
-              onChangeText={setNewMarkupPercent}
-              keyboardType="decimal-pad"
-              placeholder={t('listini.markup') || 'Markup %'}
-              placeholderTextColor={colors.textTertiary}
-            />
-            <View style={styles.modalBtns}>
-              <TouchableOpacity
-                style={styles.modalBtnSecondary}
-                onPress={() => {
-                  setShowItemModal(false);
-                  resetItemForm();
-                }}
-                disabled={savingItem}
-              >
-                <Text style={styles.modalBtnSecondaryText}>{t('buttons.cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalBtnPrimary} onPress={handleCreateOrUpdateItem} disabled={savingItem}>
-                <Text style={styles.modalBtnPrimaryText}>
-                  {savingItem ? '...' : t('buttons.save')}
-                </Text>
-              </TouchableOpacity>
-            </View>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
+          <View style={[styles.modal, { backgroundColor: colors.modalBg, maxHeight: '90%' }]}>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={[ufficio.display, styles.modalTitle, { color: colors.text }]}>
+                {editingItem ? 'Modifica voce' : (t('listini.newItem') || 'Nuova voce')}
+              </Text>
+              <TextField label="Descrizione" value={newDescription} onChangeText={setNewDescription} placeholder="Es. Trave IPE 120 S275JR" multiline />
+              <View style={{ flexDirection: 'row', gap: space.s3 }}>
+                <TextField label="Prezzo netto (€)" value={newUnitPrice} onChangeText={setNewUnitPrice} keyboardType="decimal-pad" containerStyle={{ flex: 1 }} />
+                <TextField label="Ricarico (%)" value={newMarkupPercent} onChangeText={setNewMarkupPercent} keyboardType="decimal-pad" containerStyle={{ flex: 1 }} />
+              </View>
+              <View style={styles.modalBtns}>
+                <SecondaryButton label={t('buttons.cancel')} scale="ufficio" style={{ flex: 1 }} disabled={savingItem} onPress={() => { setShowItemModal(false); resetItemForm(); }} />
+                <PrimaryButton label={t('buttons.save')} scale="ufficio" style={{ flex: 1 }} onPress={handleCreateOrUpdateItem} loading={savingItem} loadingLabel="Salvo…" />
+              </View>
+              {editingItem ? (
+                <DangerButton
+                  label="Elimina la voce"
+                  style={{ marginTop: space.s5 }}
+                  onPress={() => {
+                    const item = editingItem;
+                    setShowItemModal(false);
+                    resetItemForm();
+                    setTimeout(() => setSheet({
+                      title: item.description,
+                      actions: [],
+                      startOnConfirm: true,
+                      destructive: {
+                        label: 'Elimina la voce',
+                        confirmTitle: 'Eliminare questa voce del listino?',
+                        confirmMessage: `«${item.description}» esce dal listino. Le voci già nei lavori restano. Non si può annullare.`,
+                        onConfirm: () => deleteItem(item.id),
+                      },
+                    }), 350);
+                  }}
+                />
+              ) : null}
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
+      <ActionSheet
+        visible={Boolean(sheet)}
+        title={sheet?.title || ''}
+        subtitle={sheet?.subtitle}
+        actions={sheet?.actions}
+        destructive={sheet?.destructive}
+        startOnConfirm={sheet?.startOnConfirm}
+        onClose={() => setSheet(null)}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  groupRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 8,
-  },
-  groupName: {
-    flex: 1,
-    fontSize: 14,
-  },
-  groupInput: {
-    width: 72,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    textAlign: 'right',
-  },
-  container: { flex: 1, padding: 16 },
-  title: { fontSize: 22, fontWeight: '700', marginBottom: 16 },
-  topActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
-  actionBtn: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10 },
-  actionBtnText: { color: '#fff', fontWeight: '600' },
-  actionBtnSecondary: { borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10 },
-  actionBtnSecondaryText: { fontWeight: '600' },
-  noticeCard: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 12 },
-  noticeTitle: { fontWeight: '700', marginBottom: 4 },
-  noticeText: { fontSize: 13, lineHeight: 18 },
-  content: { flex: 1, gap: 12 },
-  card: {
-    flex: 1,
-    borderRadius: 16,
-    padding: 16,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  itemsCard: { flex: 1.4 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  cardTitle: { fontWeight: '600', fontSize: 16 },
-  listinoItemRow: { padding: 10, borderRadius: 10, marginBottom: 6, flexDirection: 'row', alignItems: 'center' },
-  listinoNameWrap: { flex: 1 },
-  listinoText: { fontSize: 14 },
-  listinoSelectedText: { color: '#fff', fontWeight: '600' },
-  rowActions: { flexDirection: 'row', gap: 12, alignItems: 'center' },
-  rowActionText: { fontSize: 16 },
-  itemRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  itemInfo: { flex: 1, paddingRight: 12 },
-  itemDesc: { fontSize: 14, fontWeight: '500' },
-  itemMeta: { fontSize: 12, marginTop: 3 },
-  itemCategory: { fontSize: 12, marginTop: 2 },
-  placeholder: { fontSize: 14 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
-  modal: { borderRadius: 16, padding: 20 },
-  modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
-  input: { borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 10 },
-  modalBtns: { flexDirection: 'row', gap: 12, marginTop: 8 },
-  modalBtnPrimary: { flex: 1, backgroundColor: '#c2410c', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
-  modalBtnPrimaryText: { color: '#fff', fontWeight: '600' },
-  modalBtnSecondary: { flex: 1, backgroundColor: '#e2e8f0', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
-  modalBtnSecondaryText: { color: '#334155', fontWeight: '600' },
+  container: { flex: 1 },
+  scroll: { padding: space.s4, paddingBottom: space.s5 },
+  groupRow: { flexDirection: 'row', alignItems: 'center', gap: space.s3, marginTop: space.s3, minHeight: 56 },
+  groupInput: { width: 96, minHeight: 56, borderWidth: 2, borderRadius: radius.control, paddingHorizontal: space.s3, textAlign: 'right', fontSize: 18 },
+  busyRow: { flexDirection: 'row', alignItems: 'center', gap: space.s2, marginBottom: space.s3 },
+  modalOverlay: { flex: 1, justifyContent: 'center', padding: space.s4 },
+  modal: { borderRadius: radius.sheet, padding: space.s5 },
+  modalTitle: { marginBottom: space.s4 },
+  modalBtns: { flexDirection: 'row', gap: space.s3, marginTop: space.s2 },
 });

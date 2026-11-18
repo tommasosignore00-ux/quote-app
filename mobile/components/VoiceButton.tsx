@@ -54,9 +54,11 @@ type VoiceButtonProps = {
   listenToWatchEvents?: boolean;
   /** Text under the button ("Tocca e parla"); hidden in floating mode. */
   showLabel?: boolean;
+  /** Solo posizione del microfono flottante (es. sopra una barra fissa in basso). */
+  floatingBottom?: number;
 };
 
-export default function VoiceButton({ onResult, context, size = 64, floating = false, onMicDenied, listenToWatchEvents = false, showLabel = false }: VoiceButtonProps) {
+export default function VoiceButton({ onResult, context, size = 64, floating = false, onMicDenied, listenToWatchEvents = false, showLabel = false, floatingBottom }: VoiceButtonProps) {
   const { t } = useTranslation();
   const [recording, setRecording] = useState(false);
   // Waiting for the transcription: further taps are ignored.
@@ -416,7 +418,7 @@ export default function VoiceButton({ onResult, context, size = 64, floating = f
       );
     }
     return (
-      <View style={styles.fabContainer} pointerEvents="box-none">
+      <View style={[styles.fabContainer, floatingBottom !== undefined && { bottom: floatingBottom, right: 16 }]} pointerEvents="box-none">
         {chip}
         {buttonContent}
       </View>

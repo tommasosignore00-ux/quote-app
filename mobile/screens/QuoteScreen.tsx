@@ -2,7 +2,23 @@ import { trackEvent } from '../lib/analytics';
 import { enableDecisionPush, firstTime } from '../lib/nudges';
 import { loadEntitlement } from '../lib/entitlement';
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, TextInput, Alert, SafeAreaView, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Modal, Alert, SafeAreaView, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import {
+  BottomActionBar,
+  Chip,
+  PrimaryButton,
+  SecondaryButton,
+  SectionHeader,
+  StatusPill,
+  TertiaryButton,
+  TextField,
+  cantiere,
+  formatMoney,
+  radius,
+  space,
+  ufficio,
+} from '../components/ui';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
@@ -14,7 +30,6 @@ import * as Print from 'expo-print';
 import { WebView } from 'react-native-webview';
 import { generateQuoteHTML, QuoteData, quoteLineExtras } from '../lib/QuoteTemplate';
 import { validateQuote, formatValidationMessage } from '../lib/quoteValidation';
-import { exportAsJSON, exportAsXML, exportAsCSV } from '../lib/exportFormats';
 import { roundForCountry } from '../lib/roundingUtils';
 import { useTheme } from '../lib/darkMode';
 import { trackTimeSaving } from '../lib/timeSavings';
@@ -46,7 +61,6 @@ export default function QuoteScreen() {
   const [recipientEmail, setRecipientEmail] = useState('');
   const [showSignature, setShowSignature] = useState(false);
   const [signatureSvg, setSignatureSvg] = useState<string | null>(null);
-  const [showExportMenu, setShowExportMenu] = useState(false);
   const [profileData, setProfileData] = useState<any>(null);
   // Helper: verifica se l'utente ha abbonamento attivo
   const [isProOrTeam, setIsProOrTeam] = useState(false);
@@ -55,6 +69,20 @@ export default function QuoteScreen() {
   }, [profileData]);
   const isTeam = profileData?.subscription_status === 'team';
   const [dettaglioItems, setDettaglioItems] = useState<any[]>([]);
+  /** Lines and total for the summary card (view only, same formula as the lines). */
+  const [summary, setSummary] = useState<{ count: number; total: number } | null>(null);
+  useEffect(() => {
+    if (!lavoro) return;
+    supabase
+      .from('preventivi_dettaglio')
+      .select('quantity, unit_price, tax_rate')
+      .eq('lavoro_id', lavoro.id)
+      .then(({ data }: { data: any[] | null }) => {
+        const rows = (data || []) as any[];
+        const total = rows.reduce((sum, d) => sum + Number(d.quantity) * Number(d.unit_price) * (1 + (Number(d.tax_rate) || 0) / 100), 0);
+        setSummary({ count: rows.length, total });
+      });
+  }, [lavoro?.id]);
 
   useEffect(() => {
     if (!lavoro) navigation.goBack();
@@ -127,14 +155,14 @@ export default function QuoteScreen() {
       );
 
       if (!validationResult.valid) {
-        Alert.alert('❌ Errore Validazione', formatValidationMessage(validationResult));
+        Alert.alert('Da correggere prima di preparare', formatValidationMessage(validationResult));
         return;
       }
 
       if (validationResult.warnings.length > 0) {
         const proceed = await new Promise<boolean>((resolve) => {
           Alert.alert(
-            '⚠️ Attenzione',
+            'Da controllare',
             formatValidationMessage(validationResult) + '\n\nVuoi continuare comunque?',
             [
               { text: 'Annulla', onPress: () => resolve(false), style: 'cancel' },
@@ -322,162 +350,144 @@ export default function QuoteScreen() {
 
   if (!lavoro) return null;
 
-  // Punto 46: Export helper
-  const handleExport = async (format: 'json' | 'xml' | 'csv') => {
-    if (!profileData || !dettaglioItems.length || !lavoro) return;
-    const vatPercent = chosenVat() ?? resolveVatPercent(profileData?.vat_percent);
-    const items = dettaglioItems.map((d: any) => {
-      const qty = Number(d.quantity);
-      const price = Number(d.unit_price);
-      const markup = Number(d.tax_rate || 0);
-      return {
-        description: d.description,
-        quantity: qty,
-        unit_price: price,
-        tax_rate: markup,
-        total: qty * price * (1 + markup / 100),
-      };
-    });
-    const subtotal = items.reduce((s, i) => s + i.total, 0);
-    const vatAmount = subtotal * vatPercent / 100;
-    const exportData = {
-      quoteTitle: lavoro.title,
-      clientName: lavoro.clienti?.name || '',
-      companyName: profileData?.company_name || '',
-      vatNumber: profileData?.vat_number || '',
-      date: new Date().toISOString().split('T')[0],
-      revision,
-      items,
-      subtotal,
-      vatPercent,
-      vatAmount,
-      total: subtotal + vatAmount,
-      currency: 'EUR',
-    };
-    try {
-      if (format === 'json') await exportAsJSON(exportData);
-      else if (format === 'xml') await exportAsXML(exportData);
-      else await exportAsCSV(exportData);
-      setShowExportMenu(false);
-    } catch (err) {
-      Alert.alert(t('messages.error'), (err as Error).message);
-    }
+  const templates = (['classic', 'minimal', 'professional', 'custom'] as const).filter((tpl) => tpl !== 'custom' || hasCustomTemplate);
+  const templateInfo: Record<(typeof templates)[number], { name: string; desc: string }> = {
+    classic: { name: t('quote.classic') || 'Classico', desc: 'Intestazione in alto, righe con bordi' },
+    minimal: { name: t('quote.minimal') || 'Minimalista', desc: 'Poche linee, molto bianco' },
+    professional: { name: t('quote.professional') || 'Professionale', desc: 'Intestazione scura, totali in evidenza' },
+    custom: { name: t('quote.custom') || 'Personalizzato', desc: 'Il tuo modello caricato' },
   };
+  const vatOptions: [string, string][] = [['', 'Del profilo'], ...VAT_PRESETS.map((rate) => [rate, `${rate}%`] as [string, string]), ['custom', 'Altra']];
+  const clientName = lavoro.clienti?.name || '';
+  const revLabel = `Rev. ${String(revision).padStart(2, '0')}`;
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[styles.title, { color: colors.text }]}>{t('main.generateQuote')}</Text>
-      <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{lavoro.title}</Text>
-
-      <View style={styles.templateSelector}>
-        <Text style={[styles.templateLabel, { color: colors.textSecondary }]}>{t('quote.templateLabel') || 'Modello preventivo:'}</Text>
-        <View style={styles.templateOptions}>
-          {(['classic', 'minimal', 'professional', ...(hasCustomTemplate ? ['custom' as const] : [])] as const).map((template) => (
-            <TouchableOpacity
-              key={template}
-              style={[styles.templateOption, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }, selectedTemplate === template && styles.templateOptionSelected]}
-              onPress={() => {
-                if (template === 'custom' && !isProOrTeam) {
-                  return;
-                }
-                setSelectedTemplate(template);
-              }}
-              disabled={template === 'custom' && !isProOrTeam}
-            >
-              <Text style={[styles.templateOptionText, { color: colors.text }, selectedTemplate === template && styles.templateOptionTextSelected]}>
-                {template === 'classic' ? (t('quote.classic') || 'Classico')
-                  : template === 'minimal' ? (t('quote.minimal') || 'Minimalista')
-                  : template === 'professional' ? (t('quote.professional') || 'Professionale')
-                  : (t('quote.custom') || 'Personalizzato')}
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <View style={[styles.summary, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          {approved && preview ? <StatusPill kind="accepted" label={`Approvato · ${revLabel}`} icon="checkmark-circle-outline" /> : null}
+          <View style={styles.summaryRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[cantiere.titleSm, { color: colors.text }]} numberOfLines={2}>
+                {[clientName, lavoro.title].filter(Boolean).join(' · ')}
               </Text>
-            </TouchableOpacity>
-          ))}
+              {summary ? (
+                <Text style={[cantiere.meta, { color: colors.textSecondary }]}>{summary.count === 1 ? '1 voce' : `${summary.count} voci`} · IVA esclusa</Text>
+              ) : null}
+            </View>
+            {summary ? (
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[cantiere.meta, { color: colors.textSecondary }]}>Totale</Text>
+                <Text style={[cantiere.price, { color: colors.text }]}>{formatMoney(summary.total)}</Text>
+              </View>
+            ) : null}
+          </View>
         </View>
-      </View>
 
-      <View style={styles.templateSelector}>
-        <Text style={[styles.vatLabel, { color: colors.text }]}>IVA del preventivo</Text>
-        <View style={styles.templateOptions}>
-          {[['', 'Del profilo'], ...VAT_PRESETS.map((rate) => [rate, `${rate}%`]), ['custom', 'Altra']].map(([value, label]) => (
-            <TouchableOpacity
+        <SectionHeader title="Modello del preventivo" />
+        <View style={{ gap: space.s3 }}>
+          {templates.map((template) => {
+            const selected = selectedTemplate === template;
+            const locked = template === 'custom' && !isProOrTeam;
+            return (
+              <Pressable
+                key={template}
+                onPress={() => !locked && setSelectedTemplate(template)}
+                disabled={locked}
+                accessibilityRole="radio"
+                accessibilityState={{ selected, disabled: locked }}
+                accessibilityLabel={`${templateInfo[template].name}. ${locked ? "Disponibile con l'abbonamento" : templateInfo[template].desc}`}
+                style={({ pressed }) => [
+                  styles.templateRow,
+                  {
+                    backgroundColor: selected ? colors.mark : pressed ? colors.surfaceSecondary : colors.surface,
+                    borderColor: selected ? colors.primary : colors.border,
+                    borderWidth: selected ? 2 : 1,
+                    opacity: locked ? 0.45 : 1,
+                  },
+                ]}
+              >
+                <TemplateThumb kind={template} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[ufficio.row, { color: colors.text }]}>{templateInfo[template].name}</Text>
+                  <Text style={[cantiere.meta, { color: colors.textSecondary }]}>
+                    {locked ? "Disponibile con l'abbonamento" : templateInfo[template].desc}
+                  </Text>
+                </View>
+                <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={28} color={selected ? colors.primaryText : colors.textSecondary} />
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <SectionHeader title="IVA del preventivo" />
+        <View style={styles.chips}>
+          {vatOptions.map(([value, label]) => (
+            <Chip
               key={value || 'profile'}
-              style={[styles.vatOption, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }, vatChoice === value && styles.templateOptionSelected]}
+              label={label}
+              selected={vatChoice === value}
+              minHeight={56}
               onPress={() => {
                 setVatChoice(value);
                 if (value !== 'custom') saveVat(value, '');
               }}
-              accessibilityRole="button"
-              accessibilityState={{ selected: vatChoice === value }}
-              accessibilityLabel={value === 'custom' ? 'Altra aliquota IVA' : value ? `IVA ${label}` : "IVA del profilo"}
-            >
-              <Text style={[styles.vatOptionText, { color: colors.text }, vatChoice === value && styles.templateOptionTextSelected]}>{label}</Text>
-            </TouchableOpacity>
+              accessibilityLabel={value === 'custom' ? 'Altra aliquota IVA' : value ? `IVA ${label}` : 'IVA del profilo'}
+            />
           ))}
         </View>
         {vatChoice === 'custom' ? (
-          <TextInput
+          <TextField
+            label="Aliquota IVA personalizzata (%)"
             value={customVat}
             onChangeText={setCustomVat}
             onEndEditing={() => saveVat('custom', customVat)}
             keyboardType="decimal-pad"
-            placeholder="Aliquota in %"
-            placeholderTextColor={colors.textSecondary}
-            accessibilityLabel="Aliquota IVA personalizzata"
-            style={[styles.vatInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surfaceSecondary }]}
+            placeholder="Es. 8"
+            containerStyle={{ marginTop: space.s3 }}
           />
         ) : null}
-      </View>
 
-      {/* Punto 9: Firma Digitale - signature before approval */}
-      {/* Firma digitale solo per abbonati */}
-      {isProOrTeam && (
-        <>
-          <TouchableOpacity
-            style={[styles.btn, styles.btnSignature, { backgroundColor: colors.primary }]}
-            onPress={() => setShowSignature(!showSignature)}
-          >
-            <Text style={styles.btnText}>
-              {signatureSvg ? '✅ Firma acquisita — Modifica' : '✍️ Aggiungi Firma Cliente'}
-            </Text>
-          </TouchableOpacity>
-          {showSignature && (
-            <SignaturePad
-              onSignatureComplete={(svg) => {
-                setSignatureSvg(svg);
-                setShowSignature(false);
-              }}
-              onCancel={() => setShowSignature(false)}
-            />
-          )}
-        </>
-      )}
+        {/* Firma digitale solo per abbonati */}
+        {isProOrTeam && (
+          <View style={{ marginTop: space.s5, gap: space.s3 }}>
+            {signatureSvg ? (
+              <>
+                <StatusPill kind="accepted" label="Firma presa" icon="pencil-outline" />
+                <TertiaryButton label="Rifai la firma" icon="pencil-outline" onPress={() => setShowSignature(!showSignature)} />
+              </>
+            ) : (
+              <SecondaryButton label="Aggiungi la firma del cliente" icon="pencil-outline" onPress={() => setShowSignature(!showSignature)} />
+            )}
+            {showSignature && (
+              <SignaturePad
+                onSignatureComplete={(svg) => {
+                  setSignatureSvg(svg);
+                  setShowSignature(false);
+                }}
+                onCancel={() => setShowSignature(false)}
+              />
+            )}
+          </View>
+        )}
+      </ScrollView>
 
-      <TouchableOpacity style={[styles.btn, { backgroundColor: colors.primary }]} onPress={generatePreview} disabled={loading}>
-        <Text style={styles.btnText}>{loading ? t('buttons.loading') : 'Prepara il preventivo'}</Text>
-      </TouchableOpacity>
+      <BottomActionBar>
+        {approved && preview ? (
+          <>
+            <SecondaryButton label="Condividi PDF" icon="share-outline" onPress={shareAsPdf} />
+            <PrimaryButton label={t('buttons.sendEmail') || 'Invia per email'} icon="mail-outline" onPress={() => setShowEmailModal(true)} />
+          </>
+        ) : (
+          <PrimaryButton label="Prepara il preventivo" icon="document-text-outline" onPress={generatePreview} loading={loading} loadingLabel="Preparo…" />
+        )}
+      </BottomActionBar>
 
-      {approved && preview && (
-        <View style={{ marginTop: 8 }}>
-          <Text style={{ fontSize: 16, fontWeight: '700', color: '#16a34a', marginBottom: 12, textAlign: 'center' }}>✓ {t('quote.approved') || 'Preventivo approvato'}</Text>
-          <TouchableOpacity style={styles.btn} onPress={() => setShowEmailModal(true)}>
-            <Text style={styles.btnText}>📧 {t('buttons.sendEmail') || 'Invia via email'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.btn, { backgroundColor: '#059669' }]} onPress={shareAsPdf}>
-            <Text style={styles.btnText}>📄 Condividi PDF</Text>
-          </TouchableOpacity>
-          {/* Only email and PDF: HTML, JSON and XML exports are not for the site. */}
-        </View>
-      )}
-
-      <Modal visible={showPreviewModal} animationType="slide">
+      <Modal visible={showPreviewModal} animationType="slide" onRequestClose={() => { setShowPreviewModal(false); setPreview(null); }}>
         <SafeAreaView style={[styles.previewModalContainer, { backgroundColor: colors.background }]}>
-          <View style={[styles.previewModalHeader, { backgroundColor: colors.primary }]}>
-            <Text style={styles.previewModalTitle}>
-              {t('main.generateQuote')} - {lavoro.title}
-            </Text>
-            <Text style={styles.previewModalSubtitle}>
-              {t('messages.reviewAndApprove') || 'Verifica e approva'} • Rev. {String(revision).padStart(2, '0')}
-            </Text>
+          <View style={[styles.previewModalHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+            <Text style={[cantiere.titleSm, { color: colors.text }]} numberOfLines={1}>{lavoro.title}</Text>
+            <Text style={[cantiere.meta, { color: colors.textSecondary }]}>Controlla e approva · {revLabel}</Text>
           </View>
           {preview ? (
             <WebView
@@ -489,14 +499,12 @@ export default function QuoteScreen() {
             />
           ) : (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-              <ActivityIndicator size="large" color="#c2410c" />
+              <ActivityIndicator size="large" color={colors.primary} />
             </View>
           )}
-          <View style={styles.previewModalFooter}>
-            <TouchableOpacity style={[styles.btn, styles.btnSecondary, { flex: 1 }]} onPress={() => { setShowPreviewModal(false); setPreview(null); }}>
-              <Text style={styles.btnText}>{t('buttons.cancel') || 'Annulla'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.btn, { flex: 1 }]} onPress={async () => {
+          <View style={[styles.previewModalFooter, { borderTopColor: colors.border, backgroundColor: colors.surface }]}>
+            <SecondaryButton label={t('buttons.cancel') || 'Annulla'} style={{ flex: 1 }} onPress={() => { setShowPreviewModal(false); setPreview(null); }} />
+            <PrimaryButton label="Valida e approva" icon="checkmark" style={{ flex: 1 }} disabled={loading} onPress={async () => {
               setApproved(true);
               setShowPreviewModal(false);
               // Quote usage is counted by the database when the revision is sent.
@@ -505,7 +513,6 @@ export default function QuoteScreen() {
                 if (user) {
                   // Punto 43: Dispatch webhook for quote_approved
                   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-                  const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
                   if (supabaseUrl) {
                     fetch(`${supabaseUrl}/functions/v1/webhook-dispatch`, {
                       method: 'POST',
@@ -519,99 +526,86 @@ export default function QuoteScreen() {
                   }
                 }
               } catch { /* the webhook is best-effort */ }
-            }} disabled={loading}>
-              <Text style={styles.btnText}>✓ {t('buttons.validateApprove') || 'Valida e Approva'}</Text>
-            </TouchableOpacity>
+            }} />
           </View>
         </SafeAreaView>
       </Modal>
 
-      <Modal visible={showEmailModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
+      <Modal visible={showEmailModal} transparent animationType="fade" onRequestClose={() => setShowEmailModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
           <View style={[styles.modal, { backgroundColor: colors.modalBg }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>{t('modals.confirmEmail')}</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
-              placeholder="email@example.com"
+            <Text style={[cantiere.title, styles.modalTitle, { color: colors.text }]}>{t('modals.confirmEmail')}</Text>
+            <TextField
+              label="Email del cliente"
+              scale="cantiere"
+              placeholder="Es. mario.rossi@email.it"
               value={recipientEmail}
               onChangeText={setRecipientEmail}
               keyboardType="email-address"
               autoCapitalize="none"
-              placeholderTextColor={colors.textTertiary}
+              autoCorrect={false}
             />
             <View style={styles.modalBtns}>
-              <TouchableOpacity style={styles.btn} onPress={() => setShowEmailModal(false)}>
-                <Text style={styles.btnText}>{t('buttons.cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.btn} onPress={handleSendEmail}>
-                <Text style={styles.btnText}>{t('buttons.send')}</Text>
-              </TouchableOpacity>
+              <SecondaryButton label={t('buttons.cancel')} style={{ flex: 1 }} onPress={() => setShowEmailModal(false)} />
+              <PrimaryButton label={t('buttons.send')} style={{ flex: 1 }} onPress={handleSendEmail} loading={loading} loadingLabel="Invio…" disabled={!recipientEmail.trim()} />
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
+    </View>
+  );
+}
 
-      {/* Punto 46: Export format selection modal */}
-      <Modal visible={showExportMenu} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modal, { backgroundColor: colors.modalBg }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Esporta Preventivo</Text>
-            <TouchableOpacity style={[styles.exportOption, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => handleExport('csv')}>
-              <Text style={[styles.exportOptionText, { color: colors.text }]}>📊 CSV (Excel)</Text>
-              <Text style={[styles.exportOptionDesc, { color: colors.textSecondary }]}>Compatibile con Excel, Fogli Google</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.exportOption, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => handleExport('json')}>
-              <Text style={[styles.exportOptionText, { color: colors.text }]}>🔧 JSON</Text>
-              <Text style={[styles.exportOptionDesc, { color: colors.textSecondary }]}>Per integrazioni software e API</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.exportOption, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => handleExport('xml')}>
-              <Text style={[styles.exportOptionText, { color: colors.text }]}>📄 XML</Text>
-              <Text style={[styles.exportOptionDesc, { color: colors.textSecondary }]}>Per commercialisti e software contabilità</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.btn, styles.btnSecondary, { marginTop: 12 }]} onPress={() => setShowExportMenu(false)}>
-              <Text style={styles.btnText}>{t('buttons.cancel')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    </ScrollView>
+/** Small drawn sheet: a header bar and four grey lines, laid out per template. */
+function TemplateThumb({ kind }: { kind: 'classic' | 'minimal' | 'professional' | 'custom' }) {
+  const { colors } = useTheme();
+  const line = (width: string, key: number, bordered = false) => (
+    <View
+      key={key}
+      style={{
+        height: 4,
+        width: width as any,
+        backgroundColor: colors.border,
+        borderRadius: 2,
+        marginTop: 5,
+        ...(bordered ? { borderWidth: 1, borderColor: colors.textTertiary, height: 6 } : null),
+      }}
+    />
+  );
+  return (
+    <View style={[styles.thumb, { backgroundColor: colors.surface, borderColor: colors.inputBorder }]}>
+      {kind === 'custom' ? (
+        <Ionicons name="document-attach-outline" size={28} color={colors.textSecondary} />
+      ) : (
+        <>
+          <View
+            style={{
+              height: kind === 'professional' ? 14 : kind === 'minimal' ? 3 : 8,
+              backgroundColor: kind === 'minimal' ? colors.textTertiary : colors.text,
+              borderRadius: 2,
+            }}
+          />
+          {[0, 1, 2, 3].map((i) => line(kind === 'minimal' ? '70%' : '100%', i, kind === 'classic'))}
+          {kind === 'professional' ? <View style={{ height: 6, width: '50%', alignSelf: 'flex-end', backgroundColor: colors.text, borderRadius: 2, marginTop: 6 }} /> : null}
+        </>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f1f5f9', padding: 16 },
-  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 4 },
-  subtitle: { fontSize: 16, color: '#64748b', marginBottom: 20 },
-  templateSelector: { marginBottom: 20 },
-  vatLabel: { fontSize: 18, fontWeight: '700', marginBottom: 10 },
-  vatOption: { minHeight: 56, minWidth: 64, paddingHorizontal: 16, borderRadius: 12, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  vatOptionText: { fontSize: 18, fontWeight: '700' },
-  vatInput: { marginTop: 10, minHeight: 56, borderWidth: 2, borderRadius: 12, paddingHorizontal: 16, fontSize: 20 },
-  templateLabel: { fontSize: 14, fontWeight: '600', marginBottom: 10, color: '#374151' },
-  templateOptions: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  templateOption: {
-    flex: 1, minWidth: 80, backgroundColor: '#e2e8f0', paddingVertical: 10, paddingHorizontal: 8,
-    borderRadius: 8, alignItems: 'center', borderWidth: 2, borderColor: '#cbd5e1',
-  },
-  templateOptionSelected: { backgroundColor: '#c2410c', borderColor: '#c2410c' },
-  templateOptionText: { fontSize: 12, fontWeight: '600', color: '#1f2937' },
-  templateOptionTextSelected: { color: '#fff' },
-  btn: { backgroundColor: '#c2410c', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginBottom: 12 },
-  btnSecondary: { backgroundColor: '#64748b' },
-  btnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  previewModalContainer: { flex: 1, backgroundColor: '#fff' },
-  previewModalHeader: { backgroundColor: '#c2410c', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12 },
-  previewModalTitle: { fontSize: 17, fontWeight: 'bold', color: '#fff', marginBottom: 2 },
-  previewModalSubtitle: { fontSize: 12, color: '#fecaca' },
-  previewModalFooter: { flexDirection: 'row', gap: 12, padding: 16, borderTopWidth: 1, borderTopColor: '#e2e8f0' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 },
-  modal: { backgroundColor: '#fff', borderRadius: 16, padding: 24 },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 16 },
-  input: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 16, marginBottom: 16, fontSize: 16 },
-  modalBtns: { flexDirection: 'row', gap: 12 },
-  btnSignature: { backgroundColor: '#0f172a' },
-  btnExport: { backgroundColor: '#0891b2' },
-  exportOption: { backgroundColor: '#f8fafc', padding: 16, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#e2e8f0' },
-  exportOptionText: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
-  exportOptionDesc: { fontSize: 13, color: '#64748b' },
+  container: { flex: 1 },
+  scroll: { padding: space.s4, paddingBottom: space.s5 },
+  summary: { borderWidth: 1, borderRadius: radius.control, padding: space.s4, gap: space.s3 },
+  summaryRow: { flexDirection: 'row', alignItems: 'flex-end', gap: space.s3 },
+  templateRow: { minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: space.s3, borderRadius: radius.control, paddingHorizontal: space.s4, paddingVertical: space.s2 },
+  thumb: { width: 56, height: 72, borderRadius: radius.control, borderWidth: 1, padding: 6, justifyContent: 'center' },
+  chips: { flexDirection: 'row', gap: space.s2, flexWrap: 'wrap' },
+  previewModalContainer: { flex: 1 },
+  previewModalHeader: { paddingHorizontal: space.s4, paddingVertical: space.s3, borderBottomWidth: 1 },
+  previewModalFooter: { flexDirection: 'row', gap: space.s3, padding: space.s4, borderTopWidth: 1 },
+  modalOverlay: { flex: 1, justifyContent: 'center', padding: space.s4 },
+  modal: { borderRadius: radius.sheet, padding: space.s5 },
+  modalTitle: { marginBottom: space.s4 },
+  modalBtns: { flexDirection: 'row', gap: space.s3 },
 });

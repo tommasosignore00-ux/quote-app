@@ -15,6 +15,7 @@ try {
 import i18n from './lib/i18n';
 import { isSupabaseConfigured } from './lib/supabase';
 import { ThemeProvider, useTheme } from './lib/darkMode';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import AuthScreen from './screens/AuthScreen';
 import LoginScreen from './screens/LoginScreen';
@@ -82,16 +83,19 @@ function AppNavigator() {
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <Stack.Navigator screenOptions={{
         headerShown: true,
-        headerStyle: { backgroundColor: colors.headerBg },
-        headerTintColor: colors.headerText,
-        headerTitleStyle: { color: colors.headerText },
+        // Testata chiara su carta (spec 3): un solo titolo, nessuna ombra.
+        headerStyle: { backgroundColor: colors.appHeaderBg },
+        headerShadowVisible: false,
+        headerTintColor: colors.appHeaderText,
+        headerTitleStyle: { color: colors.appHeaderText, fontSize: 20, fontWeight: '700' },
+        headerBackTitleStyle: { fontSize: 18 },
         contentStyle: { backgroundColor: colors.background },
       }}>
-        <Stack.Screen name="Auth" component={AuthScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Auth" component={AuthScreen} options={{ headerShown: false, title: 'Mastrovoce' }} />
         <Stack.Screen name="Login" component={LoginScreen} options={{ title: i18n.t('navigation.login') }} />
         <Stack.Screen name="Register" component={RegisterScreen} options={{ title: i18n.t('navigation.register') }} />
         <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: i18n.t('app.title') }} />
+        <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Lavori' }} />
         <Stack.Screen name="Quote" component={QuoteScreen} options={{ title: i18n.t('navigation.quote') }} />
         <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: i18n.t('navigation.profile') }} />
         <Stack.Screen name="Preventivi" component={PreventiviScreen} options={{ title: 'Preventivi' }} />
@@ -117,9 +121,11 @@ export default function App() {
   }
 
   return (
-    <ThemeProvider>
-      <AppNavigator />
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <AppNavigator />
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
 
