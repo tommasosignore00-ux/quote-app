@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
 import { useSubscription } from '@/lib/useSubscription';
+import { prefersPhoneVersion } from '@/lib/mobileWeb';
 
 import LegalConsentPopup from '@/components/LegalConsentPopup';
 import QuoteAcceptedPopup from '@/components/QuoteAcceptedPopup';
@@ -27,6 +28,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       if (!session) {
         window.location.href = '/auth/login';
         return;
+      }
+      // On a phone, or from the home screen icon, the phone version opens instead.
+      // "Versione completa" (?versione=computer) keeps the full site for this visit.
+      try {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('versione') === 'computer')
+          {sessionStorage.setItem('mastrovoce:full-site', '1');}
+        const wantsFull = sessionStorage.getItem('mastrovoce:full-site') === '1';
+        if (
+          !wantsFull &&
+          window.location.pathname === '/dashboard' &&
+          prefersPhoneVersion()
+        ) {
+          window.location.replace('/m');
+          return;
+        }
+      } catch {
+        // Storage unavailable: stay on the full site.
       }
       setAuthChecked(true);
     };

@@ -11,7 +11,10 @@ export type QuoteVersionRow = {
   client_decision_at: string | null;
   client_signer_name: string | null;
   client_note: string | null;
-  lavori: { title: string; clienti: { name: string } | null } | null;
+  lavori: {
+    title: string;
+    clienti: { name: string; phone?: string | null } | null;
+  } | null;
 };
 
 export type QuoteStage = 'accepted' | 'rejected' | 'sent' | 'validated';
@@ -44,7 +47,7 @@ export async function fetchQuoteVersions(): Promise<QuoteVersionRow[]> {
   const { data, error } = await supabase
     .from('preventivi_versioni')
     .select(
-      'id, lavoro_id, revision, created_at, sent_at, recipient_email, client_decision, client_decision_at, client_signer_name, client_note, lavori(title, clienti(name))'
+      'id, lavoro_id, revision, created_at, sent_at, recipient_email, client_decision, client_decision_at, client_signer_name, client_note, lavori(title, clienti(name, phone))'
     )
     .order('created_at', { ascending: false })
     .limit(1000);
@@ -57,7 +60,7 @@ export async function fetchUnseenAcceptances(): Promise<QuoteVersionRow[]> {
   const { data, error } = await supabase
     .from('preventivi_versioni')
     .select(
-      'id, lavoro_id, revision, created_at, sent_at, recipient_email, client_decision, client_decision_at, client_signer_name, client_note, lavori(title, clienti(name))'
+      'id, lavoro_id, revision, created_at, sent_at, recipient_email, client_decision, client_decision_at, client_signer_name, client_note, lavori(title, clienti(name, phone))'
     )
     .eq('client_decision', 'accepted')
     .is('owner_notified_at', null)

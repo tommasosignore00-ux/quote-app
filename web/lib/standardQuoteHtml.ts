@@ -116,6 +116,9 @@ export function renderStandardQuote(input: StandardQuoteInput): string {
         )
         .join('');
 
+  // Built-in labels come in capitals ("PREVENTIVO"): written as a word on the document.
+  const label =
+    input.quoteLabel.charAt(0).toUpperCase() + input.quoteLabel.slice(1).toLowerCase();
   const company = input.companyName || '';
   const mark = input.logoUrl
     ? `<img class="logo" src="${input.logoUrl}" alt="">`
@@ -182,7 +185,7 @@ export function renderStandardQuote(input: StandardQuoteInput): string {
   </div>
   ${input.companyDetails.length ? `<div class="details">${input.companyDetails.join(' · ')}</div>` : ''}
   <hr class="rule">
-  <div class="ref">${input.quoteLabel} · ${input.title} · Rev. ${String(input.revision).padStart(2, '0')} · ${input.dateText}</div>
+  <div class="ref">${label} · ${input.title} · Rev. ${String(input.revision).padStart(2, '0')} · ${input.dateText}</div>
   <div class="client">Cliente: ${input.clientName}</div>
   ${input.clientDetails.length ? `<div class="client-details">${input.clientDetails.join(' · ')}</div>` : ''}
 

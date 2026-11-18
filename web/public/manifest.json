@@ -1,11 +1,11 @@
 {
   "name": "Mastrovoce - Il tuo preventivo, dettato in cantiere",
   "short_name": "Mastrovoce",
-  "description": "Detti le voci in cantiere e il preventivo esce con i tuoi prezzi, il tuo formato e il nome della tua azienda.",
-  "start_url": "/",
+  "description": "Preventivi dettati in cantiere, con i prezzi del tuo listino.",
+  "start_url": "/m",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#c2410c",
+  "background_color": "#faf7f2",
+  "theme_color": "#faf7f2",
   "orientation": "portrait-primary",
   "icons": [
     {
@@ -18,5 +18,6 @@
       "sizes": "512x512",
       "type": "image/png"
     }
-  ]
+  ],
+  "scope": "/"
 }

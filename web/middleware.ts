@@ -5,6 +5,7 @@ import { createServerClient } from '@supabase/ssr';
 // Protected routes that require authentication
 const protectedRoutes = [
   '/dashboard',
+  '/m/',
   '/onboarding',
   '/api/quotes',
   '/api/clients',
@@ -41,7 +42,9 @@ export async function middleware(request: NextRequest) {
   }
 
   // Only check protected routes
-  const isProtected = protectedRoutes.some((route) => pathname.startsWith(route));
+  // '/m' alone is the phone home: '/m/' would not match it, and plain '/m' would match '/manifest.json'.
+  const isProtected =
+    pathname === '/m' || protectedRoutes.some((route) => pathname.startsWith(route));
   if (!isProtected) {
     return response;
   }
