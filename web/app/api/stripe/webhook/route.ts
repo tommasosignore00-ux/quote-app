@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { supabaseAdmin } from '../../../../lib/supabase-server';
 import { TEAM_INCLUDED_USERS } from '../../../../lib/checkout';
+import { syncTeamSeats } from '../../../../lib/teamSeats';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const supabase = supabaseAdmin;
@@ -100,6 +101,17 @@ async function applySubscription(eventSubscription: Stripe.Subscription) {
   const trialEnd = subscription.trial_end
     ? new Date(subscription.trial_end * 1000).toISOString()
     : null;
+  // Founder price only through our checkout, which holds a place and marks the
+  // subscription: a price reached another way (e.g. the customer portal) is not a founder.
+  const founderAmount = founderPrice(subscription);
+  const founderOffer = subscription.metadata?.founder === 'true';
+  const becomesFounder =
+    founderAmount !== null && founderOffer && subscription.status === 'active';
+  if (founderAmount !== null && !founderOffer) {
+    await audit(profile.id, 'founder_price_without_offer', {
+      subscription_id: subscription.id,
+    });
+  }
   const { error } = await supabase
     .from('profiles')
     .update({
@@ -119,17 +131,28 @@ async function applySubscription(eventSubscription: Stripe.Subscription) {
           }
         : {}),
       // A founder is someone whose founder subscription was paid, never a mere sign-up.
-      ...(founderPrice(subscription) !== null && subscription.status === 'active'
+      ...(becomesFounder
+        ? { is_founding_member: true, founding_member_locked_price: founderAmount }
+        : {}),
+      // The founder price lasts while the subscription does: it is lost when it ends.
+      ...(finished
         ? {
-            is_founding_member: true,
-            founding_member_locked_price: founderPrice(subscription),
+            team_plan: false,
+            is_founding_member: false,
+            founding_member_locked_price: null,
           }
         : {}),
-      ...(finished ? { team_plan: false } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq('id', profile.id);
   if (error) throw new Error(`profile update failed: ${error.code}`);
+
+  if (becomesFounder || finished) {
+    // The held place becomes a founder, or is released.
+    await supabase.from('founder_reservations').delete().eq('profile_id', profile.id);
+  }
+  // Retries a seat change that failed earlier (never throws).
+  if (plan === 'team' && !finished) await syncTeamSeats(profile.id);
 
   await audit(profile.id, `subscription_${subscription.status}`, {
     subscription_id: subscription.id,
@@ -148,6 +171,8 @@ async function handleDeleted(eventSubscription: Stripe.Subscription) {
       subscription_status: 'canceled',
       trial_ends_at: null,
       team_plan: false,
+      is_founding_member: false,
+      founding_member_locked_price: null,
       updated_at: new Date().toISOString(),
     })
     .eq('stripe_subscription_id', eventSubscription.id)

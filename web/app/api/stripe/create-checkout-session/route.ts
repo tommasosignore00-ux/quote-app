@@ -7,6 +7,7 @@ import {
 } from '../../../../lib/apiAuth';
 import { checkoutSessionSchema, validateRequest } from '../../../../lib/validations';
 import { createSubscriptionCheckout, type CheckoutPlan } from '../../../../lib/checkout';
+import { rateLimit } from '../../../../lib/rate-limit';
 
 /** Onboarding checkout: same rules as the subscription page, plus the company name. */
 export async function POST(req: Request) {
@@ -24,6 +25,17 @@ export async function POST(req: Request) {
       offer,
     } = validation.data;
     if (!isOwnProfile(user, claimedUserId)) return forbiddenResponse();
+    // Each checkout opens a Stripe session and may hold a founder place.
+    const limit = await rateLimit(`checkout:${user.id}`, {
+      maxRequests: 10,
+      windowMs: 60 * 60 * 1000,
+    });
+    if (!limit.success) {
+      return NextResponse.json(
+        { error: 'Troppe richieste. Riprova più tardi.' },
+        { status: 429 }
+      );
+    }
 
     // Only the plan names are accepted: never a price id from the client.
     const plan = String(requestedPlan)

@@ -137,6 +137,13 @@ export async function POST(req: Request) {
     { onConflict: 'team_owner_id,member_id' }
   );
   if (error) {
+    // The database refuses an 11th user even when invitations arrive together.
+    if (error.code === 'P0001' && error.hint === 'TEAM_FULL') {
+      return NextResponse.json(
+        { error: `Il Team arriva al massimo a ${TEAM_MAX_USERS} utenti, tu compreso.` },
+        { status: 409 }
+      );
+    }
     console.error('Team invite failed:', error.code);
     return NextResponse.json({ error: 'Invito non riuscito' }, { status: 500 });
   }

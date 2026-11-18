@@ -6,6 +6,7 @@ import {
   isOwnProfile,
 } from '@/lib/apiAuth';
 import { createSubscriptionCheckout, type CheckoutPlan } from '@/lib/checkout';
+import { rateLimit } from '@/lib/rate-limit';
 
 const PLANS: CheckoutPlan[] = ['monthly', 'yearly', 'team'];
 
@@ -23,6 +24,17 @@ export async function POST(req: Request) {
       offer?: string;
     };
     if (!isOwnProfile(user, claimedUserId)) return forbiddenResponse();
+    // Each checkout opens a Stripe session and may hold a founder place.
+    const limit = await rateLimit(`checkout:${user.id}`, {
+      maxRequests: 10,
+      windowMs: 60 * 60 * 1000,
+    });
+    if (!limit.success) {
+      return NextResponse.json(
+        { error: 'Troppe richieste. Riprova più tardi.' },
+        { status: 429 }
+      );
+    }
     if (!user.email || !PLANS.includes(plan as CheckoutPlan)) {
       return NextResponse.json({ error: 'Piano non valido' }, { status: 400 });
     }

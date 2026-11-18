@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'crypto';
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -35,7 +36,7 @@ async function checkDatabase(): Promise<ServiceStatus> {
     if (error) throw error;
     return { status: 'ok', latencyMs: Date.now() - start };
   } catch (e: any) {
-    return { status: 'down', latencyMs: Date.now() - start, error: e.message };
+    return { status: 'down', latencyMs: Date.now() - start, error: 'check failed' };
   }
 }
 
@@ -53,7 +54,7 @@ async function checkOpenAI(): Promise<ServiceStatus> {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return { status: 'ok', latencyMs: Date.now() - start };
   } catch (e: any) {
-    return { status: 'down', latencyMs: Date.now() - start, error: e.message };
+    return { status: 'down', latencyMs: Date.now() - start, error: 'check failed' };
   }
 }
 
@@ -71,11 +72,29 @@ async function checkStripe(): Promise<ServiceStatus> {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return { status: 'ok', latencyMs: Date.now() - start };
   } catch (e: any) {
-    return { status: 'down', latencyMs: Date.now() - start, error: e.message };
+    return { status: 'down', latencyMs: Date.now() - start, error: 'check failed' };
   }
 }
 
-export async function GET() {
+/**
+ * Public answer: only "ok". The detailed check (database, OpenAI, Stripe) needs the
+ * x-health-token header equal to HEALTH_CHECK_TOKEN, so nobody can make the site call
+ * paid services or read error details.
+ */
+export async function GET(req: Request) {
+  const expected = process.env.HEALTH_CHECK_TOKEN || '';
+  const given = req.headers.get('x-health-token') || '';
+  const allowed =
+    expected.length > 0 &&
+    given.length === expected.length &&
+    timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+  if (!allowed) {
+    return NextResponse.json(
+      { status: 'ok' },
+      { headers: { 'Cache-Control': 'no-store' } }
+    );
+  }
+
   const [database, openai, stripe] = await Promise.all([
     checkDatabase(),
     checkOpenAI(),

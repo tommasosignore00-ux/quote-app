@@ -19,7 +19,10 @@ export async function POST(req: Request) {
     const customerId = profile?.stripe_customer_id;
 
     if (!customerId) {
-      return NextResponse.json({ error: 'Nessun abbonamento Stripe associato' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Nessun abbonamento Stripe associato' },
+        { status: 400 }
+      );
     }
 
     const session = await stripe.billingPortal.sessions.create({
@@ -28,7 +31,15 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ url: session.url });
-  } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+  } catch {
+    // Stripe's own message stays in the server log, never in the browser.
+    console.error('Stripe portal route error');
+    return NextResponse.json(
+      {
+        error:
+          "Non è stato possibile aprire la gestione dell'abbonamento. Riprova tra poco.",
+      },
+      { status: 500 }
+    );
   }
 }

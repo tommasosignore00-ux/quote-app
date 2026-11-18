@@ -8,12 +8,16 @@ const PDF_RUNTIME_FILES = [
   './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
 ];
 
+// Development only: React Refresh evaluates code strings. Production never gets eval.
+const DEV_EVAL = process.env.NODE_ENV === 'production' ? '' : " 'unsafe-eval'";
+
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://js.stripe.com https://*.posthog.com",
-  "style-src 'self' 'unsafe-inline'",
+  `script-src 'self' 'unsafe-inline'${DEV_EVAL} https://js.stripe.com https://*.posthog.com`,
+  // Quotes rendered in the site load their fonts from Google Fonts.
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "img-src 'self' data: blob: https:",
-  "font-src 'self' data:",
+  "font-src 'self' data: https://fonts.gstatic.com",
   "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.posthog.com https://*.ingest.sentry.io https://*.ingest.de.sentry.io https://api.stripe.com",
   "frame-src 'self' https://js.stripe.com https://checkout.stripe.com",
   "frame-ancestors 'none'",
@@ -59,9 +63,10 @@ const nextConfig = {
         { key: 'X-Content-Type-Options', value: 'nosniff' },
         { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
         { key: 'Permissions-Policy', value: 'camera=(), microphone=(self), geolocation=()' },
-        { key: 'Strict-Transport-Security', value: 'max-age=15552000' },
-        // Report-Only for now: read the violations before enforcing it.
-        { key: 'Content-Security-Policy-Report-Only', value: CONTENT_SECURITY_POLICY },
+        { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
+        // Enforced. 'unsafe-inline' stays for scripts: Next.js 14 injects inline
+        // bootstrap scripts, which would need a per-request nonce on every page.
+        { key: 'Content-Security-Policy', value: CONTENT_SECURITY_POLICY },
       ],
     },
   ],
