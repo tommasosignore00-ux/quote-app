@@ -1,4 +1,6 @@
 import 'react-native-url-polyfill/auto';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState } from 'react-native';
 import { createClient } from '@supabase/supabase-js';
 
 // In some local setups, Node (Expo CLI) may need an explicit CA bundle.
@@ -30,4 +32,22 @@ if (!isSupabaseConfigured) {
 	console.warn('Missing Supabase configuration. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY');
 }
 
-export const supabase: any = isSupabaseConfigured ? createClient(supabaseUrl, supabaseAnonKey) : null;
+// The session is kept on the phone: whoever logged in once stays logged in until they sign out.
+export const supabase: any = isSupabaseConfigured
+	? createClient(supabaseUrl, supabaseAnonKey, {
+			auth: {
+				storage: AsyncStorage,
+				persistSession: true,
+				autoRefreshToken: true,
+				detectSessionInUrl: false,
+			},
+		})
+	: null;
+
+// Token refresh runs only while the app is in the foreground, as Supabase recommends on mobile.
+if (supabase) {
+	AppState.addEventListener('change', (state) => {
+		if (state === 'active') supabase.auth.startAutoRefresh();
+		else supabase.auth.stopAutoRefresh();
+	});
+}
