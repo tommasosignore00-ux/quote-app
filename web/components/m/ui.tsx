@@ -113,11 +113,14 @@ export function MicButton({
   seconds,
   onPress,
   size = 'big',
+  level = 0,
 }: {
   state: 'idle' | 'recording' | 'processing';
   seconds: number;
   onPress: () => void;
   size?: 'big' | 'small';
+  /** Microphone input 0-1 while recording: shows the phone is hearing. */
+  level?: number;
 }) {
   const recording = state === 'recording';
   const busy = state === 'processing';
@@ -150,6 +153,21 @@ export function MicButton({
           <Mic className={icon} />
         )}
       </button>
+      {recording ? (
+        <div
+          className={`${size === 'big' ? 'h-3 w-48' : 'h-2 w-20'} overflow-hidden rounded-full bg-mv-line`}
+          role="meter"
+          aria-label="Livello del microfono"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(level * 100)}
+        >
+          <div
+            className="h-full rounded-full bg-danger transition-[width] duration-100"
+            style={{ width: `${Math.max(4, Math.round(level * 100))}%` }}
+          />
+        </div>
+      ) : null}
       {size === 'big' ? (
         <p
           className={`text-xl font-bold ${recording ? 'text-danger' : 'text-mv-ink'}`}

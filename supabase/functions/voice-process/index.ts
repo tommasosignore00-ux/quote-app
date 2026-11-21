@@ -291,7 +291,9 @@ serve(async (req) => {
     const text = normalizeTradeTerms(rawText)
 
     if (!text || isHallucinatedTranscript(text)) {
-      return new Response(JSON.stringify({ action: 'none', data: {}, text: '', agent: null }), { headers: corsHeaders })
+      // The client tells "nothing heard" (silent audio) from "only noise" without seeing the text.
+      const reason = text ? 'noise' : 'empty'
+      return new Response(JSON.stringify({ action: 'none', data: {}, text: '', agent: null, reason }), { headers: corsHeaders })
     }
 
     if (userId) {

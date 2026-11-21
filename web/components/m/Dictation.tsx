@@ -110,6 +110,7 @@ export default function Dictation({
         seconds={recorder.seconds}
         onPress={press}
         size={size}
+        level={recorder.level}
       />
       {problem ? (
         <div className={size === 'big' ? 'mt-4 w-full' : 'mt-2 max-w-[260px]'}>

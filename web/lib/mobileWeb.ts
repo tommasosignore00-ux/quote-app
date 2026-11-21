@@ -77,27 +77,54 @@ export type RecorderState = 'idle' | 'recording' | 'processing';
 export function useVoiceRecorder(onAudio: (blob: Blob) => Promise<void>) {
   const [state, setState] = useState<RecorderState>('idle');
   const [seconds, setSeconds] = useState(0);
+  /** Microphone input level 0-1 while recording, for the meter. */
+  const [level, setLevel] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const startedAtRef = useRef(0);
   const timerRef = useRef<number | null>(null);
   const autoStopRef = useRef<number | null>(null);
+  const meterRef = useRef<number | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const peakRef = useRef(0);
+  const meteredRef = useRef(false);
   const onAudioRef = useRef(onAudio);
   onAudioRef.current = onAudio;
 
   const clearTimers = () => {
     if (timerRef.current) window.clearInterval(timerRef.current);
     if (autoStopRef.current) window.clearTimeout(autoStopRef.current);
+    if (meterRef.current) window.clearInterval(meterRef.current);
     timerRef.current = null;
     autoStopRef.current = null;
+    meterRef.current = null;
   };
 
-  useEffect(() => () => clearTimers(), []);
+  const closeAudioContext = () => {
+    audioContextRef.current?.close().catch(() => {});
+    audioContextRef.current = null;
+  };
+
+  useEffect(
+    () => () => {
+      clearTimers();
+      closeAudioContext();
+    },
+    []
+  );
 
   const stop = useCallback(() => {
     const recorder = recorderRef.current;
-    if (recorder && recorder.state === 'recording') recorder.stop();
+    if (recorder && recorder.state === 'recording') {
+      // Safari can drop the tail of the audio if the last slice is not requested first.
+      try {
+        recorder.requestData();
+      } catch {
+        // Not supported: stop() still flushes what it has.
+      }
+      recorder.stop();
+    }
   }, []);
 
   const start = useCallback(async () => {
@@ -106,15 +133,63 @@ export function useVoiceRecorder(onAudio: (blob: Blob) => Promise<void>) {
       setError('Questo browser non registra la voce. Usa Safari o Chrome aggiornati.');
       return;
     }
+    // Created inside the tap, before any await: iPhone allows audio only from a gesture.
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    let audioContext: AudioContext | null = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      audioContext = AudioContextClass ? new AudioContextClass() : null;
+    } catch {
+      audioContext = null;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      // The format the iPhone records best; Chrome falls back to its own.
+      const mimeType = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find(
+        (type) => MediaRecorder.isTypeSupported?.(type)
+      );
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
       chunksRef.current = [];
       recorder.ondataavailable = (event) => {
         if (event.data.size) chunksRef.current.push(event.data);
       };
+
+      // Level meter: shows the phone is hearing, and tells silence from speech.
+      peakRef.current = 0;
+      meteredRef.current = false;
+      if (audioContext) {
+        try {
+          await audioContext.resume();
+          const analyser = audioContext.createAnalyser();
+          analyser.fftSize = 1024;
+          audioContext.createMediaStreamSource(stream).connect(analyser);
+          const samples = new Uint8Array(analyser.fftSize);
+          audioContextRef.current = audioContext;
+          meterRef.current = window.setInterval(() => {
+            if (audioContext?.state !== 'running') return;
+            analyser.getByteTimeDomainData(samples);
+            let peak = 0;
+            for (const sample of samples)
+              {peak = Math.max(peak, Math.abs(sample - 128) / 128);}
+            meteredRef.current = true;
+            peakRef.current = Math.max(peakRef.current, peak);
+            setLevel(Math.min(1, peak * 3));
+          }, 120);
+        } catch {
+          closeAudioContext();
+        }
+      }
+
       recorder.onstop = async () => {
         clearTimers();
+        closeAudioContext();
+        setLevel(0);
         stream.getTracks().forEach((track) => track.stop());
         recorderRef.current = null;
         const duration = Date.now() - startedAtRef.current;
@@ -124,8 +199,16 @@ export function useVoiceRecorder(onAudio: (blob: Blob) => Promise<void>) {
           return;
         }
         const blob = new Blob(chunksRef.current, {
-          type: recorder.mimeType || 'audio/webm',
+          type: recorder.mimeType || mimeType || 'audio/mp4',
         });
+        // Measured silence, or almost no data: sending it would only come back empty.
+        if ((meteredRef.current && peakRef.current < 0.02) || blob.size < 2000) {
+          setState('idle');
+          setError(
+            "Il microfono non ha registrato la voce. Controlla che nessun'altra app lo stia usando (chiamate, note vocali), poi riprova parlando vicino al telefono."
+          );
+          return;
+        }
         setState('processing');
         try {
           await onAudioRef.current(blob);
@@ -133,7 +216,8 @@ export function useVoiceRecorder(onAudio: (blob: Blob) => Promise<void>) {
           setState('idle');
         }
       };
-      recorder.start();
+      // Slices every second: Safari keeps the whole recording even if it is cut short.
+      recorder.start(1000);
       recorderRef.current = recorder;
       startedAtRef.current = Date.now();
       setSeconds(0);
@@ -144,6 +228,7 @@ export function useVoiceRecorder(onAudio: (blob: Blob) => Promise<void>) {
       );
       autoStopRef.current = window.setTimeout(stop, MAX_RECORDING_MS);
     } catch {
+      audioContext?.close().catch(() => {});
       setState('idle');
       setError(
         'Microfono bloccato. Consenti il microfono a questo sito nelle impostazioni di Safari.'
@@ -156,7 +241,7 @@ export function useVoiceRecorder(onAudio: (blob: Blob) => Promise<void>) {
     else if (state === 'idle') start();
   }, [state, start, stop]);
 
-  return { state, seconds, error, setError, toggle };
+  return { state, seconds, level, error, setError, toggle };
 }
 
 /** Sends the audio to voice-process with the same context the app sends. */
@@ -167,8 +252,9 @@ export async function sendDictation(
   const {
     data: { session },
   } = await supabase.auth.getSession();
-  if (!session?.access_token)
-    {throw new Error("Sessione scaduta: effettua di nuovo l'accesso.");}
+  if (!session?.access_token) {
+    throw new Error("Sessione scaduta: effettua di nuovo l'accesso.");
+  }
   const formData = new FormData();
   formData.append('audio', blob, audioFileName(blob.type));
   formData.append('context', JSON.stringify(context));
@@ -258,7 +344,9 @@ export async function draftFromResult(
           ? question.trim()
           : result.text
             ? `Non ho capito cosa aggiungere. Ho sentito: "${result.text}".`
-            : 'Non ho sentito niente: riprova parlando vicino al telefono.',
+            : (result as { reason?: string }).reason === 'noise'
+              ? 'Ho sentito solo rumore: riprova parlando vicino al telefono, lontano da macchine accese.'
+              : "L'audio è arrivato vuoto: il microfono non ha registrato la voce. Chiudi le altre app che usano il microfono e riprova.",
     };
   }
   const items = await Promise.all(
