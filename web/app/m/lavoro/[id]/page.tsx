@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import {
   clientUnitPrice,
   euro,
+  lacksPrice,
   qty,
   rememberJob,
   type Costo,
@@ -73,6 +74,7 @@ export default function MobileJob() {
     0
   );
   const locked = job?.status === 'approved';
+  const unpriced = lines.filter(lacksPrice).length;
 
   return (
     <main className="pb-[260px]">
@@ -86,6 +88,15 @@ export default function MobileJob() {
             </Notice>
           </div>
         ) : null}
+        {unpriced && !locked ? (
+          <div className="mb-4">
+            <Notice tone="error">
+              {unpriced === 1
+                ? '1 voce è senza prezzo: toccala per metterlo, o il cliente la vedrà a 0 €.'
+                : `${unpriced} voci sono senza prezzo: toccale per metterlo, o il cliente le vedrà a 0 €.`}
+            </Notice>
+          </div>
+        ) : null}
         {!lines.length && job ? (
           <Notice>
             Nessuna voce ancora. Tocca il microfono e detta materiali e lavorazioni.
@@ -93,7 +104,10 @@ export default function MobileJob() {
         ) : null}
         <ul className="divide-y divide-mv-line overflow-hidden rounded-2xl border-2 border-mv-line bg-mv-sheet">
           {lines.map((line) => (
-            <li key={line.id}>
+            <li
+              key={line.id}
+              className={lacksPrice(line) ? 'border-l-8 border-danger' : undefined}
+            >
               <button
                 type="button"
                 disabled={locked}
@@ -113,9 +127,15 @@ export default function MobileJob() {
                       : ''}
                   </span>
                 </span>
-                <span className="whitespace-nowrap text-lg font-bold">
-                  {euro(Number(line.quantity) * clientUnitPrice(line))}
-                </span>
+                {lacksPrice(line) ? (
+                  <span className="whitespace-nowrap text-lg font-bold text-danger">
+                    Prezzo da inserire
+                  </span>
+                ) : (
+                  <span className="whitespace-nowrap text-lg font-bold">
+                    {euro(Number(line.quantity) * clientUnitPrice(line))}
+                  </span>
+                )}
               </button>
             </li>
           ))}

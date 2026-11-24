@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Download, Mail, Send } from 'lucide-react';
 import { jsPDF } from 'jspdf';
@@ -8,6 +9,7 @@ import html2canvas from 'html2canvas';
 import { supabase } from '@/lib/supabase';
 import { normalizeCountryCode, resolveVatPercent } from '@/lib/constants';
 import { generateQuoteHTML, quoteLineExtras, type QuoteData } from '@/lib/QuoteTemplate';
+import { lacksPrice } from '@/lib/mobileWeb';
 import { useMobileProfile } from '@/components/m/profile';
 import { Button, Field, Notice, PageTitle, Sheet, inputClass } from '@/components/m/ui';
 
@@ -44,6 +46,10 @@ export default function MobileQuote() {
   );
   const [emailOpen, setEmailOpen] = useState(false);
   const [email, setEmail] = useState('');
+  /** Lines the client would see at 0 €. */
+  const [unpriced, setUnpriced] = useState<string[]>([]);
+  /** Sending held until the user confirms the lines at 0 €. */
+  const [held, setHeld] = useState<'link' | 'email' | 'pdf' | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -106,6 +112,11 @@ export default function MobileQuote() {
           supabase.from('profiles').select('*').eq('id', profileInfo.id).single(),
         ]);
       if (!lavoro || !profile) throw new Error('Dati del preventivo non disponibili.');
+      setUnpriced(
+        (dettaglio || [])
+          .filter((d) => lacksPrice(d as { unit_price: number; tax_rate: number }))
+          .map((d) => String(d.description))
+      );
       const c = (lavoro.clienti || {}) as Record<string, string | undefined>;
       const rev = lavoro.current_revision ?? 1;
       setRevision(rev);
@@ -184,6 +195,20 @@ export default function MobileQuote() {
       .update({ current_revision: revision + 1 })
       .eq('id', id);
     setRevision(revision + 1);
+  };
+
+  /** Asks first when some lines are at 0 €; otherwise goes straight on. */
+  const unlessUnpriced = (action: 'link' | 'email' | 'pdf', run: () => void) => {
+    if (unpriced.length) setHeld(action);
+    else run();
+  };
+
+  const runHeld = () => {
+    const action = held;
+    setHeld(null);
+    if (action === 'link') shareLink();
+    else if (action === 'email') setEmailOpen(true);
+    else if (action === 'pdf') downloadPdf();
   };
 
   const shareLink = async () => {
@@ -362,19 +387,42 @@ export default function MobileQuote() {
                 className="h-[70dvh] w-full"
               />
             </div>
+            {unpriced.length ? (
+              <div className="mb-4">
+                <Notice tone="error">
+                  {unpriced.length === 1
+                    ? 'Questa voce è a 0 €: '
+                    : `Queste ${unpriced.length} voci sono a 0 €: `}
+                  <strong>{unpriced.join(', ')}</strong>.{' '}
+                  <Link href={`/m/lavoro/${id}`} className="font-bold underline">
+                    Torna al lavoro e metti il prezzo
+                  </Link>
+                  .
+                </Notice>
+              </div>
+            ) : null}
             <div className="grid gap-3">
-              <Button big onClick={shareLink} disabled={busy}>
+              <Button
+                big
+                onClick={() => unlessUnpriced('link', shareLink)}
+                disabled={busy}
+              >
                 <Send className="h-6 w-6" /> Manda il link al cliente
               </Button>
               <Button
                 big
                 variant="secondary"
-                onClick={() => setEmailOpen(true)}
+                onClick={() => unlessUnpriced('email', () => setEmailOpen(true))}
                 disabled={busy}
               >
                 <Mail className="h-6 w-6" /> Invia per email
               </Button>
-              <Button big variant="secondary" onClick={downloadPdf} disabled={busy}>
+              <Button
+                big
+                variant="secondary"
+                onClick={() => unlessUnpriced('pdf', downloadPdf)}
+                disabled={busy}
+              >
                 <Download className="h-6 w-6" /> Scarica PDF
               </Button>
             </div>
@@ -384,6 +432,32 @@ export default function MobileQuote() {
           </>
         )}
       </div>
+
+      <Sheet
+        open={held !== null}
+        onClose={() => setHeld(null)}
+        title="Ci sono voci a 0 €"
+      >
+        <p className="mb-2 text-lg">
+          Il cliente vedrà {unpriced.length === 1 ? 'questa voce' : 'queste voci'} a 0 €:
+        </p>
+        <ul className="mb-5 list-disc pl-6 text-lg font-semibold">
+          {unpriced.map((description, index) => (
+            <li key={`${description}-${index}`}>{description}</li>
+          ))}
+        </ul>
+        <div className="grid gap-3">
+          <Link
+            href={`/m/lavoro/${id}`}
+            className="flex min-h-[64px] w-full items-center justify-center rounded-xl bg-primary text-xl font-bold text-white"
+          >
+            Metti i prezzi
+          </Link>
+          <Button big variant="secondary" onClick={runHeld}>
+            {held === 'pdf' ? 'Scarica lo stesso' : 'Manda lo stesso'}
+          </Button>
+        </div>
+      </Sheet>
 
       <Sheet open={emailOpen} onClose={() => setEmailOpen(false)} title="Invia per email">
         <Field label="Email del cliente">

@@ -52,6 +52,10 @@ const MIN_RECORDING_MS = 700;
 export const clientUnitPrice = (c: Pick<Costo, 'unit_price' | 'tax_rate'>) =>
   Number(c.unit_price) * (1 + (Number(c.tax_rate) || 0) / 100);
 
+/** A line saved without a price (e.g. dictated and not in the price list). */
+export const lacksPrice = (c: Pick<Costo, 'unit_price' | 'tax_rate'>) =>
+  !(clientUnitPrice(c) > 0);
+
 export const euro = (value: number) =>
   `${(Number(value) || 0).toLocaleString('it-IT', {
     minimumFractionDigits: 2,
@@ -175,8 +179,9 @@ export function useVoiceRecorder(onAudio: (blob: Blob) => Promise<void>) {
             if (audioContext?.state !== 'running') return;
             analyser.getByteTimeDomainData(samples);
             let peak = 0;
-            for (const sample of samples)
-              {peak = Math.max(peak, Math.abs(sample - 128) / 128);}
+            for (const sample of samples) {
+              peak = Math.max(peak, Math.abs(sample - 128) / 128);
+            }
             meteredRef.current = true;
             peakRef.current = Math.max(peakRef.current, peak);
             setLevel(Math.min(1, peak * 3));
