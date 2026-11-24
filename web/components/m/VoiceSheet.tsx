@@ -87,7 +87,7 @@ export default function VoiceSheet({
           return (
             <li
               key={item.key}
-              className="rounded-2xl border-2 border-mv-line bg-mv-sheet p-4"
+              className="rounded-[20px] border border-mv-line bg-mv-sheet p-4"
             >
               <p className="text-xl font-bold">{match?.description || item.spoken}</p>
               {match ? (

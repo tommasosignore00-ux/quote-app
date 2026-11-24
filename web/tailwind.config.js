@@ -15,6 +15,8 @@ module.exports = {
           muted: '#57534e',
           soft: '#f1ece3',
           mark: '#fff1e8',
+          input: '#78716c',
+          placeholder: '#78716c',
         },
       },
       fontFamily: {

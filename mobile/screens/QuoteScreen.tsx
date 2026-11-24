@@ -352,10 +352,10 @@ export default function QuoteScreen() {
 
   const templates = (['classic', 'minimal', 'professional', 'custom'] as const).filter((tpl) => tpl !== 'custom' || hasCustomTemplate);
   const templateInfo: Record<(typeof templates)[number], { name: string; desc: string }> = {
-    classic: { name: t('quote.classic') || 'Classico', desc: 'Intestazione in alto, righe con bordi' },
-    minimal: { name: t('quote.minimal') || 'Minimalista', desc: 'Poche linee, molto bianco' },
-    professional: { name: t('quote.professional') || 'Professionale', desc: 'Intestazione scura, totali in evidenza' },
-    custom: { name: t('quote.custom') || 'Personalizzato', desc: 'Il tuo modello caricato' },
+    classic: { name: 'Classico', desc: 'Intestazione in alto, righe con bordi' },
+    minimal: { name: 'Minimalista', desc: 'Poche linee, molto bianco' },
+    professional: { name: 'Professionale', desc: 'Intestazione scura, totali in evidenza' },
+    custom: { name: 'Personalizzato', desc: 'Il tuo modello caricato' },
   };
   const vatOptions: [string, string][] = [['', 'Del profilo'], ...VAT_PRESETS.map((rate) => [rate, `${rate}%`] as [string, string]), ['custom', 'Altra']];
   const clientName = lavoro.clienti?.name || '';

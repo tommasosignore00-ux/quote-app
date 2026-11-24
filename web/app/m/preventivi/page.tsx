@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Phone } from 'lucide-react';
+import { Clock, Lock, Phone, Send, XCircle } from 'lucide-react';
 import {
   fetchQuoteVersions,
   latestPerJob,
@@ -10,7 +10,7 @@ import {
   type QuoteStage,
   type QuoteVersionRow,
 } from '@/lib/quoteTracking';
-import { Notice, PageTitle, Sheet } from '@/components/m/ui';
+import { Chip, Notice, PageTitle, Sheet, StatusPill } from '@/components/m/ui';
 
 const FILTERS: Array<{ key: QuoteStage | 'all'; label: string }> = [
   { key: 'all', label: 'Tutti' },
@@ -20,16 +20,20 @@ const FILTERS: Array<{ key: QuoteStage | 'all'; label: string }> = [
   { key: 'rejected', label: 'Rifiutati' },
 ];
 
-const STAGE_STYLE: Record<QuoteStage, string> = {
-  accepted: 'bg-green-100 text-green-900',
-  rejected: 'bg-red-100 text-red-900',
-  sent: 'bg-amber-100 text-amber-900',
-  validated: 'bg-mv-soft text-mv-ink',
-};
+const STAGE_PILL = {
+  accepted: { kind: 'accepted', Icon: Lock },
+  rejected: { kind: 'refused', Icon: XCircle },
+  sent: { kind: 'waiting', Icon: Clock },
+  validated: { kind: 'toSend', Icon: Send },
+} as const;
 
 const date = (value: string | null) =>
   value
-    ? new Date(value).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })
+    ? new Date(value).toLocaleDateString('it-IT', {
+        day: '2-digit',
+        month: '2-digit',
+        year: '2-digit',
+      })
     : '';
 
 /** Days a sent quote has waited for an answer; shown from the third day. */
@@ -72,22 +76,19 @@ export default function MobileQuotes() {
 
   return (
     <main>
-      <PageTitle>Preventivi</PageTitle>
+      <PageTitle back="/m" backLabel="Lavori">
+        Preventivi
+      </PageTitle>
       <div className="flex gap-2 overflow-x-auto px-4 py-3">
         {FILTERS.map((item) => (
-          <button
+          <Chip
             key={item.key}
-            type="button"
-            aria-pressed={filter === item.key}
+            rounded
+            selected={filter === item.key}
             onClick={() => setFilter(item.key)}
-            className={`min-h-[56px] shrink-0 rounded-full px-5 text-lg font-bold ${
-              filter === item.key
-                ? 'bg-primary text-white'
-                : 'border-2 border-mv-line bg-mv-sheet'
-            }`}
           >
             {item.label}
-          </button>
+          </Chip>
         ))}
       </div>
       <div className="space-y-3 px-4">
@@ -95,7 +96,11 @@ export default function MobileQuotes() {
           <Notice tone="error">Preventivi non caricati. Riprova tra poco.</Notice>
         ) : null}
         {loaded && !error && !visible.length ? (
-          <Notice>Nessun preventivo in questa sezione.</Notice>
+          <Notice>
+            {rows.length
+              ? 'Nessun preventivo in questa sezione.'
+              : 'Qui trovi i preventivi che mandi. Si preparano da un lavoro.'}
+          </Notice>
         ) : null}
         {visible.map((row) => {
           const stage = quoteStage(row);
@@ -104,33 +109,40 @@ export default function MobileQuotes() {
           return (
             <article
               key={row.id}
-              className="rounded-2xl border-2 border-mv-line bg-mv-sheet p-4"
+              className="rounded-[20px] border border-mv-line bg-mv-sheet p-4"
             >
               <button
                 type="button"
                 onClick={() => open(row)}
-                className="block w-full text-left"
+                className="flex w-full flex-col gap-2 text-left active:opacity-70"
               >
-                <p className="text-xl font-bold">
+                <p className="line-clamp-2 text-xl font-bold">
                   {row.lavori?.clienti?.name || '—'} · {row.lavori?.title || '—'}
                 </p>
-                <span
-                  className={`mt-2 inline-block rounded-lg px-3 py-1 text-base font-bold ${STAGE_STYLE[stage]}`}
+                <StatusPill
+                  kind={STAGE_PILL[stage].kind}
+                  icon={(() => {
+                    const Icon = stage === 'accepted' ? Lock : STAGE_PILL[stage].Icon;
+                    return <Icon className="h-5 w-5" />;
+                  })()}
                 >
                   {STAGE_LABELS[stage]}
-                </span>
-                <p className="mt-2 text-base text-mv-muted">
+                </StatusPill>
+                <p className="text-base font-semibold text-mv-muted">
                   Revisione {row.revision}
-                  {row.sent_at ? ` · inviato il ${date(row.sent_at)}` : ''}
-                  {row.client_decision_at
-                    ? ` · risposta il ${date(row.client_decision_at)}`
-                    : ''}
+                  {row.sent_at ? ` · Inviato il ${date(row.sent_at)}` : ''}
                 </p>
+                {row.client_decision ? (
+                  <p className="text-base font-semibold">
+                    {row.client_decision === 'accepted' ? 'Accettato' : 'Rifiutato'} il{' '}
+                    {date(row.client_decision_at)}
+                  </p>
+                ) : null}
               </button>
               {waiting >= 3 ? (
                 <div className="mt-3">
-                  <p className="text-lg font-bold text-amber-900">
-                    In attesa da {waiting} giorni
+                  <p className="flex items-center gap-1.5 text-lg font-bold text-amber-800">
+                    <Clock className="h-[22px] w-[22px]" /> In attesa da {waiting} giorni
                   </p>
                   {phone ? (
                     <a

@@ -1,13 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { ChevronRight, Plus } from 'lucide-react';
+import { CheckCircle2, Plus, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import {
   clientUnitPrice,
-  euro,
   rememberJob,
   rememberedJob,
   type Cliente,
@@ -15,20 +12,33 @@ import {
 } from '@/lib/mobileWeb';
 import { useMobileProfile } from '@/components/m/profile';
 import Dictation from '@/components/m/Dictation';
-import { Button, Field, Notice, Sheet, inputClass } from '@/components/m/ui';
+import JobRow from '@/components/m/JobRow';
+import {
+  Button,
+  Field,
+  ListGroup,
+  Notice,
+  PageTitle,
+  SectionHeader,
+  Sheet,
+  TextAction,
+  inputClass,
+} from '@/components/m/ui';
 
 type JobWithTotal = Lavoro & { total: number };
 
 export default function MobileHome() {
   const profile = useMobileProfile();
-  const router = useRouter();
   const [clienti, setClienti] = useState<Cliente[]>([]);
   const [lavori, setLavori] = useState<JobWithTotal[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [newJobOpen, setNewJobOpen] = useState(false);
-  const [pickHint, setPickHint] = useState(false);
   const [lastAdded, setLastAdded] = useState<string | null>(null);
+  /** Open while dictated lines wait for their job. */
+  const [picking, setPicking] = useState<
+    ((choice: { job: Lavoro; clientName: string } | null) => void) | null
+  >(null);
 
   const load = useCallback(async () => {
     const [{ data: c }, { data: l }] = await Promise.all([
@@ -86,108 +96,95 @@ export default function MobileHome() {
   const choose = (id: string | null) => {
     rememberJob(id);
     setCurrentId(id);
-    setPickHint(false);
+  };
+
+  const chooseJob = () =>
+    new Promise<{ job: Lavoro; clientName: string } | null>((resolve) => {
+      setPicking(() => resolve);
+    });
+
+  const picked = (job: Lavoro | null) => {
+    picking?.(job ? { job, clientName: clientName(job) } : null);
+    setPicking(null);
   };
 
   return (
-    <main className="px-4 pt-4">
-      <header className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Lavori</h1>
-        <span className="truncate text-base text-mv-muted">{profile.companyName}</span>
-      </header>
-
-      {current ? (
-        <section
-          className="mb-6 rounded-2xl border-2 border-mv-ink bg-mv-sheet p-4"
-          aria-label="Lavoro attivo"
-        >
-          <p className="text-base text-mv-muted">Stai aggiungendo a</p>
-          <p className="text-xl font-bold">
-            {clientName(current)} · {current.title}
-          </p>
-          {lastAdded ? (
-            <p className="mt-1 text-base font-semibold text-green-800">✓ {lastAdded}</p>
-          ) : null}
-          <div className="mt-3 grid grid-cols-2 gap-3">
+    <main>
+      <PageTitle brand>Lavori</PageTitle>
+      <div className="px-4">
+        {current ? (
+          <section
+            className="mt-2 flex items-center gap-3 rounded-[20px] border-2 border-mv-ink bg-mv-sheet p-4"
+            aria-label="Lavoro attivo"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-base font-semibold text-mv-muted">Stai aggiungendo a</p>
+              <p className="line-clamp-2 text-xl font-bold">
+                {clientName(current) || '—'} · {current.title}
+              </p>
+              {lastAdded ? (
+                <p className="mt-1 flex items-center gap-1.5 truncate text-base font-semibold">
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-green-800" /> {lastAdded}
+                </p>
+              ) : null}
+            </div>
             <Button
               variant="secondary"
-              onClick={() => router.push(`/m/lavoro/${current.id}`)}
+              className="min-h-[64px] shrink-0"
+              onClick={() => {
+                choose(null);
+                setLastAdded(null);
+              }}
+              aria-label="Chiudi: le prossime voci chiederanno cliente e lavoro"
             >
-              Apri il lavoro
+              <X className="h-5 w-5" /> Chiudi
             </Button>
-            <Button variant="secondary" onClick={() => choose(null)}>
-              Cambia
-            </Button>
-          </div>
+          </section>
+        ) : (
+          <p className="mt-2 text-center text-base font-semibold text-mv-muted">
+            Detta: ti chiedo dopo per quale cliente e lavoro.
+          </p>
+        )}
+
+        <section className="mt-8 flex flex-col items-center">
+          <Dictation
+            job={current}
+            clientName={clientName(current)}
+            chooseJob={chooseJob}
+            onSaved={(rows, job) => {
+              choose(job.id);
+              setLastAdded(
+                rows.length === 1
+                  ? `Aggiunta: ${rows[0].description}`
+                  : `Aggiunte ${rows.length} voci`
+              );
+              load();
+            }}
+          />
         </section>
-      ) : null}
 
-      <section className="mb-8 flex flex-col items-center">
-        <Dictation
-          job={current}
-          clientName={clientName(current)}
-          onNeedJob={() => setPickHint(true)}
-          onSaved={(rows) => {
-            setLastAdded(
-              rows.length === 1
-                ? `Aggiunta: ${rows[0].description}`
-                : `Aggiunte ${rows.length} voci`
-            );
-            load();
-          }}
+        <SectionHeader
+          title="Lavori recenti"
+          action={<TextAction href="/m/clienti">Tutti i clienti</TextAction>}
         />
-        {pickHint ? (
-          <div className="mt-4 w-full">
-            <Notice>
-              Prima scegli il lavoro qui sotto, oppure crea un nuovo lavoro.
-            </Notice>
-          </div>
-        ) : null}
-      </section>
-
-      <section aria-labelledby="recenti">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 id="recenti" className="text-xl font-bold">
-            Lavori recenti
-          </h2>
-        </div>
         {loaded && !lavori.length ? (
-          <Notice>Non hai ancora lavori. Crea il primo per iniziare a dettare.</Notice>
-        ) : null}
-        <ul className="divide-y divide-mv-line overflow-hidden rounded-2xl border-2 border-mv-line bg-mv-sheet">
-          {lavori.slice(0, 8).map((job) => (
-            <li key={job.id} className="flex items-stretch">
-              <button
-                type="button"
-                onClick={() => choose(job.id)}
-                aria-pressed={job.id === currentId}
-                className={`flex min-h-[72px] flex-1 flex-col justify-center px-4 text-left ${job.id === currentId ? 'bg-mv-mark' : ''}`}
-              >
-                <span className="text-lg font-bold">{job.title}</span>
-                <span className="text-base text-mv-muted">
-                  {clientName(job)} · {euro(job.total)}
-                </span>
-              </button>
-              <Link
-                href={`/m/lavoro/${job.id}`}
-                onClick={() => rememberJob(job.id)}
-                aria-label={`Apri ${job.title}`}
-                className="flex w-16 items-center justify-center border-l border-mv-line"
-              >
-                <ChevronRight className="h-7 w-7" />
-              </Link>
-            </li>
-          ))}
-        </ul>
-        <Button
-          big
-          variant="secondary"
-          className="mt-4 w-full"
-          onClick={() => setNewJobOpen(true)}
-        >
-          <Plus className="h-6 w-6" /> Nuovo lavoro
-        </Button>
-      </section>
+          <Notice>
+            Tocca il microfono e detta la prima voce, per esempio: «sei metri di trave IPE
+            120».
+          </Notice>
+        ) : (
+          <ListGroup>
+            {lavori.slice(0, 8).map((job) => (
+              <li key={job.id}>
+                <JobRow job={job} clientName={clientName(job)} />
+              </li>
+            ))}
+          </ListGroup>
+        )}
+        <TextAction className="mt-2" onClick={() => setNewJobOpen(true)}>
+          <Plus className="h-5 w-5" /> Nuovo lavoro
+        </TextAction>
+      </div>
 
       <NewJobSheet
         open={newJobOpen}
@@ -200,7 +197,86 @@ export default function MobileHome() {
           load();
         }}
       />
+
+      <PickJobSheet
+        open={picking !== null}
+        lavori={lavori}
+        clienti={clienti}
+        profileId={profile.id}
+        clientName={clientName}
+        onPicked={picked}
+      />
     </main>
+  );
+}
+
+/** After dictating with no job: pick where the lines go, or make a new job. */
+function PickJobSheet({
+  open,
+  lavori,
+  clienti,
+  profileId,
+  clientName,
+  onPicked,
+}: {
+  open: boolean;
+  lavori: JobWithTotal[];
+  clienti: Cliente[];
+  profileId: string;
+  clientName: (job: Lavoro) => string;
+  onPicked: (job: Lavoro | null) => void;
+}) {
+  const [creating, setCreating] = useState(false);
+  if (creating) {
+    return (
+      <NewJobSheet
+        open={open}
+        clienti={clienti}
+        profileId={profileId}
+        onClose={() => setCreating(false)}
+        onCreated={async (id) => {
+          setCreating(false);
+          const { data } = await supabase
+            .from('lavori')
+            .select(
+              'id, title, cliente_id, status, updated_at, vat_percent, clienti(name)'
+            )
+            .eq('id', id)
+            .single();
+          onPicked((data as unknown as Lavoro) || null);
+        }}
+      />
+    );
+  }
+  return (
+    <Sheet open={open} onClose={() => onPicked(null)} title="In quale lavoro?">
+      {lavori.length ? (
+        <ul className="mb-4 divide-y divide-mv-line overflow-hidden rounded-[20px] border border-mv-line bg-mv-sheet">
+          {lavori.slice(0, 12).map((job) => (
+            <li key={job.id}>
+              <button
+                type="button"
+                onClick={() => onPicked(job)}
+                className="flex min-h-[72px] w-full flex-col justify-center px-4 py-3 text-left active:bg-mv-soft"
+              >
+                <span className="text-xl font-bold">{job.title}</span>
+                <span className="text-base font-semibold text-mv-muted">
+                  {clientName(job)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <div className="grid gap-3">
+        <Button big onClick={() => setCreating(true)}>
+          <Plus className="h-6 w-6" /> Nuovo lavoro
+        </Button>
+        <Button big variant="secondary" onClick={() => onPicked(null)}>
+          Annulla
+        </Button>
+      </div>
+    </Sheet>
   );
 }
 
@@ -226,8 +302,9 @@ function NewJobSheet({
   const create = async () => {
     setError(null);
     if (!title.trim()) return setError('Scrivi il nome del lavoro.');
-    if (!clienteId && !newClient.trim())
-      {return setError('Scegli un cliente o scrivine uno nuovo.');}
+    if (!clienteId && !newClient.trim()) {
+      return setError('Scegli un cliente o scrivine uno nuovo.');
+    }
     setSaving(true);
     let id = clienteId;
     if (!id) {

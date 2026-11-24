@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Download, Mail, Send } from 'lucide-react';
+import { Download, FileText, Mail, Send } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { supabase } from '@/lib/supabase';
@@ -11,7 +11,15 @@ import { normalizeCountryCode, resolveVatPercent } from '@/lib/constants';
 import { generateQuoteHTML, quoteLineExtras, type QuoteData } from '@/lib/QuoteTemplate';
 import { lacksPrice } from '@/lib/mobileWeb';
 import { useMobileProfile } from '@/components/m/profile';
-import { Button, Field, Notice, PageTitle, Sheet, inputClass } from '@/components/m/ui';
+import {
+  Button,
+  Chip,
+  Field,
+  Notice,
+  PageTitle,
+  Sheet,
+  inputClass,
+} from '@/components/m/ui';
 
 const VAT_PRESETS = ['22', '10', '5', '4', '0'];
 
@@ -287,38 +295,36 @@ export default function MobileQuote() {
 
   return (
     <main className="pb-6">
-      <PageTitle back={`/m/lavoro/${id}`}>Preventivo</PageTitle>
-      <div className="px-4 pt-4">
-        <p className="text-lg font-bold">
-          {clientName} · {title}
-        </p>
-        <p className="mb-5 text-base text-mv-muted">
-          Revisione {String(revision).padStart(2, '0')}
-        </p>
+      <PageTitle back={`/m/lavoro/${id}`} backLabel={title || 'Lavoro'}>
+        Crea Preventivo
+      </PageTitle>
+      <div className="px-4 pt-2">
+        <div className="mb-6 rounded-[20px] border border-mv-line bg-mv-sheet p-4">
+          <p className="line-clamp-2 text-xl font-bold">
+            {clientName} · {title}
+          </p>
+          <p className="text-base font-semibold text-mv-muted">
+            Revisione {String(revision).padStart(2, '0')} · IVA esclusa
+          </p>
+        </div>
 
-        <p className="mb-2 text-lg font-bold">IVA del preventivo</p>
+        <h2 className="mb-3 text-[22px] font-bold">IVA del preventivo</h2>
         <div className="mb-3 flex flex-wrap gap-2">
           {[
             ['', 'Del profilo'],
             ...VAT_PRESETS.map((rate) => [rate, `${rate}%`]),
             ['custom', 'Altra'],
           ].map(([value, label]) => (
-            <button
+            <Chip
               key={value || 'profile'}
-              type="button"
-              aria-pressed={vat === value}
+              selected={vat === value}
               onClick={() => {
                 setVat(value);
                 if (value !== 'custom') saveVat(value, '');
               }}
-              className={`min-h-[56px] min-w-[64px] rounded-xl border-2 px-4 text-lg font-bold ${
-                vat === value
-                  ? 'border-primary bg-primary text-white'
-                  : 'border-mv-line bg-mv-sheet'
-              }`}
             >
               {label}
-            </button>
+            </Chip>
           ))}
         </div>
         {vat === 'custom' ? (
@@ -338,30 +344,24 @@ export default function MobileQuote() {
 
         {hasCustom ? (
           <>
-            <p className="mb-2 text-lg font-bold">Modello</p>
-            <div className="mb-5 grid grid-cols-2 gap-2">
+            <h2 className="mb-3 text-[22px] font-bold">Modello del preventivo</h2>
+            <div className="mb-5 flex flex-wrap gap-2">
               {(
                 [
                   ['classic', 'Standard'],
                   ['custom', 'Il tuo modello'],
                 ] as const
               ).map(([value, label]) => (
-                <button
+                <Chip
                   key={value}
-                  type="button"
-                  aria-pressed={template === value}
+                  selected={template === value}
                   onClick={() => {
                     setTemplate(value);
                     setHtml('');
                   }}
-                  className={`min-h-[56px] rounded-xl border-2 text-lg font-bold ${
-                    template === value
-                      ? 'border-primary bg-primary text-white'
-                      : 'border-mv-line bg-mv-sheet'
-                  }`}
                 >
                   {label}
-                </button>
+                </Chip>
               ))}
             </div>
           </>
@@ -375,7 +375,8 @@ export default function MobileQuote() {
 
         {!html ? (
           <Button big className="w-full" onClick={preview} disabled={busy}>
-            {busy ? 'Preparo…' : 'Mostra il preventivo'}
+            <FileText className="h-6 w-6" />
+            {busy ? 'Preparo…' : 'Prepara il preventivo'}
           </Button>
         ) : (
           <>

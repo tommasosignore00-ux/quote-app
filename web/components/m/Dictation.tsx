@@ -21,16 +21,19 @@ type Props = {
   job: Lavoro | null;
   clientName: string;
   size?: 'big' | 'small';
-  /** Shown when there is no job to add to. */
-  onNeedJob?: () => void;
-  onSaved: (rows: Costo[]) => void;
+  /**
+   * Like the app: with no job yet you dictate first, and the job is asked when you
+   * confirm the lines. Resolves to null when the user gives up.
+   */
+  chooseJob?: () => Promise<{ job: Lavoro; clientName: string } | null>;
+  onSaved: (rows: Costo[], job: Lavoro) => void;
 };
 
 export default function Dictation({
   job,
   clientName,
   size = 'big',
-  onNeedJob,
+  chooseJob,
   onSaved,
 }: Props) {
   const profile = useMobileProfile();
@@ -42,7 +45,6 @@ export default function Dictation({
   const [message, setMessage] = useState<string | null>(null);
 
   const recorder = useVoiceRecorder(async (blob) => {
-    if (!job) return;
     try {
       const result = await sendDictation(blob, {
         appLanguage: 'it',
@@ -55,12 +57,16 @@ export default function Dictation({
           defaultVatRate: profile.vatPercent,
           vatMode: 'standard',
         },
-        currentCustomer: {
-          id: job.cliente_id,
-          name: clientName,
-          companyName: clientName,
-        },
-        currentJob: { id: job.id, customerId: job.cliente_id, title: job.title },
+        ...(job
+          ? {
+              currentCustomer: {
+                id: job.cliente_id,
+                name: clientName,
+                companyName: clientName,
+              },
+              currentJob: { id: job.id, customerId: job.cliente_id, title: job.title },
+            }
+          : {}),
       });
       const { items, message: problem } = await draftFromResult(result, profile.id);
       if (problem) setMessage(problem);
@@ -73,19 +79,21 @@ export default function Dictation({
   const press = () => {
     setMessage(null);
     recorder.setError(null);
-    if (!job) {
-      onNeedJob?.();
-      return;
-    }
+    if (!job && !chooseJob) return;
     recorder.toggle();
   };
 
   const confirm = async (items: VoiceDraftItem[]) => {
-    if (!job) return;
+    let target = job;
+    if (!target) {
+      const chosen = await chooseJob?.();
+      if (!chosen) return;
+      target = chosen.job;
+    }
     setSaving(true);
     const { data, error } = await supabase
       .from('preventivi_dettaglio')
-      .insert(draftRows(items, job.id, profile.materialMarkup))
+      .insert(draftRows(items, target.id, profile.materialMarkup))
       .select('*');
     setSaving(false);
     if (error) {
@@ -95,11 +103,11 @@ export default function Dictation({
     supabase
       .from('lavori')
       .update({ updated_at: new Date().toISOString() })
-      .eq('id', job.id)
+      .eq('id', target.id)
       .then(() => {});
     setDraft(null);
     navigator.vibrate?.(30);
-    onSaved((data || []) as Costo[]);
+    onSaved((data || []) as Costo[], target);
   };
 
   const problem = message || recorder.error;
@@ -122,7 +130,7 @@ export default function Dictation({
           open
           transcript={draft.transcript}
           initialItems={draft.items}
-          jobLabel={`${clientName} · ${job?.title || ''}`}
+          jobLabel={job ? `${clientName} · ${job.title}` : 'Dopo ti chiedo il lavoro'}
           profileMarkup={profile.materialMarkup}
           saving={saving}
           onConfirm={confirm}

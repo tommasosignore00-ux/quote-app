@@ -8,7 +8,15 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { FileText, Hammer, Mic, Square, User } from 'lucide-react';
+import {
+  ChevronLeft,
+  CircleUser,
+  FileText,
+  Hammer,
+  Mic,
+  Square,
+  Tags,
+} from 'lucide-react';
 
 type Variant = 'primary' | 'secondary' | 'danger';
 
@@ -33,22 +41,129 @@ export function Button({
   );
 }
 
-export function PageTitle({ children, back }: { children: ReactNode; back?: string }) {
+const BACK_PILL =
+  'flex min-h-[48px] min-w-0 max-w-[180px] items-center gap-0.5 rounded-full bg-white py-2 pl-2 pr-4 text-lg font-semibold text-mv-ink shadow-[0_2px_10px_rgba(15,23,42,0.08)] active:opacity-60';
+
+/**
+ * Header like the app's: paper background, centered title, a white "‹ Lavori" pill on
+ * the left (or the brand mark on the home screen).
+ */
+export function PageTitle({
+  children,
+  back,
+  onBack,
+  backLabel = 'Indietro',
+  brand = false,
+}: {
+  children: ReactNode;
+  back?: string;
+  /** Back inside the same page (e.g. from a list item to the list). */
+  onBack?: () => void;
+  backLabel?: string;
+  brand?: boolean;
+}) {
   return (
-    <header className="sticky top-0 z-20 flex min-h-[60px] items-center gap-2 border-b border-mv-line bg-mv-paper px-2">
-      {back ? (
-        <Link
-          href={back}
-          aria-label="Indietro"
-          className="flex h-12 w-12 items-center justify-center rounded-full text-3xl text-mv-ink"
-        >
-          ‹
-        </Link>
-      ) : (
-        <span className="w-3" />
-      )}
-      <h1 className="truncate text-xl font-bold">{children}</h1>
+    <header className="sticky top-0 z-20 grid min-h-[64px] grid-cols-[1fr_auto_1fr] items-center gap-2 bg-mv-paper px-4 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
+      <div className="flex min-w-0 justify-start">
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label={`Indietro: ${backLabel}`}
+            className={BACK_PILL}
+          >
+            <ChevronLeft className="h-7 w-7 shrink-0" strokeWidth={2.25} />
+            <span className="truncate">{backLabel}</span>
+          </button>
+        ) : back ? (
+          <Link href={back} aria-label={`Indietro: ${backLabel}`} className={BACK_PILL}>
+            <ChevronLeft className="h-7 w-7 shrink-0" strokeWidth={2.25} />
+            <span className="truncate">{backLabel}</span>
+          </Link>
+        ) : brand ? (
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-[0_2px_10px_rgba(15,23,42,0.08)]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/icon-192.png" alt="Mastrovoce" className="h-8 w-8 rounded-[8px]" />
+          </span>
+        ) : null}
+      </div>
+      <h1 className="max-w-[55vw] truncate text-center text-xl font-bold">{children}</h1>
+      <div />
     </header>
+  );
+}
+
+/** Orange text action, like the app's "Tutti i clienti" or "Nuovo lavoro". */
+export function TextAction({
+  href,
+  onClick,
+  children,
+  className = '',
+}: {
+  href?: string;
+  onClick?: () => void;
+  children: ReactNode;
+  className?: string;
+}) {
+  const style = `inline-flex min-h-[48px] items-center gap-1.5 text-lg font-semibold text-primary underline underline-offset-4 ${className}`;
+  return href ? (
+    <Link href={href} className={style}>
+      {children}
+    </Link>
+  ) : (
+    <button type="button" onClick={onClick} className={style}>
+      {children}
+    </button>
+  );
+}
+
+/** White card with thin dividers, like the app's lists. */
+export function ListGroup({ children }: { children: ReactNode }) {
+  return (
+    <ul className="divide-y divide-mv-line overflow-hidden rounded-[20px] border border-mv-line bg-mv-sheet">
+      {children}
+    </ul>
+  );
+}
+
+/** Section title with an optional action on the right. */
+export function SectionHeader({ title, action }: { title: string; action?: ReactNode }) {
+  return (
+    <div className="mb-3 mt-8 flex items-center justify-between gap-3">
+      <h2 className="text-[22px] font-bold leading-7">{title}</h2>
+      {action}
+    </div>
+  );
+}
+
+/** Choice chip: selected is ink with a check, the others outlined. */
+export function Chip({
+  selected,
+  onClick,
+  children,
+  rounded = false,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  children: ReactNode;
+  rounded?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onClick}
+      className={`inline-flex min-h-[56px] min-w-[64px] shrink-0 items-center justify-center gap-1.5 border-2 px-4 text-[17px] font-bold ${
+        rounded ? 'rounded-full' : 'rounded-xl'
+      } ${
+        selected
+          ? 'border-mv-ink bg-mv-ink text-white'
+          : 'border-mv-input bg-mv-sheet text-mv-ink active:bg-mv-soft'
+      }`}
+    >
+      {selected ? <span aria-hidden>✓</span> : null}
+      {children}
+    </button>
   );
 }
 
@@ -105,7 +220,7 @@ export function Field({ label, children }: { label: string; children: ReactNode 
 }
 
 export const inputClass =
-  'block w-full min-h-[56px] rounded-xl border-2 border-mv-line bg-mv-sheet px-4 text-lg text-mv-ink focus:border-primary focus:outline-none';
+  'block w-full min-h-[56px] rounded-xl border-2 border-mv-input bg-mv-sheet px-4 text-lg text-mv-ink placeholder:text-mv-placeholder focus:border-primary focus:outline-none';
 
 /** The big microphone. Recording changes shape and shows the time, not only the color. */
 export function MicButton({
@@ -124,8 +239,8 @@ export function MicButton({
 }) {
   const recording = state === 'recording';
   const busy = state === 'processing';
-  const dim = size === 'big' ? 'h-[200px] w-[200px]' : 'h-[84px] w-[84px]';
-  const icon = size === 'big' ? 'h-20 w-20' : 'h-9 w-9';
+  const dim = size === 'big' ? 'h-[220px] w-[220px]' : 'h-[84px] w-[84px]';
+  const icon = size === 'big' ? 'h-24 w-24' : 'h-10 w-10';
   const time = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
   const label = busy
     ? 'Sto capendo…'
@@ -139,7 +254,7 @@ export function MicButton({
         onClick={onPress}
         disabled={busy}
         aria-label={busy ? 'Sto capendo' : recording ? 'Ferma la registrazione' : 'Parla'}
-        className={`${dim} flex items-center justify-center text-white shadow-lg transition-all ${
+        className={`${dim} flex items-center justify-center text-white shadow-[0_4px_8px_rgba(15,23,42,0.18)] transition-all ${
           recording
             ? 'rounded-[28%] bg-danger ring-8 ring-red-200 motion-safe:animate-pulse'
             : 'rounded-full bg-primary active:bg-primary-dark'
@@ -170,7 +285,7 @@ export function MicButton({
       ) : null}
       {size === 'big' ? (
         <p
-          className={`text-xl font-bold ${recording ? 'text-danger' : 'text-mv-ink'}`}
+          className={`text-xl font-semibold ${recording ? 'text-danger' : 'text-mv-ink'}`}
           aria-live="polite"
         >
           {label}
@@ -190,36 +305,72 @@ export function MicButton({
 const TABS = [
   { href: '/m', label: 'Lavori', Icon: Hammer },
   { href: '/m/preventivi', label: 'Preventivi', Icon: FileText },
-  { href: '/m/profilo', label: 'Profilo', Icon: User },
+  { href: '/m/listini', label: 'Listini', Icon: Tags },
+  { href: '/m/profilo', label: 'Profilo', Icon: CircleUser },
 ];
 
+/** Same bar as the app: four tabs, the active one orange with a small bar on top. */
 export function TabBar() {
   const pathname = usePathname();
+  // Like the app, a job and its quote use the whole screen: no tab bar there.
+  if (pathname.startsWith('/m/lavoro')) return null;
   return (
     <nav
       aria-label="Sezioni"
-      className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t border-mv-line bg-mv-paper pb-[env(safe-area-inset-bottom)]"
+      className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-mv-line bg-mv-paper pb-[env(safe-area-inset-bottom)]"
     >
       {TABS.map(({ href, label, Icon }) => {
         const active =
           href === '/m'
-            ? pathname === '/m' || pathname.startsWith('/m/lavoro')
+            ? pathname === '/m' || pathname.startsWith('/m/clienti')
             : pathname.startsWith(href);
         return (
           <Link
             key={href}
             href={href}
             aria-current={active ? 'page' : undefined}
-            className={`flex min-h-[64px] flex-col items-center justify-center gap-1 text-base font-semibold ${
-              active ? 'text-primary' : 'text-mv-muted'
+            className={`relative flex min-h-[64px] flex-col items-center justify-center gap-0.5 pt-1 text-base ${
+              active ? 'font-bold text-primary' : 'font-semibold text-mv-muted'
             }`}
           >
-            <Icon className="h-6 w-6" />
+            {active ? (
+              <span className="absolute top-0 h-[3px] w-8 rounded-full bg-primary" />
+            ) : null}
+            <Icon className="h-[26px] w-[26px]" strokeWidth={active ? 2.4 : 1.8} />
             {label}
           </Link>
         );
       })}
     </nav>
+  );
+}
+
+type PillKind = 'accepted' | 'waiting' | 'toSend' | 'refused' | 'locked';
+const PILL: Record<PillKind, string> = {
+  accepted: 'bg-green-100 text-green-800',
+  waiting: 'bg-amber-100 text-amber-800',
+  toSend: 'bg-mv-soft text-mv-ink',
+  refused: 'bg-red-50 text-danger',
+  locked: 'bg-mv-soft text-mv-ink',
+};
+
+/** State in words with an icon, like the app's pills. */
+export function StatusPill({
+  kind,
+  children,
+  icon,
+}: {
+  kind: PillKind;
+  children: ReactNode;
+  icon?: ReactNode;
+}) {
+  return (
+    <span
+      className={`inline-flex min-h-[36px] items-center gap-1.5 self-start rounded-full px-3 text-base font-bold ${PILL[kind]}`}
+    >
+      {icon}
+      {children}
+    </span>
   );
 }
 

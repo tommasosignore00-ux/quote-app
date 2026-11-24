@@ -16,9 +16,11 @@ export default function MobileProfile() {
 
   return (
     <main>
-      <PageTitle>Profilo</PageTitle>
+      <PageTitle back="/m" backLabel="Lavori">
+        Profilo
+      </PageTitle>
       <div className="space-y-6 px-4 pt-4">
-        <section className="rounded-2xl border-2 border-mv-line bg-mv-sheet p-4">
+        <section className="rounded-[20px] border border-mv-line bg-mv-sheet p-4">
           <p className="text-base text-mv-muted">La tua azienda</p>
           <p className="text-xl font-bold">{profile.companyName || '—'}</p>
           <p className="mt-2 text-base text-mv-muted">
@@ -29,7 +31,7 @@ export default function MobileProfile() {
           </p>
         </section>
 
-        <section className="rounded-2xl border-2 border-mv-line bg-mv-sheet p-4">
+        <section className="rounded-[20px] border border-mv-line bg-mv-sheet p-4">
           <h2 className="mb-3 text-xl font-bold">Mettila sulla schermata Home</h2>
           <ol className="space-y-3 text-lg">
             <li className="flex gap-3">

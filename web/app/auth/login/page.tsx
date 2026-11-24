@@ -17,8 +17,9 @@ export default function LoginPage() {
   const [code, setCode] = useState('');
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('mfa') === '1')
-      {setNeedsCode(true);}
+    if (new URLSearchParams(window.location.search).get('mfa') === '1') {
+      setNeedsCode(true);
+    }
   }, []);
 
   const continueToApp = async (userId: string) => {
@@ -123,48 +124,66 @@ export default function LoginPage() {
     );
   }
 
+  // On a phone the page looks like the app's login; the computer keeps its look.
+  const input =
+    'w-full border rounded-lg px-3 py-2 max-md:min-h-[56px] max-md:rounded-xl max-md:border-2 max-md:border-mv-input max-md:bg-white max-md:px-4 max-md:text-lg max-md:focus:border-primary max-md:focus:outline-none';
+  const label =
+    'block text-sm font-medium mb-1 max-md:text-base max-md:font-semibold max-md:mb-1.5';
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4 max-md:items-start max-md:bg-mv-paper max-md:p-0 max-md:font-sans max-md:text-mv-ink">
       <form
         onSubmit={handleLogin}
-        className="w-full max-w-md bg-white rounded-xl shadow-lg p-6"
+        className="w-full max-w-md bg-white rounded-xl shadow-lg p-6 max-md:max-w-none max-md:rounded-none max-md:bg-transparent max-md:px-4 max-md:pt-[max(1rem,env(safe-area-inset-top))] max-md:shadow-none"
       >
-        <h1 className="text-2xl font-bold mb-6">{t('auth.login')}</h1>
-        <div className="space-y-4">
+        <h1 className="text-2xl font-bold mb-6 max-md:mb-10 max-md:flex max-md:min-h-[56px] max-md:items-center max-md:justify-center max-md:text-xl">
+          {t('auth.login')}
+        </h1>
+        <div className="space-y-4 max-md:space-y-5">
           <div>
-            <label className="block text-sm font-medium mb-1">{t('auth.email')}</label>
+            <label className={label}>{t('auth.email')}</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full border rounded-lg px-3 py-2"
+              autoComplete="email"
+              placeholder="Es. mario.rossi@email.it"
+              className={`${input} max-md:placeholder:text-mv-placeholder md:placeholder:text-transparent`}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">{t('auth.password')}</label>
+            <label className={label}>{t('auth.password')}</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full border rounded-lg px-3 py-2"
+              autoComplete="current-password"
+              className={input}
             />
             <div className="mt-2 text-right">
               <Link
                 href="/auth/forgot-password"
-                className="text-sm text-primary hover:underline"
+                className="text-sm text-primary hover:underline max-md:inline-flex max-md:min-h-[48px] max-md:items-center max-md:text-base max-md:font-semibold max-md:underline"
               >
                 Password dimenticata?
               </Link>
             </div>
           </div>
-          <button type="submit" disabled={loading} className="w-full btn-primary">
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full btn-primary max-md:min-h-[64px] max-md:bg-primary max-md:active:bg-primary-dark max-md:rounded-xl max-md:text-xl max-md:font-bold"
+          >
             {loading ? '...' : t('auth.login')}
           </button>
         </div>
-        <p className="mt-4 text-center text-sm text-slate-500">
-          <Link href="/auth/register" className="text-primary hover:underline">
+        <p className="mt-4 text-center text-sm text-slate-500 max-md:mt-6 max-md:text-lg">
+          <Link
+            href="/auth/register"
+            className="text-primary hover:underline max-md:font-semibold max-md:underline max-md:underline-offset-4"
+          >
+            <span className="md:hidden">Non hai un account? </span>
             {t('auth.register')}
           </Link>
         </p>

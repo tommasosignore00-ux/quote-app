@@ -48,7 +48,7 @@ export default function MobileLayout({ children }: { children: ReactNode }) {
 
   if (loading || !mobileProfile) {
     return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-mv-paper text-xl text-mv-ink">
+      <div className="flex min-h-[100dvh] items-center justify-center bg-mv-paper font-sans text-xl text-mv-ink">
         Caricamento…
       </div>
     );
@@ -56,7 +56,7 @@ export default function MobileLayout({ children }: { children: ReactNode }) {
 
   return (
     <ProfileContext.Provider value={mobileProfile}>
-      <div className="min-h-[100dvh] bg-mv-paper pb-[calc(80px+env(safe-area-inset-bottom))] font-mv-text text-base text-mv-ink">
+      <div className="min-h-[100dvh] bg-mv-paper pb-[calc(80px+env(safe-area-inset-bottom))] font-sans text-base text-mv-ink antialiased">
         {children}
       </div>
       <TabBar />
