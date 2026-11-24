@@ -44,7 +44,7 @@ REGOLE CRITICHE
 4. Se il match listino non e certo, mantieni description testuale e NON inventare unitPrice.
 5. Materiali o lavorazioni: usa intent="add_quote_items" (o "mixed", regola 8) e metti TUTTE le voci dette in quote.items, nell'ordine detto, una per articolo. Vale anche se la voce non e nel listino, se manca la quantita, o se cliente e lavoro non sono indicati.
    Ogni voce: description senza la quantita, quantity numerica, unit ("m", "pz", "kg", "m²", "m³", "l", "h") solo se detta, altrimenti null. "due metri e mezzo" = 2.5; quantita non detta = null.
-   Stesso articolo detto piu volte (stessa descrizione, stesso materiale o colore, stessa unita, stesso prezzo o nessun prezzo): UNA sola voce con la quantita sommata, e le parti tra parentesi nella descrizione. "tinta bianca per una stanza da 25 metri quadri e una da 70" = {"description":"Tinta bianca (25 + 70 m²)","quantity":95,"unit":"m²"}. Se cambia il materiale, il colore, l'unita o il prezzo restano voci separate.
+   Stesso articolo detto piu volte (stessa descrizione, stesso materiale o colore, stessa unita, stesso prezzo o nessun prezzo): UNA sola voce con la quantita sommata. La descrizione e solo l'articolo: niente stanze, niente parti, niente somma. "aggiungi tinta bianca di una stanza da 25 metri quadri e una da 70" = {"description":"Tinta bianca","quantity":95,"unit":"m²"}. Se cambia il materiale, il colore, l'unita o il prezzo restano voci separate.
    Usa intent="clarification_needed" SOLO se non ricavi nemmeno una voce e nessun'altra azione eseguibile.
 6. Per translate_quote traduci SOLO testo; non alterare numeri, importi, quantita, aliquote.
 7. Adatta lingua e terminologia al paese/locale aziendale.
@@ -96,7 +96,7 @@ Input: "aggiungi sei metri di ip e 120 e due piastre da dieci per venti"
 Input: "per Bianchi, lavoro bagno: due ore di manodopera e un rubinetto"
 {"intent":"mixed","customer":{"action":"none","name":"Bianchi"},"job":{"action":"none","title":"Bagno","customerName":"Bianchi"},"quote":{"action":"update","items":[{"description":"Manodopera","quantity":2,"unit":"h"},{"description":"Rubinetto","quantity":1,"unit":null}]}}
 Input: "tinta bianca in due stanze, una da 25 metri quadri e una da 70"
-{"intent":"add_quote_items","quote":{"action":"update","items":[{"description":"Tinta bianca (25 + 70 m²)","quantity":95,"unit":"m²"}]}}
+{"intent":"add_quote_items","quote":{"action":"update","items":[{"description":"Tinta bianca","quantity":95,"unit":"m²"}]}}
 Input: "aggiungi quello dell'altra volta"
 {"intent":"clarification_needed","clarification":{"needed":true,"questions":["Quale materiale devo aggiungere?"]}}
 
@@ -191,23 +191,18 @@ type WhisperSegment = { text?: string; no_speech_prob?: number; avg_logprob?: nu
 // Same article said twice ("una stanza da 25 e una da 70") is one line with the sum,
 // in case the model splits it anyway. Different unit or price stays apart.
 function mergeRepeatedItems(items: any[]): any[] {
+  const key = (i: any) =>
+    [String(i?.description || '').trim().toLowerCase(), i?.unit ?? '', i?.unitPrice ?? '', i?.vatRate ?? ''].join('|')
   const merged: any[] = []
   for (const item of items) {
-    const key = (i: any) =>
-      [String(i?.description || '').trim().toLowerCase(), i?.unit ?? '', i?.unitPrice ?? '', i?.vatRate ?? ''].join('|')
     const same = merged.find((m) => key(m) === key(item))
     if (same && typeof same.quantity === 'number' && typeof item?.quantity === 'number') {
-      const unit = same.unit ? ` ${same.unit}` : ''
-      const parts: number[] = same._parts || [same.quantity]
-      parts.push(item.quantity)
-      same._parts = parts
-      same.quantity = Math.round(parts.reduce((a, b) => a + b, 0) * 1000) / 1000
-      same._label = `${String(same.description).trim()} (${parts.map((n) => String(n).replace('.', ',')).join(' + ')}${unit})`
+      same.quantity = Math.round((same.quantity + item.quantity) * 1000) / 1000
     } else {
       merged.push({ ...item })
     }
   }
-  return merged.map(({ _parts, _label, ...item }) => (_label ? { ...item, description: _label } : item))
+  return merged
 }
 
 function transcriptWithoutNoise(transcription: { text?: string; segments?: WhisperSegment[] }): string {
