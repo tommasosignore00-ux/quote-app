@@ -251,17 +251,22 @@ export default function MobileQuote() {
     setBusy(true);
     setMessage(null);
     try {
-      const version = await saveVersion({ recipient_email: email.trim() });
-      const { data: sent, error } = await supabase.functions.invoke('send-email', {
-        body: { lavoroId: id, revision },
+      // The email leaves from the artisan's own Mail app: no sending domain is needed,
+      // and the client's reply goes straight to the artisan.
+      const version = await saveVersion({
+        recipient_email: email.trim(),
+        sent_at: new Date().toISOString(),
       });
-      if (error || sent?.error) {
-        await supabase.from('preventivi_versioni').delete().eq('id', version.id);
-        throw new Error('Email non inviata. Riprova o manda il link su WhatsApp.');
-      }
+      const link = `${window.location.origin}/q/${version.public_token}`;
+      const subject = `Preventivo ${title}`;
+      const body = `Buongiorno${clientName ? ` ${clientName}` : ''},\n\necco il preventivo per «${title}». Lo può leggere e accettare qui:\n${link}\n\nCordiali saluti`;
       await nextRevision();
       setEmailOpen(false);
-      setMessage({ text: `Preventivo inviato a ${email.trim()}.`, tone: 'info' });
+      setMessage({
+        text: 'Si è aperta Mail con il preventivo: controlla e premi Invia. Quando il cliente risponde lo vedi in Preventivi.',
+        tone: 'info',
+      });
+      window.location.href = `mailto:${encodeURIComponent(email.trim())}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     } catch (err) {
       setMessage({ text: (err as Error).message, tone: 'error' });
     } finally {
@@ -515,7 +520,7 @@ export default function MobileQuote() {
             Annulla
           </Button>
           <Button big onClick={sendEmail} disabled={busy || !email.trim()}>
-            {busy ? 'Invio…' : 'Invia'}
+            {busy ? 'Preparo…' : 'Apri Mail'}
           </Button>
         </div>
       </Sheet>
