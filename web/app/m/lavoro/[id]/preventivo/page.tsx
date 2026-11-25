@@ -58,6 +58,7 @@ export default function MobileQuote() {
   const [unpriced, setUnpriced] = useState<string[]>([]);
   /** Sending held until the user confirms the lines at 0 €. */
   const [held, setHeld] = useState<'link' | 'email' | 'pdf' | null>(null);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -268,13 +269,29 @@ export default function MobileQuote() {
     }
   };
 
+  // On iPhone a Home-screen web app cannot download files: the PDF is handed to the share
+  // sheet (Salva su File, WhatsApp, Mail). Sharing needs a fresh tap, so it gets its own button.
+  const sharePdf = async (file: File) => {
+    try {
+      await navigator.share({ files: [file], title: file.name });
+      setPdfFile(null);
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return;
+      window.location.href = URL.createObjectURL(file);
+    }
+  };
+
   const downloadPdf = async () => {
     setBusy(true);
+    setMessage(null);
     try {
       const frame = await renderForCapture(html);
       const body = frame.contentDocument?.body;
       if (body) {
-        const canvas = await html2canvas(body, { scale: 2 });
+        // iPhone refuses canvases above about 16 million pixels and returns a blank image.
+        const area = Math.max(1, body.scrollWidth * body.scrollHeight);
+        const scale = Math.min(2, Math.sqrt(14_000_000 / area));
+        const canvas = await html2canvas(body, { scale });
         const pdf = new jsPDF({ format: 'a4' });
         const width = pdf.internal.pageSize.getWidth();
         const pageHeight = pdf.internal.pageSize.getHeight();
@@ -285,9 +302,17 @@ export default function MobileQuote() {
           if (offset > 0) pdf.addPage();
           pdf.addImage(image, 'PNG', 0, -offset, width, height);
         }
-        pdf.save(`Preventivo-${title}-Rev${String(revision).padStart(2, '0')}.pdf`);
+        const name = `Preventivo-${title}-Rev${String(revision).padStart(2, '0')}.pdf`;
+        const file = new File([pdf.output('blob')], name, { type: 'application/pdf' });
+        if (navigator.canShare?.({ files: [file] })) setPdfFile(file);
+        else pdf.save(name);
       }
       frame.remove();
+    } catch {
+      setMessage({
+        text: 'PDF non creato. Riprova o manda il link al cliente.',
+        tone: 'error',
+      });
     } finally {
       setBusy(false);
     }
@@ -458,6 +483,19 @@ export default function MobileQuote() {
             {held === 'pdf' ? 'Scarica lo stesso' : 'Manda lo stesso'}
           </Button>
         </div>
+      </Sheet>
+
+      <Sheet
+        open={pdfFile !== null}
+        onClose={() => setPdfFile(null)}
+        title="Il PDF è pronto"
+      >
+        <p className="mb-5 text-lg">
+          Tocca qui sotto: puoi salvarlo su File o mandarlo con WhatsApp o Mail.
+        </p>
+        <Button big onClick={() => pdfFile && sharePdf(pdfFile)}>
+          <Download className="h-6 w-6" /> Salva o manda il PDF
+        </Button>
       </Sheet>
 
       <Sheet open={emailOpen} onClose={() => setEmailOpen(false)} title="Invia per email">
